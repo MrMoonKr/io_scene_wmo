@@ -566,7 +566,7 @@ class BlenderWMOScene:
 
                     scale = doodad.scale[0]
 
-                    doodad_color = [int(pow(channel, 10 / 22) * 255) for channel in doodad.wow_wmo_doodad.color]
+                    doodad_color = [int(channel * 255) for channel in doodad.wow_wmo_doodad.color]
                     doodad_color = (doodad_color[2], doodad_color[1], doodad_color[0], doodad_color[3])
 
                     flags = 0
