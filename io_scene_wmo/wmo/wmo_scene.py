@@ -575,8 +575,8 @@ class BlenderWMOScene:
 
                     self.wmo.add_doodad(path, position, rotation, scale, doodad_color, flags)
 
-            if set_name == "Set_$DefaultGlobal":
-                has_global = True
+                if set_name == "Set_$DefaultGlobal":
+                    has_global = True
 
         if not has_global:
             self.wmo.add_doodad_set("Set_$DefaultGlobal", 0)
