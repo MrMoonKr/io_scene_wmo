@@ -68,8 +68,8 @@ class BlenderWMOScene:
                 mat.wow_wmo_material.shader = "0"
 
             mat.wow_wmo_material.blending_mode = str(wmo_material.blend_mode)
-            mat.wow_wmo_material.emissive_color = [pow(x / 255, 2.2) for x in wmo_material.emissive_color]
-            mat.wow_wmo_material.diff_color = [pow(x / 255, 2.2) for x in wmo_material.diff_color]
+            mat.wow_wmo_material.emissive_color = [x / 255 for x in wmo_material.emissive_color]
+            mat.wow_wmo_material.diff_color = [x / 255 for x in wmo_material.diff_color]
             mat.wow_wmo_material.terrain_type = str(wmo_material.terrain_type)
 
             mat_flags = set()
