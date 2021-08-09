@@ -284,10 +284,10 @@ class BlenderWMOScene:
                     bpy.context.view_layer.objects.active = nobj
 
                     nobj.wow_wmo_doodad.self_pointer = nobj
-                    nobj.wow_wmo_doodad.color = (pow(doodad.color[2] / 255, 2.2),
-                                                 pow(doodad.color[1] / 255, 2.2),
-                                                 pow(doodad.color[0] / 255, 2.2),
-                                                 pow(doodad.color[3] / 255, 2.2)
+                    nobj.wow_wmo_doodad.color = (doodad.color[2] / 255,
+                                                 doodad.color[1] / 255,
+                                                 doodad.color[0] / 255,
+                                                 doodad.color[3] / 255
                                                 )
 
                     flags = []
