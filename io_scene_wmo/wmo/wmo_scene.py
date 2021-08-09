@@ -221,7 +221,7 @@ class BlenderWMOScene:
             fog_obj.wow_wmo_fog.end_dist = wmo_fog.end_dist
             fog_obj.wow_wmo_fog.start_factor = wmo_fog.start_factor
             fog_obj.wow_wmo_fog.color1 = (wmo_fog.color1[2] / 255, wmo_fog.color1[1] / 255, wmo_fog.color1[0] / 255)
-            fog_obj.wow_wmo_fog.end_dist2 = wmo_fog.end_dist
+            fog_obj.wow_wmo_fog.end_dist2 = wmo_fog.end_dist2
             fog_obj.wow_wmo_fog.start_factor2 = wmo_fog.start_factor2
             fog_obj.wow_wmo_fog.color2 = (wmo_fog.color2[2] / 255, wmo_fog.color2[1] / 255, wmo_fog.color2[0] / 255)
 
