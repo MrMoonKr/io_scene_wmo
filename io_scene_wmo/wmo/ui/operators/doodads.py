@@ -127,7 +127,7 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
 
                 vertex_color = self.gen_doodad_color(obj, group)
 
-                color = [pow(x, 2.2) for x in vertex_color]
+                color = [x for x in vertex_color]
                 obj.wow_wmo_doodad.color = color
 
                 doodad_counter += 1
