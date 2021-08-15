@@ -77,7 +77,9 @@ class WowM2MaterialPropertyGroup(bpy.types.PropertyGroup):
         default='0'
         )
 
-    #shader: bpy.props.IntProperty(name='Shader')
+    shader: bpy.props.IntProperty(
+        name='Shader'
+        )
 
     blending_mode:  bpy.props.EnumProperty(
         items=BLENDING_MODES,
