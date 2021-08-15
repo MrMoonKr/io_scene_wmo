@@ -1469,15 +1469,16 @@ class BlenderM2Scene:
             # find root keybone, write additional bones
             root_keybone = None
 
-            for bone in root_bone.children:
+            if root_bone:
+                for bone in root_bone.children:
 
-                if bone.wow_m2_bone.key_bone_id == '26':
-                    root_keybone = bone
-                    continue
+                    if bone.wow_m2_bone.key_bone_id == '26':
+                        root_keybone = bone
+                        continue
 
-                add_bone(bone)
-                for child_bone in bone.children_recursive:
-                    add_bone(child_bone)
+                    add_bone(bone)
+                    for child_bone in bone.children_recursive:
+                        add_bone(child_bone)
 
             # write root keybone and its children
             if root_keybone:
