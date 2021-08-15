@@ -1643,7 +1643,8 @@ class BlenderM2Scene:
                                          origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))  # TODO: second UV
 
             material = mesh.materials[0]
-            bl_texture = material.active_texture
+            # bl_texture = material.active_texture old
+            bl_texture = material.wow_m2_material.texture_1
             wow_path = bl_texture.wow_m2_texture.path
 
             if fill_textures and not wow_path:
