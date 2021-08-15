@@ -1702,10 +1702,11 @@ class BlenderM2Scene:
             normals = [tuple(poly.normal) for poly in mesh.polygons]
 
             self.m2.add_collision_mesh(vertices, faces, normals)
+            bpy.data.objects.remove(new_obj, do_unlink=True)
 
         # remove temporary objects
-        for obj in proxy_objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
+        #for obj in proxy_objects:
+        #    bpy.data.objects.remove(obj, do_unlink=True)
 
         # calculate collision bounding box
         b_min, b_max = get_objs_boundbox_world(objects)
