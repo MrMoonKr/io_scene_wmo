@@ -1469,15 +1469,16 @@ class BlenderM2Scene:
             # find root keybone, write additional bones
             root_keybone = None
 
-            for bone in root_bone.children:
+            if root_bone:
+                for bone in root_bone.children:
 
-                if bone.wow_m2_bone.key_bone_id == '26':
-                    root_keybone = bone
-                    continue
+                    if bone.wow_m2_bone.key_bone_id == '26':
+                        root_keybone = bone
+                        continue
 
-                add_bone(bone)
-                for child_bone in bone.children_recursive:
-                    add_bone(child_bone)
+                    add_bone(bone)
+                    for child_bone in bone.children_recursive:
+                        add_bone(child_bone)
 
             # write root keybone and its children
             if root_keybone:
@@ -1642,7 +1643,8 @@ class BlenderM2Scene:
                                          origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))  # TODO: second UV
 
             material = mesh.materials[0]
-            bl_texture = material.active_texture
+            # bl_texture = material.active_texture old
+            bl_texture = material.wow_m2_material.texture_1
             wow_path = bl_texture.wow_m2_texture.path
 
             if fill_textures and not wow_path:
@@ -1666,7 +1668,7 @@ class BlenderM2Scene:
 
     def save_collision(self, selected_only):
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
-        objects = list(filter(lambda ob: ob.wow_m2_geoset.collision_mesh and ob.type == 'MESH' and not ob.hide_get(), objects))
+        objects = list(filter(lambda ob: ob.wow_m2_geoset.collision_mesh and ob.type == 'MESH', objects))
 
         proxy_objects = []
 
@@ -1700,10 +1702,11 @@ class BlenderM2Scene:
             normals = [tuple(poly.normal) for poly in mesh.polygons]
 
             self.m2.add_collision_mesh(vertices, faces, normals)
+            bpy.data.objects.remove(new_obj, do_unlink=True)
 
         # remove temporary objects
-        for obj in proxy_objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
+        #for obj in proxy_objects:
+        #    bpy.data.objects.remove(obj, do_unlink=True)
 
         # calculate collision bounding box
         b_min, b_max = get_objs_boundbox_world(objects)
