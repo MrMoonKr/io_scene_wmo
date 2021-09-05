@@ -773,6 +773,7 @@ class BlenderWMOSceneGroup:
                 for i in range(group.mliq.x_verts * group.mliq.y_verts):
                     vertex = LiquidVertex()
                     vertex.is_water = False
+                    group.mliq.is_water = False
 
                     vertex.u = int(uv_map.get(mesh.vertices[i].index)[0])
                     vertex.v = int(uv_map.get(mesh.vertices[i].index)[1])
