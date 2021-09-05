@@ -773,6 +773,7 @@ class BlenderWMOSceneGroup:
                 for i in range(group.mliq.x_verts * group.mliq.y_verts):
                     vertex = LiquidVertex()
                     vertex.is_water = False
+                    group.mliq.is_water = False
 
                     vertex.u = int(uv_map.get(mesh.vertices[i].index)[0])
                     vertex.v = int(uv_map.get(mesh.vertices[i].index)[1])
@@ -1110,6 +1111,8 @@ class BlenderWMOSceneGroup:
                     group.mogp.flags |= MOGPFlags.HasVertexColor
             else:
                 group.mocv = None
+        
+        group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
 
         if obj.wow_wmo_group.liquid_mesh:
             self.save_liquid(obj.wow_wmo_group.liquid_mesh)
@@ -1117,8 +1120,6 @@ class BlenderWMOSceneGroup:
             group.mliq = None
             group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
             group.root.mohd.flags |= 0x4
-
-        group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
 
         if not has_lights:
             group.molr = None
