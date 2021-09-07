@@ -636,7 +636,7 @@ class BlenderWMOSceneGroup:
                     if angle is None or angle >= pi * 0.5:
                         continue
 
-                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.view_layer, g_center, direction)
+                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center, direction)
 
                     if not ray_cast_result[0] \
                             or ray_cast_result[4].name == portal_obj.name \
