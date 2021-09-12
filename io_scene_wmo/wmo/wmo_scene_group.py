@@ -145,7 +145,7 @@ class BlenderWMOSceneGroup:
             elif basic_liquid_type == 2:
                 real_liquid_type = 19
             elif basic_liquid_type == 15:
-                real_liquid_type = 17
+                real_liquid_type = 15
             elif basic_liquid_type == 3:
                 real_liquid_type = 20
         else:
