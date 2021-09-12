@@ -191,8 +191,8 @@ class BlenderWMOSceneGroup:
         mesh.update(calc_edges=True)
         mesh.validate()
 
-        # create uv map if liquid is lava
-        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12}:
+        # create uv map if liquid is lava or slime
+        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
             uv_map = {}
 
             for vertex in mesh.vertices:
