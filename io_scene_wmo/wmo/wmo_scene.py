@@ -395,6 +395,8 @@ class BlenderWMOScene:
             flags.add("2")
         if self.wmo.mohd.flags & 0x8:
             flags.add("1")
+        if self.wmo.mohd.flags & 0x4:
+            flags.add("3")
 
         properties.flags = flags
         properties.skybox_path = self.wmo.mosb.skybox
@@ -827,8 +829,8 @@ class BlenderWMOScene:
             self.wmo.mohd.flags |= 0x02
         if "1" in flags:
             self.wmo.mohd.flags |= 0x08
-
-        self.wmo.mohd.flags |= 0x4
+        if "3" in flags:
+            self.wmo.mohd.flags |= 0x4
 
 
 
