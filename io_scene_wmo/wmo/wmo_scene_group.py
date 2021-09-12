@@ -740,8 +740,8 @@ class BlenderWMOSceneGroup:
 
         group.mogp.flags |= 0x1000  # do we really need that?
 
-        types_1 = {3, 7, 11}
-        types_2 = {4, 8, 12}
+        types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
+        types_2 = {4, 8, 12, 20, 21} # slime
 
         texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
 
