@@ -1119,7 +1119,7 @@ class BlenderWMOSceneGroup:
         else:
             group.mliq = None
             group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
-            group.root.mohd.flags |= 0x4
+            # group.root.mohd.flags |= 0x4 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
 
         if not has_lights:
             group.molr = None
