@@ -145,7 +145,7 @@ class BlenderWMOSceneGroup:
             elif basic_liquid_type == 2:
                 real_liquid_type = 19
             elif basic_liquid_type == 15:
-                real_liquid_type = 17
+                real_liquid_type = 15
             elif basic_liquid_type == 3:
                 real_liquid_type = 20
         else:
@@ -191,8 +191,8 @@ class BlenderWMOSceneGroup:
         mesh.update(calc_edges=True)
         mesh.validate()
 
-        # create uv map if liquid is lava
-        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12}:
+        # create uv map if liquid is lava or slime
+        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
             uv_map = {}
 
             for vertex in mesh.vertices:
@@ -740,8 +740,8 @@ class BlenderWMOSceneGroup:
 
         group.mogp.flags |= 0x1000  # do we really need that?
 
-        types_1 = {3, 7, 11}
-        types_2 = {4, 8, 12}
+        types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
+        types_2 = {4, 8, 12, 20, 21} # slime
 
         texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
 
@@ -1119,7 +1119,7 @@ class BlenderWMOSceneGroup:
         else:
             group.mliq = None
             group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
-            group.root.mohd.flags |= 0x4
+            # group.root.mohd.flags |= 0x4 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
 
         if not has_lights:
             group.molr = None
