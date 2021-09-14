@@ -220,7 +220,7 @@ class BlenderWMOSceneGroup:
                     if tile_flag & bit:
                         vc_layer.data[loop].color = (0, 0, 255, 255)
                     else:
-                        vc_layer.data[loop].color = (0, 0, 0, 0)
+                        vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
 
         # set mesh location
