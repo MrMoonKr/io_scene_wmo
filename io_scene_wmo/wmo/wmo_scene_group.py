@@ -827,6 +827,17 @@ class BlenderWMOSceneGroup:
         # create bmesh
         bm = bmesh.new()
         bm.from_object(obj, bpy.context.evaluated_depsgraph_get())
+        
+        # handle separate collision
+        if obj.wow_wmo_group.collision_mesh:
+            col_mesh = obj.wow_wmo_group.collision_mesh.data.copy()
+
+            for poly in col_mesh.polygons:
+                poly.material_index = 0xFF
+
+            bm.from_mesh(col_mesh)
+            bm.verts.ensure_lookup_table()
+            bm.faces.ensure_lookup_table()
 
         # triangulate bmesh
         bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
@@ -836,7 +847,7 @@ class BlenderWMOSceneGroup:
         faces = bm.faces
 
         vertices.ensure_lookup_table()
-        edges.ensure_lookup_table() 
+        edges.ensure_lookup_table()
         faces.ensure_lookup_table()
 
         # untag faces
@@ -872,16 +883,6 @@ class BlenderWMOSceneGroup:
 
         if obj_blend_map:
             self.wmo_scene.wmo.mohd.flags |= 0x2
-
-        if obj.wow_wmo_group.collision_mesh:
-            col_mesh = obj.wow_wmo_group.collision_mesh.data.copy()
-
-            for poly in col_mesh.polygons:
-                poly.material_index = 0xFF
-
-            bm.from_mesh(col_mesh)
-            bm.verts.ensure_lookup_table()
-            bm.faces.ensure_lookup_table()
 
         faces_set = set(faces)
         batches = {}
