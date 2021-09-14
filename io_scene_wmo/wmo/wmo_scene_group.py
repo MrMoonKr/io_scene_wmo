@@ -836,7 +836,7 @@ class BlenderWMOSceneGroup:
         faces = bm.faces
 
         vertices.ensure_lookup_table()
-        edges.ensure_lookup_table()
+        edges.ensure_lookup_table() 
         faces.ensure_lookup_table()
 
         # untag faces
