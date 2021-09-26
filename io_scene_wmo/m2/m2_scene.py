@@ -1577,7 +1577,7 @@ class BlenderM2Scene:
 
             bpy.ops.object.modifier_add(type='EDGE_SPLIT')
             bpy.context.object.modifiers["EdgeSplit"].use_edge_angle = False
-            bpy.ops.object.modifier_apply(apply_as='DATA', modifier="EdgeSplit")
+            bpy.ops.object.modifier_apply(modifier="EdgeSplit")
 
             # smooth edges
             bpy.ops.object.mode_set(mode='EDIT')
