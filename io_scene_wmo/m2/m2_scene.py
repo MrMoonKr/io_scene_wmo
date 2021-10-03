@@ -1601,9 +1601,22 @@ class BlenderM2Scene:
             if len(mesh.uv_layers) >= 2:
                 tex_coords2 = [mesh.uv_layers[1].data[loop.vertex_index].uv for loop in mesh.loops]
 
-            bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-            origin = new_obj.location
+            # old system
+            # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+            # origin = new_obj.location
 
+            vertx = 0.0
+            verty = 0.0
+            vertz = 0.0
+            vertcount = len(vertices)
+            
+            for vert in vertices:
+                vertx += vert[0]
+                verty += vert[1]
+                vertz += vert[2]
+            
+            origin = ( vertx / vertcount, verty / vertcount, vertz / vertcount )
+            
             sort_pos = get_obj_boundbox_center(new_obj)
             sort_radius = get_obj_radius(new_obj, sort_pos)
 
