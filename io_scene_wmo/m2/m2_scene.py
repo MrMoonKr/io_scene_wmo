@@ -1662,9 +1662,11 @@ class BlenderM2Scene:
 
             self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id)
 
+            bpy.data.objects.remove(new_obj, do_unlink=True)
+
         # remove temporary objects
-        for obj in proxy_objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
+        # for obj in proxy_objects:
+        #     bpy.data.objects.remove(obj, do_unlink=True)
 
     def save_collision(self, selected_only):
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
