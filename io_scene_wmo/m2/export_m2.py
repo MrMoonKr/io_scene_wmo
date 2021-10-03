@@ -11,6 +11,7 @@ def export_m2(version, filepath, selected_only, fill_textures):
     bl_m2 = BlenderM2Scene(m2, addon_prefs)
     bl_m2.save_properties(filepath, selected_only)
     bl_m2.save_bones(selected_only)
+    bl_m2.save_animations()
     bl_m2.save_geosets(selected_only, fill_textures)
     bl_m2.save_collision(selected_only)
 
