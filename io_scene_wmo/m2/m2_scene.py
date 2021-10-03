@@ -1649,9 +1649,6 @@ class BlenderM2Scene:
 
             if fill_textures and not wow_path:
                 wow_path = resolve_texture_path(bl_texture.filepath)
-            
-            if not wow_path:
-                raise Exception("Error: An M2 geoset texture doesn't have a filepath.")
 
             tex_id = self.m2.add_texture(wow_path,
                                          construct_bitfield(bl_texture.wow_m2_texture.flags),
