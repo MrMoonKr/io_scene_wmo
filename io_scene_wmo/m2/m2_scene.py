@@ -1660,7 +1660,7 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
             g_index = self.m2.add_geoset(vertices, normals, tex_coords, tex_coords2, tris, bone_indices, bone_weights,
                                          origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))  # TODO: second UV
 
-            for material in mesh.materials:
+            for i, material in enumerate(mesh.materials):
                 # bl_texture = material.active_texture old
                 bl_texture = material.wow_m2_material.texture_1
                 wow_path = bl_texture.wow_m2_texture.path
@@ -1673,12 +1673,13 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                                              int(bl_texture.wow_m2_texture.texture_type)
                                              )
 
+                tex_coord_id = i
                 render_flags = construct_bitfield(material.wow_m2_material.render_flags)
                 flags = construct_bitfield(material.wow_m2_material.flags)
                 bl_mode = int(material.wow_m2_material.blending_mode)
                 shader_id = int(material.wow_m2_material.shader)
 
-                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id)
+                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id, tex_coord_id)
 
         # remove temporary objects
         for obj in proxy_objects:
