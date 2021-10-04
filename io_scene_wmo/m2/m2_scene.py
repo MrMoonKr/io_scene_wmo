@@ -1536,6 +1536,8 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
         # deselect all objects before saving geosets
         bpy.ops.object.select_all(action='DESELECT')
 
+        self.m2.root.tex_unit_lookup_table.append(0)
+
         proxy_objects = []
         for obj in filter(lambda ob: not ob.wow_m2_geoset.collision_mesh and ob.type == 'MESH' and not ob.hide_get(), objects):
 
@@ -1664,6 +1666,11 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                 # bl_texture = material.active_texture old
                 bl_texture = material.wow_m2_material.texture_1
                 wow_path = bl_texture.wow_m2_texture.path
+
+                # TODO : this data should be saved before, 2nd value is usualy -1 (for environment mapping), it can also be 1
+                # IN VERY RARE cases if model uses 3 textures in one submesh, there can be a 3rd entry according to wiki, only Kel'Thuzad has one.
+                if i == 1 and len(self.m2.root.tex_unit_lookup_table) == 1:
+                    self.m2.root.tex_unit_lookup_table.append(-1)
 
                 if fill_textures and not wow_path:
                     wow_path = resolve_texture_path(bl_texture.filepath)
