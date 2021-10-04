@@ -399,7 +399,12 @@ class BlenderM2Scene:
 
             # TODO: other settings
 
-            self.materials[tex_unit.skin_section_index] = blender_mat, tex_unit
+            if not tex_unit.skin_section_index in self.materials:
+	            self.materials[tex_unit.skin_section_index] = []
+
+            self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
+            
+self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
 
     def load_armature(self):
         if not len(self.m2.root.bones):
@@ -749,8 +754,8 @@ class BlenderM2Scene:
                 uv_layer2.data[i].uv = (uv[0], 1 - uv[1])
 
             # set textures and materials
-            material, tex_unit = self.materials[smesh_i]
-            mesh.materials.append(material)
+            for material, tex_unit in self.materials[smesh_i]:
+                mesh.materials.append(material)
 
             for i, poly in enumerate(mesh.polygons):
                 poly.material_index = 0  # TODO: excuse me wtf?
@@ -1655,25 +1660,25 @@ class BlenderM2Scene:
             g_index = self.m2.add_geoset(vertices, normals, tex_coords, tex_coords2, tris, bone_indices, bone_weights,
                                          origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))  # TODO: second UV
 
-            material = mesh.materials[0]
-            # bl_texture = material.active_texture old
-            bl_texture = material.wow_m2_material.texture_1
-            wow_path = bl_texture.wow_m2_texture.path
+            for material in mesh.materials:
+                # bl_texture = material.active_texture old
+                bl_texture = material.wow_m2_material.texture_1
+                wow_path = bl_texture.wow_m2_texture.path
 
-            if fill_textures and not wow_path:
-                wow_path = resolve_texture_path(bl_texture.filepath)
+                if fill_textures and not wow_path:
+                    wow_path = resolve_texture_path(bl_texture.filepath)
 
-            tex_id = self.m2.add_texture(wow_path,
-                                         construct_bitfield(bl_texture.wow_m2_texture.flags),
-                                         int(bl_texture.wow_m2_texture.texture_type)
-                                         )
+                tex_id = self.m2.add_texture(wow_path,
+                                             construct_bitfield(bl_texture.wow_m2_texture.flags),
+                                             int(bl_texture.wow_m2_texture.texture_type)
+                                             )
 
-            render_flags = construct_bitfield(material.wow_m2_material.render_flags)
-            flags = construct_bitfield(material.wow_m2_material.flags)
-            bl_mode = int(material.wow_m2_material.blending_mode)
-            shader_id = int(material.wow_m2_material.shader)
+                render_flags = construct_bitfield(material.wow_m2_material.render_flags)
+                flags = construct_bitfield(material.wow_m2_material.flags)
+                bl_mode = int(material.wow_m2_material.blending_mode)
+                shader_id = int(material.wow_m2_material.shader)
 
-            self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id)
+                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id)
 
         # remove temporary objects
         for obj in proxy_objects:
