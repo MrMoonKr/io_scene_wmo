@@ -1686,8 +1686,9 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                 priority_plane = int(material.wow_m2_material.priority_plane)
                 bl_mode = int(material.wow_m2_material.blending_mode)
                 shader_id = int(material.wow_m2_material.shader)
+                mat_layer = int(material.wow_m2_material.layer)
 
-                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id, tex_coord_id, priority_plane)
+                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id, tex_coord_id, priority_plane, mat_layer)
 
         # remove temporary objects
         for obj in proxy_objects:
