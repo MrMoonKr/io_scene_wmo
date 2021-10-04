@@ -1663,22 +1663,29 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                                          origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))  # TODO: second UV
 
             for i, material in enumerate(mesh.materials):
-                # bl_texture = material.active_texture old
-                bl_texture = material.wow_m2_material.texture_1
-                wow_path = bl_texture.wow_m2_texture.path
-
                 # TODO : this data should be saved before, 2nd value is usualy -1 (for environment mapping), it can also be 1
                 # IN VERY RARE cases if model uses 3 textures in one submesh, there can be a 3rd entry according to wiki, only Kel'Thuzad has one.
                 if i == 1 and len(self.m2.root.tex_unit_lookup_table) == 1:
                     self.m2.root.tex_unit_lookup_table.append(-1)
 
-                if fill_textures and not wow_path:
-                    wow_path = resolve_texture_path(bl_texture.filepath)
+                textures = [material.wow_m2_material.texture_1, material.wow_m2_material.texture_2,
+                            material.wow_m2_material.texture_3, material.wow_m2_material.texture_4]
+                
+                for bl_texture in textures:
+                    if bl_texture:
+                        texture_count += 1
+                        wow_path = bl_texture.wow_m2_texture.path
 
-                tex_id = self.m2.add_texture(wow_path,
-                                             construct_bitfield(bl_texture.wow_m2_texture.flags),
-                                             int(bl_texture.wow_m2_texture.texture_type)
-                                             )
+                        if bl_texture.wow_m2_texture.texture_type == 0:
+                            if fill_textures and not wow_path:
+                                wow_path = resolve_texture_path(bl_texture.filepath)
+
+                        tmp_tex_id = self.m2.add_texture(wow_path,
+                                                     construct_bitfield(bl_texture.wow_m2_texture.flags),
+                                                     int(bl_texture.wow_m2_texture.texture_type)
+                                                     )
+                        if texture_count == 1:
+                            tex_id = tmp_tex_id
 
                 tex_coord_id = i
                 render_flags = construct_bitfield(material.wow_m2_material.render_flags)
@@ -1688,7 +1695,8 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                 shader_id = int(material.wow_m2_material.shader)
                 mat_layer = int(material.wow_m2_material.layer)
 
-                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id, tex_coord_id, priority_plane, mat_layer)
+                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id,
+                                                tex_coord_id, priority_plane, mat_layer, texture_count)
 
         # remove temporary objects
         for obj in proxy_objects:
