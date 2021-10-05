@@ -386,6 +386,7 @@ class BlenderM2Scene:
 
             blender_mat.wow_m2_material.layer = tex_unit.material_layer
             blender_mat.wow_m2_material.priority_plane = tex_unit.priority_plane
+            blender_mat.wow_m2_material.tex_unit_coord = self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index]
 
             vertex_shader = M2ShaderPermutations().get_vertex_shader_id(tex_unit.texture_count, tex_unit.shader_id)
             pixel_shader = M2ShaderPermutations().get_pixel_shader_id(tex_unit.texture_count, tex_unit.shader_id)
@@ -1536,8 +1537,6 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
         # deselect all objects before saving geosets
         bpy.ops.object.select_all(action='DESELECT')
 
-        self.m2.root.tex_unit_lookup_table.append(0)
-
         proxy_objects = []
         for obj in filter(lambda ob: not ob.wow_m2_geoset.collision_mesh and ob.type == 'MESH' and not ob.hide_get(), objects):
 
@@ -1663,10 +1662,6 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                                          origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))  # TODO: second UV
 
             for i, material in enumerate(mesh.materials):
-                # TODO : this data should be saved before, 2nd value is usualy -1 (for environment mapping), it can also be 1
-                # IN VERY RARE cases if model uses 3 textures in one submesh, there can be a 3rd entry according to wiki, only Kel'Thuzad has one.
-                if i == 1 and len(self.m2.root.tex_unit_lookup_table) == 1:
-                    self.m2.root.tex_unit_lookup_table.append(-1)
 
                 textures = [material.wow_m2_material.texture_1, material.wow_m2_material.texture_2,
                             material.wow_m2_material.texture_3, material.wow_m2_material.texture_4]
@@ -1687,7 +1682,7 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                         if texture_count == 1:
                             tex_id = tmp_tex_id
 
-                tex_coord_id = i
+                tex_unit_coord = material.wow_m2_material.tex_unit_coord
                 render_flags = construct_bitfield(material.wow_m2_material.render_flags)
                 flags = construct_bitfield(material.wow_m2_material.flags)
                 priority_plane = int(material.wow_m2_material.priority_plane)
@@ -1696,7 +1691,7 @@ self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
                 mat_layer = int(material.wow_m2_material.layer)
 
                 self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id,
-                                                tex_coord_id, priority_plane, mat_layer, texture_count)
+                                                tex_unit_coord, priority_plane, mat_layer, texture_count)
 
         # remove temporary objects
         for obj in proxy_objects:
