@@ -108,6 +108,11 @@ class WowM2MaterialPropertyGroup(bpy.types.PropertyGroup):
         max=7
     )
 
+    tex_unit_coord: bpy.props.IntProperty(
+        min=-1,
+        max=1
+    )
+
     priority_plane: bpy.props.IntProperty()
 
     color: bpy.props.StringProperty(
