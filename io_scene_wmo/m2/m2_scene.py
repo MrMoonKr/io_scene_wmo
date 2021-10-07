@@ -404,8 +404,6 @@ class BlenderM2Scene:
 	            self.materials[tex_unit.skin_section_index] = []
 
             self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
-            
-self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
 
     def load_armature(self):
         if not len(self.m2.root.bones):
