@@ -583,6 +583,7 @@ class BlenderM2Scene:
             anim.frequency = sequence.frequency
             anim.replay_min = sequence.replay.minimum
             anim.replay_max = sequence.replay.maximum
+            anim.VariationNext = sequence.variation_next
 
             if self.m2.root.version >= M2Versions.WOD:
                 anim.blend_time_in = sequence.blend_time_in
