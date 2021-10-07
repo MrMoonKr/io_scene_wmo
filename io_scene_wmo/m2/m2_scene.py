@@ -1510,22 +1510,57 @@ class BlenderM2Scene:
         if not len(bpy.data.actions):
             self.m2.add_dummy_anim_set()
 
+        self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
+        texture_weight = self.m2.root.texture_weights.new()
+        if self.m2.root.version >= M2Versions.WOTLK:
+            texture_weight.timestamps.new().add(0)
+            texture_weight.values.new().add(32767)
+        
+        frame_range_list = []
+        
         for action in bpy.data.actions:
-            seq_id = self.m2.add_anim(
-                action.wow_m2_animation.animation_id,
-                action.wow_m2_animation.VariationNext,
-                action.frame_range.to_tuple(),
-                action.wow_m2_animation.Movespeed,
-                construct_bitfield(action.wow_m2_animation.flags),
-                action.wow_m2_animation.Frequency,
-                (action.wow_m2_animation.replay_min, action.wow_m2_animation.replay_max),
-                action.wow_m2_animation.BlendTime,  # TODO: multiversioning
-                action.wow_m2_animation.VariationNext,
-                action.wow_m2_animation.alias_next
-            )
-
+            frame_range_list.append( action.frame_range.to_tuple() )
             for fcurve in action.fcurves:
+                # print(fcurve)
+                # use fcurves to calc boundings ?
                 pass
+        
+        print("frame ranges")
+        print(frame_range_list)
+        
+        for i, action in enumerate(self.scene.wow_m2_animations):
+            seq_id = self.m2.add_anim(
+                int(action.animation_id),
+                action.chain_index, # titi, to test
+                frame_range_list[i],
+                action.move_speed,
+                construct_bitfield(action.flags),
+                action.frequency,
+                (action.replay_min, action.replay_max),
+                action.blend_time,  # TODO: multiversioning
+                # ( ( (0.0, 0.0, 0.0), (0.0, 0.0, 0.0) ), 0.0 ), # TODO : bounds
+                ((self.m2.root.bounding_box.min, self.m2.root.bounding_box.max), self.m2.root.bounding_sphere_radius), # using root boundings, better than nothing
+                action.VariationNext,
+                action.alias_next
+            )
+        
+        # TODO
+        # for action in bpy.data.actions:
+        #     seq_id = self.m2.add_anim(
+        #         action.wow_m2_animation.animation_id,
+        #         action.wow_m2_animation.VariationNext,
+        #         action.frame_range.to_tuple(),
+        #         action.wow_m2_animation.Movespeed,
+        #         construct_bitfield(action.wow_m2_animation.flags),
+        #         action.wow_m2_animation.Frequency,
+        #         (action.wow_m2_animation.replay_min, action.wow_m2_animation.replay_max),
+        #         action.wow_m2_animation.BlendTime,  # TODO: multiversioning
+        #         action.wow_m2_animation.VariationNext,
+        #         action.wow_m2_animation.alias_next
+        #     )
+
+        #     for fcurve in action.fcurves:
+        #         pass
 
     def save_geosets(self, selected_only, fill_textures):
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
