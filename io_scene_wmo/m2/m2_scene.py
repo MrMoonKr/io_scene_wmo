@@ -816,122 +816,122 @@ class BlenderM2Scene:
         for smesh_pair, obj in zip(enumerate(skin.submeshes), self.geosets):
             smesh_i, smesh = smesh_pair
 
-            _, tex_unit = self.materials[smesh_i]
+            for _, tex_unit in self.materials[smesh_i]:
 
-            for i in range(2 if tex_unit.texture_count > 1 else 1):
+                for i in range(2 if tex_unit.texture_count > 1 else 1):
 
-                combo_index = tex_unit.texture_transform_combo_index + i
+                    combo_index = tex_unit.texture_transform_combo_index + i
 
-                if combo_index >= self.m2.root.texture_lookup_table.n_elements:
-                    break
+                    if combo_index >= self.m2.root.texture_lookup_table.n_elements:
+                        break
 
-                tex_tranform_index = self.m2.root.texture_transforms_lookup_table[combo_index]
+                    tex_tranform_index = self.m2.root.texture_transforms_lookup_table[combo_index]
 
-                if tex_tranform_index >= 0:
+                    if tex_tranform_index >= 0:
 
-                    c_obj = self.uv_transforms.get(tex_tranform_index)
-                    tex_transform = self.m2.root.texture_transforms[tex_tranform_index]
-                    seq_name_table = M2SequenceNames()
-                    n_global_sequences = len(self.global_sequences)
+                        c_obj = self.uv_transforms.get(tex_tranform_index)
+                        tex_transform = self.m2.root.texture_transforms[tex_tranform_index]
+                        seq_name_table = M2SequenceNames()
+                        n_global_sequences = len(self.global_sequences)
 
-                    if not c_obj:
-                        bpy.ops.object.empty_add(type='SINGLE_ARROW', location=(0, 0, 0))
-                        c_obj = bpy.context.view_layer.objects.active
-                        c_obj.name = "TT_Controller"
-                        c_obj.wow_m2_uv_transform.enabled = True
-                        c_obj = bpy.context.view_layer.objects.active
-                        c_obj.rotation_mode = 'QUATERNION'
-                        c_obj.empty_display_size = 0.5
-                        c_obj.animation_data_create()
-                        c_obj.animation_data.action_blend_type = 'ADD'
+                        if not c_obj:
+                            bpy.ops.object.empty_add(type='SINGLE_ARROW', location=(0, 0, 0))
+                            c_obj = bpy.context.view_layer.objects.active
+                            c_obj.name = "TT_Controller"
+                            c_obj.wow_m2_uv_transform.enabled = True
+                            c_obj = bpy.context.view_layer.objects.active
+                            c_obj.rotation_mode = 'QUATERNION'
+                            c_obj.empty_display_size = 0.5
+                            c_obj.animation_data_create()
+                            c_obj.animation_data.action_blend_type = 'ADD'
 
-                        self.uv_transforms[tex_tranform_index] = c_obj
+                            self.uv_transforms[tex_tranform_index] = c_obj
 
-                    bpy.context.view_layer.objects.active = obj
-                    bpy.ops.object.modifier_add(type='UV_WARP')
-                    uv_transform = bpy.context.object.modifiers[-1]
-                    uv_transform.name = 'M2TexTransform_{}'.format(i + 1)
-                    uv_transform.object_from = obj
-                    uv_transform.object_to = c_obj
-                    uv_transform.uv_layer = 'UVMap' if not i else 'UVMap.001'
+                        bpy.context.view_layer.objects.active = obj
+                        bpy.ops.object.modifier_add(type='UV_WARP')
+                        uv_transform = bpy.context.object.modifiers[-1]
+                        uv_transform.name = 'M2TexTransform_{}'.format(i + 1)
+                        uv_transform.object_from = obj
+                        uv_transform.object_to = c_obj
+                        uv_transform.uv_layer = 'UVMap' if not i else 'UVMap.001'
 
-                    setattr(obj.wow_m2_geoset, 'uv_transform_{}'.format(i + 1), c_obj)
+                        setattr(obj.wow_m2_geoset, 'uv_transform_{}'.format(i + 1), c_obj)
 
-                    # load global sequences
-                    for j, seq_index in enumerate(self.global_sequences):
-                        anim = bpy.context.scene.wow_m2_animations[seq_index]
+                        # load global sequences
+                        for j, seq_index in enumerate(self.global_sequences):
+                            anim = bpy.context.scene.wow_m2_animations[seq_index]
 
-                        name = "TT_{}_{}_Global_Sequence_{}".format(tex_tranform_index, obj.name, str(j).zfill(3))
+                            name = "TT_{}_{}_Global_Sequence_{}".format(tex_tranform_index, obj.name, str(j).zfill(3))
 
-                        cur_index = len(anim.anim_pairs)
-                        anim_pair = anim.anim_pairs.add()
-                        anim_pair.type = 'OBJECT'
-                        anim_pair.object = c_obj
+                            cur_index = len(anim.anim_pairs)
+                            anim_pair = anim.anim_pairs.add()
+                            anim_pair.type = 'OBJECT'
+                            anim_pair.object = c_obj
 
-                        if tex_transform.translation.global_sequence == j \
-                        and tex_transform.translation.timestamps.n_elements:
-                            action = self._bl_create_action(anim_pair, name)
-                            self._bl_create_fcurves(action, obj.name, bl_convert_trans_track, 3, 0, 'location',
-                                                    tex_transform.translation)
+                            if tex_transform.translation.global_sequence == j \
+                            and tex_transform.translation.timestamps.n_elements:
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(action, obj.name, bl_convert_trans_track, 3, 0, 'location',
+                                                        tex_transform.translation)
 
-                        if tex_transform.rotation.global_sequence == j \
-                        and tex_transform.rotation.timestamps.n_elements:
-                            action = self._bl_create_action(anim_pair, name)
-                            self._bl_create_fcurves(action, obj.name, bl_convert_rot_track, 4, 0, 'rotation_quaternion',
-                                                    tex_transform.rotation)
+                            if tex_transform.rotation.global_sequence == j \
+                            and tex_transform.rotation.timestamps.n_elements:
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(action, obj.name, bl_convert_rot_track, 4, 0, 'rotation_quaternion',
+                                                        tex_transform.rotation)
 
-                        if tex_transform.scaling.global_sequence == j \
-                        and tex_transform.scaling.timestamps.n_elements:
-                            action = self._bl_create_action(anim_pair, name)
-                            self._bl_create_fcurves(action, obj.name, self._bl_convert_track_dummy, 3, 0, 'scale',
-                                                    tex_transform.scaling)
+                            if tex_transform.scaling.global_sequence == j \
+                            and tex_transform.scaling.timestamps.n_elements:
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(action, obj.name, self._bl_convert_track_dummy, 3, 0, 'scale',
+                                                        tex_transform.scaling)
 
-                        if not anim_pair.action:
-                                anim.anim_pairs.remove(cur_index)
+                            if not anim_pair.action:
+                                    anim.anim_pairs.remove(cur_index)
 
                     # load animations
-                    for j, anim_index in enumerate(self.animations):
+                        for j, anim_index in enumerate(self.animations):
 
-                        # skip alias
-                        if self.alias_animation_lookup.get(j):
-                            continue
+                            # skip alias
+                            if self.alias_animation_lookup.get(j):
+                                continue
 
-                        anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
-                        sequence = self.m2.root.sequences[anim_index]
+                            anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
+                            sequence = self.m2.root.sequences[anim_index]
 
-                        field_name = seq_name_table.get_sequence_name(sequence.id)
-                        name = 'TT_{}_{}_{}_UnkAnim'.format(tex_tranform_index, obj.name, str(j).zfill(3)) \
-                             if not field_name else "TT_{}_{}_{}_{}_({})".format(tex_tranform_index,
-                                                                                 obj.name,
-                                                                                 str(j).zfill(3),
-                                                                                 field_name,
-                                                                                 sequence.variation_index)
+                            field_name = seq_name_table.get_sequence_name(sequence.id)
+                            name = 'TT_{}_{}_{}_UnkAnim'.format(tex_tranform_index, obj.name, str(j).zfill(3)) \
+                                 if not field_name else "TT_{}_{}_{}_{}_({})".format(tex_tranform_index,
+                                                                                     obj.name,
+                                                                                     str(j).zfill(3),
+                                                                                     field_name,
+                                                                                     sequence.variation_index)
 
-                        cur_index = len(anim.anim_pairs)
-                        anim_pair = anim.anim_pairs.add()
-                        anim_pair.type = 'OBJECT'
-                        anim_pair.object = c_obj
+                            cur_index = len(anim.anim_pairs)
+                            anim_pair = anim.anim_pairs.add()
+                            anim_pair.type = 'OBJECT'
+                            anim_pair.object = c_obj
 
-                        if tex_transform.translation.global_sequence < 0 \
-                        and tex_transform.translation.timestamps.n_elements > j:
-                            action = self._bl_create_action(anim_pair, name)
-                            self._bl_create_fcurves(action, obj.name, bl_convert_trans_track, 3, j, 'location',
-                                                    tex_transform.translation)
+                            if tex_transform.translation.global_sequence < 0 \
+                            and tex_transform.translation.timestamps.n_elements > j:
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(action, obj.name, bl_convert_trans_track, 3, j, 'location',
+                                                        tex_transform.translation)
 
-                        if tex_transform.rotation.global_sequence < 0 \
-                                and tex_transform.rotation.timestamps.n_elements > j:
-                            action = self._bl_create_action(anim_pair, name)
-                            self._bl_create_fcurves(action, obj.name, bl_convert_rot_track, 4, j, 'rotation_quaternion',
-                                                    tex_transform.rotation)
+                            if tex_transform.rotation.global_sequence < 0 \
+                                    and tex_transform.rotation.timestamps.n_elements > j:
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(action, obj.name, bl_convert_rot_track, 4, j, 'rotation_quaternion',
+                                                        tex_transform.rotation)
 
-                        if tex_transform.scaling.global_sequence < 0 \
-                                and tex_transform.scaling.timestamps.n_elements > j:
-                            action = self._bl_create_action(anim_pair, name)
-                            self._bl_create_fcurves(action, obj.name, self._bl_convert_track_dummy, 4, j,
-                                                    'rotation_quaternion', tex_transform.rotation)
+                            if tex_transform.scaling.global_sequence < 0 \
+                                    and tex_transform.scaling.timestamps.n_elements > j:
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(action, obj.name, self._bl_convert_track_dummy, 4, j,
+                                                        'rotation_quaternion', tex_transform.rotation)
 
-                        if not anim_pair.action:
-                            anim.anim_pairs.remove(cur_index)
+                            if not anim_pair.action:
+                                anim.anim_pairs.remove(cur_index)
 
     def load_attachments(self):
         # TODO: unknown field
