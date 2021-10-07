@@ -1663,7 +1663,9 @@ class BlenderM2Scene:
 
                 textures = [material.wow_m2_material.texture_1, material.wow_m2_material.texture_2,
                             material.wow_m2_material.texture_3, material.wow_m2_material.texture_4]
-                
+
+                texture_count = 0
+
                 for bl_texture in textures:
                     if bl_texture:
                         texture_count += 1
