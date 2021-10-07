@@ -1662,7 +1662,7 @@ class BlenderM2Scene:
 
             self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id)
 
-            bpy.data.objects.remove(new_obj, do_unlink=True)
+        bpy.data.objects.remove(new_obj, do_unlink=True)
 
         # remove temporary objects
         # for obj in proxy_objects:
