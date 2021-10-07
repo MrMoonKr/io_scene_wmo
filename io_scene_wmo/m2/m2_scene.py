@@ -1588,9 +1588,6 @@ class BlenderM2Scene:
             if not mesh.uv_layers.active:
                 raise Exception("Mesh <<{}>> has no UV map.".format(obj.name))
 
-            if len(mesh.materials) > 1:
-                raise Exception("Mesh <<{}>> has more than one material applied.".format(obj.name))
-
             # apply all modifiers
             if len(obj.modifiers):
                 for modifier in obj.modifiers:
