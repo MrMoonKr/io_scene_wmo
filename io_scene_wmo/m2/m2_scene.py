@@ -1021,7 +1021,7 @@ class BlenderM2Scene:
                                     'data.wow_m2_light.{}'.format(prop_name), prop_track)
 
         for i, light in enumerate(self.m2.root.lights):
-            bpy.ops.object.lamp_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
+            bpy.ops.object.light_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.data.wow_m2_light.type = str(light.type)
 
