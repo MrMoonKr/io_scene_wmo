@@ -1036,6 +1036,10 @@ class BlenderWMOSceneGroup:
         group.mogp.bounding_box_corner1 = [32767.0, 32767.0, 32767.0]
         group.mogp.bounding_box_corner2 = [-32768.0, -32768.0, -32768.0]
 
+        if len(group.movt.vertices) > 65535:
+            raise Exception('\nThe group \"{}\" has too many vertices : {} (max allowed = 65535)'.format(
+                obj.name, str(len(group.movt.vertices))))
+
         for vtx in group.movt.vertices:
             for j in range(0, 3):
                 group.mogp.bounding_box_corner1[j] = min(group.mogp.bounding_box_corner1[j], vtx[j])
