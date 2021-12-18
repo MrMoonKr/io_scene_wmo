@@ -540,7 +540,10 @@ class BlenderWMOScene:
         group_info.bounding_box_corner2 = bounding_box[1].copy()
         group_info.name_ofs = self.wmo.mogn.add_string(name)  # 0xFFFFFFFF
 
-        desc_ofs = self.wmo.mogn.add_string(desc)
+        if desc:
+            desc_ofs = self.wmo.mogn.add_string(desc)
+        else:
+            desc_ofs = 0
 
         self.wmo.mogi.infos.append(group_info)
 
