@@ -165,11 +165,12 @@ def on_depsgraph_update(_):
                     DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = True
 
                     # handle object copies
-                    if obj.active_material.users > 1:
-                        for i, mat in enumerate(obj.data.materials):
-                            mat = mat.copy()
-                            obj.data.materials[i] = mat
-                            is_duplicated = True
+                    if obj.active_material:
+                        if obj.active_material.users > 1:
+                            for i, mat in enumerate(obj.data.materials):
+                                mat = mat.copy()
+                                obj.data.materials[i] = mat
+                                is_duplicated = True
 
                     if is_duplicated:
                         continue
