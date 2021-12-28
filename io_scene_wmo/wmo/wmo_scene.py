@@ -120,10 +120,11 @@ class BlenderWMOScene:
             elif wmo_material.blend_mode == 1:
                 mat.blend_method = 'CLIP'
                 mat.alpha_threshold = 0.9
-            elif wmo_material.blend_mode in (3, 7, 10):
-                mat.blend_method = 'ADD'
-            elif wmo_material.blend_mode in (4, 5):
-                mat.blend_method = 'MULTIPLY'
+            # those blending modes don't exist anymore in 2.9+
+            # elif wmo_material.blend_mode in (3, 7, 10):
+            #     mat.blend_method = 'ADD'
+            # elif wmo_material.blend_mode in (4, 5):
+            #     mat.blend_method = 'MULTIPLY'
             else:
                 mat.blend_method = 'BLEND'
 
