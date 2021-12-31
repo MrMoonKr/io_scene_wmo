@@ -480,8 +480,10 @@ class BlenderWMOScene:
             doodads = []
             for doodad in slot.doodads:
                 if not doodad.pointer:
-                    raise Exception("Error : Doodad reference is linked with a non existing object, check and fix your doodad references.")
-
+                    print("Skipping bugged doodad reference")
+                    # raise Exception("Error : Doodad reference is linked with a non existing object, check and fix your doodad references.")
+                    continue
+                    
                 group = find_nearest_object(doodad.pointer, group_objects)
                 rel = group.wow_wmo_group.relations.doodads.add()
                 rel.id = doodad_counter
