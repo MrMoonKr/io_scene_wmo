@@ -232,7 +232,7 @@ def on_depsgraph_update(_):
                             bpy.app.timers.register(partial(_liquid_edit_mode_timer, override), first_interval=0.1)
 
                         # enforce object mode or sculpt mode
-                        elif obj.mode not in ('OBJECT', 'SCULPT'):
+                        elif obj.mode not in ('OBJECT', 'SCULPT', 'EDIT', 'VERTEX_PAINT'):
                             bpy.context.view_layer.objects.active = obj
                             bpy.ops.object.mode_set(mode='OBJECT')
 
