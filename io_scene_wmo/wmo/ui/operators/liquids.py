@@ -109,8 +109,8 @@ class WMO_OT_add_liquid(bpy.types.Operator):
 
     def execute(self, context):
         with DepsgraphLock():
-            bpy.ops.mesh.primitive_grid_add(x_subdivisions=self.x_planes + 1,
-                                            y_subdivisions=self.y_planes + 1,
+            bpy.ops.mesh.primitive_grid_add(x_subdivisions=self.x_planes,
+                                            y_subdivisions=self.y_planes,
                                             size=4.1666625
                                             )
             water = bpy.context.view_layer.objects.active
