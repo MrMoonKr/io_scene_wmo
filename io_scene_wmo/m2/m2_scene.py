@@ -1504,7 +1504,7 @@ class BlenderM2Scene:
 
         # if there are no actions, make a default Stand anim.
         if not len(bpy.data.actions):
-            self.m2.add_dummy_anim_set()
+            self.m2.add_dummy_anim_set(get_origin_position())
 
         for action in bpy.data.actions:
             seq_id = self.m2.add_anim(
