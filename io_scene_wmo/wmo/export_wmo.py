@@ -12,10 +12,7 @@ from ..ui import get_addon_prefs
 def export_wmo_from_blender_scene(filepath, client_version, export_selected, export_method):
     """ Export WoW WMO object from Blender scene to files """
 
-    try:
-        bpy.ops.object.mode_set(mode='OBJECT')
-    except:
-        pass
+    bpy.ops.object.mode_set(mode='OBJECT') # set to object mode on export to avoid crashes
 
     start_time = time.time()
 
