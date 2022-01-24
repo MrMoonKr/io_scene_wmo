@@ -183,7 +183,7 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
                          icon='VIEWZOOM')
             col.prop(cur_anim_track, 'move_speed', text="Move speed")
 
-            if context.scene.wow_scene.version >= WoWVersions.WOD:
+            if int(context.scene.wow_scene.version) >= WoWVersions.WOD:
                 col.prop(cur_anim_track, 'blend_time_in', text="Blend time in")
                 col.prop(cur_anim_track, 'blend_time_out', text="Blend time out")
             else:
