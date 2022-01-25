@@ -753,9 +753,9 @@ class BlenderWMOSceneGroup:
         elif group.mogp.liquid_type in types_2:
             texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
 
-        diff_color = (int(ob.wow_wmo_liquid.color[0] * 255),
+        diff_color = (int(ob.wow_wmo_liquid.color[2] * 255),
                       int(ob.wow_wmo_liquid.color[1] * 255),
-                      int(ob.wow_wmo_liquid.color[2] * 255),
+                      int(ob.wow_wmo_liquid.color[0] * 255),
                       int(ob.wow_wmo_liquid.color[3] * 255)
                      )
 
