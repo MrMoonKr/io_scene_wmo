@@ -1,4 +1,5 @@
 import os
+import re
 
 from math import sqrt, isinf
 from functools import partial
@@ -14,7 +15,8 @@ from ..utils.misc import resolve_texture_path, get_origin_position, get_objs_bou
 from .ui.enums import mesh_part_id_menu
 from .ui.panels.camera import update_follow_path_constraints
 from ..pywowlib.enums.m2_enums import M2SkinMeshPartID, M2AttachmentTypes, M2EventTokens, M2SequenceNames
-from ..pywowlib.file_formats.wow_common_types import M2Versions
+from ..pywowlib.file_formats.wow_common_types import *
+from ..pywowlib.file_formats.m2_format import *
 from ..pywowlib.m2_file import M2File
 
 
@@ -1516,52 +1518,94 @@ class BlenderM2Scene:
         if self.m2.root.version >= M2Versions.WOTLK:
             texture_weight.timestamps.new().add(0)
             texture_weight.values.new().add(32767)
-        
-        frame_range_list = []
-        
-        for action in bpy.data.actions:
-            frame_range_list.append( action.frame_range.to_tuple() )
-            for fcurve in action.fcurves:
-                # print(fcurve)
-                # use fcurves to calc boundings ?
-                pass
-        
-        print("frame ranges")
-        print(frame_range_list)
-        
-        for i, action in enumerate(self.scene.wow_m2_animations):
-            seq_id = self.m2.add_anim(
-                int(action.animation_id),
-                action.chain_index, # titi, to test
-                frame_range_list[i],
-                action.move_speed,
-                construct_bitfield(action.flags),
-                action.frequency,
-                (action.replay_min, action.replay_max),
-                action.blend_time,  # TODO: multiversioning
-                # ( ( (0.0, 0.0, 0.0), (0.0, 0.0, 0.0) ), 0.0 ), # TODO : bounds
-                ((self.m2.root.bounding_box.min, self.m2.root.bounding_box.max), self.m2.root.bounding_sphere_radius), # using root boundings, better than nothing
-                action.VariationNext,
-                action.alias_next
-            )
-        
-        # TODO
-        # for action in bpy.data.actions:
-        #     seq_id = self.m2.add_anim(
-        #         action.wow_m2_animation.animation_id,
-        #         action.wow_m2_animation.VariationNext,
-        #         action.frame_range.to_tuple(),
-        #         action.wow_m2_animation.Movespeed,
-        #         construct_bitfield(action.wow_m2_animation.flags),
-        #         action.wow_m2_animation.Frequency,
-        #         (action.wow_m2_animation.replay_min, action.wow_m2_animation.replay_max),
-        #         action.wow_m2_animation.BlendTime,  # TODO: multiversioning
-        #         action.wow_m2_animation.VariationNext,
-        #         action.wow_m2_animation.alias_next
-        #     )
 
-        #     for fcurve in action.fcurves:
-        #         pass
+        for i, wow_action in enumerate(self.scene.wow_m2_animations):
+            if len(wow_action.anim_pairs) == 0:
+                continue
+
+            # temp: just take the first animation added here
+            anim_pair = wow_action.anim_pairs[0]
+            if anim_pair.action is None or anim_pair.object is None:
+                print("Null action or object in animtion", wow_action.name)
+                continue
+
+            blender_action = anim_pair.action
+            obj = anim_pair.object
+
+            # Create animation chunk
+            seq_id = self.m2.add_anim(
+                int(wow_action.animation_id),
+                wow_action.chain_index, # titi, to test
+                blender_action.frame_range.to_tuple(),
+                wow_action.move_speed,
+                construct_bitfield(wow_action.flags),
+                wow_action.frequency,
+                (wow_action.replay_min, wow_action.replay_max),
+                wow_action.blend_time,  # TODO: multiversioning
+                ((self.m2.root.bounding_box.min, self.m2.root.bounding_box.max), self.m2.root.bounding_sphere_radius), # TODO using root boundings, better than nothing
+                wow_action.VariationNext,
+                wow_action.alias_next
+            )
+
+            # Track pass 1: Collect data into more readable format
+            armature_data = {} # {location|rotation|scale:{[timestamps]:<PointType>[]}}
+            for curve in blender_action.fcurves:
+                def next_dict(cur,key):
+                    if not key in cur: cur[key] = {}
+                    return cur[key]
+                bone = re.search('"(.+?)"',curve.data_path).group(1)
+                curve_type = re.search('([a-zA-Z_]+)$',curve.data_path).group(0)
+                bone_data = next_dict(armature_data,bone)
+                track_data = next_dict(bone_data,curve_type)
+                index = curve.array_index
+                for i,point in enumerate(curve.keyframe_points):
+                    keyframe_data = next_dict(track_data,point.co[0])
+                    keyframe_data[curve.array_index] = point.co[1]
+
+            # Track pass 2: Sort tracks by timestamp
+            # armature_data -> {location|rotation|scale: {timestamp,<PointType>[]}[]}
+            for bone,tracks in armature_data.items():
+                for trackname,frame_dict in tracks.items():
+                    tracks[trackname] = [{'timestamp':timestamp,'values':values}
+                        for timestamp,values in frame_dict.items()]
+                    tracks[trackname].sort(key=lambda track:track['timestamp'])
+
+            # Track pass 3: Write m2 tracks
+            for bone_name,tracks in armature_data.items():
+                bone_id = self.bone_ids[bone_name]
+                m2_bone = self.m2.root.bones[bone_id]
+
+                def prep_track(track,valueType):
+                    while len(track.timestamps) <= seq_id:
+                        track.timestamps.add(M2Array(uint32))
+                    while len(track.values) <= seq_id:
+                        track.values.add(M2Array(valueType))
+                    return (track.timestamps[seq_id],track.values[seq_id])
+
+                if "rotation_quaternion" in tracks:
+                    m2_bone.flags = 512
+                    m2_bone.rotation.interpolation_type = 1 # TODO: assumes linear, should be read
+                    (track_times,track_values) = prep_track(m2_bone.rotation,M2CompQuaternion)
+                    for keyframe in tracks["rotation_quaternion"]:
+                        track_times.add(int((keyframe["timestamp"])/0.0266666))
+
+                        def to_wow_quat(value):
+                            # clamp away floating point errors, happens in blender sometimes
+                            # no real values should ever be outside this range.
+                            if value > 1: value = 1
+                            if value < -1: value = -1
+
+                            value = value * 32767
+                            if value <= 0: value += 32767
+                            else: value -= 32768
+                            return int(value)
+
+                        track_values.add(M2CompQuaternion((
+                              to_wow_quat(keyframe["values"][0])
+                            , to_wow_quat(keyframe["values"][1])
+                            , to_wow_quat(-keyframe["values"][3])
+                            , to_wow_quat(keyframe["values"][2])
+                        )))
 
     def save_geosets(self, selected_only, fill_textures):
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
