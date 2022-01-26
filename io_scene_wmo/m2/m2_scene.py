@@ -1560,7 +1560,11 @@ class BlenderM2Scene:
                 index = curve.array_index
                 for i,point in enumerate(curve.keyframe_points):
                     keyframe_data = next_dict(track_data,point.co[0])
-                    keyframe_data[curve.array_index] = point.co[1]
+                    if curve_type == "rotation_quaternion":
+                        key = ["w","x","y","z"][index]
+                    else:
+                        key = ["x","y","z"][index]
+                    keyframe_data[key] = point.co[1]
 
             # Track pass 2: Sort tracks by timestamp
             # armature_data -> {location|rotation|scale: {timestamp,<PointType>[]}[]}
@@ -1600,11 +1604,13 @@ class BlenderM2Scene:
                             else: value -= 32768
                             return int(value)
 
+                        rot_quat = keyframe["values"]
+
                         track_values.add(M2CompQuaternion((
-                              to_wow_quat(keyframe["values"][0])
-                            , to_wow_quat(keyframe["values"][1])
-                            , to_wow_quat(-keyframe["values"][3])
-                            , to_wow_quat(keyframe["values"][2])
+                              to_wow_quat(rot_quat["w"])
+                            , to_wow_quat(rot_quat["y"])
+                            , to_wow_quat(-rot_quat["z"])
+                            , to_wow_quat(-rot_quat["x"])
                         )))
 
     def save_geosets(self, selected_only, fill_textures):
