@@ -1512,6 +1512,40 @@ class BlenderM2Scene:
         # if there are no actions, make a default Stand anim.
         if not len(bpy.data.actions):
             self.m2.add_dummy_anim_set(get_origin_position())
+            return
+
+        # collect bone rotation quaternions
+        bone_quats = {}
+        for obj in bpy.data.objects:
+            if obj.type == "ARMATURE":
+                bone_quats[obj.name] = {}
+                bpy.ops.object.select_all(action='DESELECT')
+                obj.select_set(True)
+                bpy.ops.object.mode_set(mode='EDIT')
+                for bone in obj.data.edit_bones:
+                    # blender thinks y=1,x=0,z=0 is a "neutral" bone position but wbs thinks it's x=1,y=0,z=0
+                    temp_bone = obj.data.edit_bones.new(bone.name+"_clone")
+                    temp_bone.head = (
+                        bone.head[1],
+                        bone.head[0],
+                        bone.head[2]
+                    )
+                    temp_bone.tail = (
+                        bone.tail[1],
+                        bone.tail[0],
+                        bone.tail[2]
+                    )
+                    temp_bone.roll = bone.roll
+                    quat = temp_bone.matrix.to_quaternion()
+                    bone_quats[obj.name][bone.name] = {
+                        "w":quat[0],
+                        "x":quat[1],
+                        "y":quat[2],
+                        "z":quat[3],
+                    }
+                    obj.data.edit_bones.remove(temp_bone)
+                bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
 
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
         texture_weight = self.m2.root.texture_weights.new()
@@ -1604,7 +1638,14 @@ class BlenderM2Scene:
                             else: value -= 32768
                             return int(value)
 
-                        rot_quat = keyframe["values"]
+                        def rotate_quat(q1,q2):
+                            return {
+                                "x" : q1["x"] * q2["w"] + q1["y"] * q2["z"] - q1["z"] * q2["y"] + q1["w"] * q2["x"],
+                                "y" : -q1["x"] * q2["z"] + q1["y"] * q2["w"] + q1["z"] * q2["x"] + q1["w"] * q2["y"],
+                                "z" : q1["x"] * q2["y"] - q1["y"] * q2["x"] + q1["z"] * q2["w"] + q1["w"] * q2["z"],
+                                "w" : -q1["x"] * q2["x"] - q1["y"] * q2["y"] - q1["z"] * q2["z"] + q1["w"] * q2["w"],
+                        }
+                        rot_quat = rotate_quat(bone_quats[obj.name][bone_name],keyframe["values"])
 
                         track_values.add(M2CompQuaternion((
                               to_wow_quat(rot_quat["w"])
