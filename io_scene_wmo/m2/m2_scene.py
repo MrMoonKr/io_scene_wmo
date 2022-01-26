@@ -1609,8 +1609,8 @@ class BlenderM2Scene:
                         track_values.add(M2CompQuaternion((
                               to_wow_quat(rot_quat["w"])
                             , to_wow_quat(rot_quat["y"])
-                            , to_wow_quat(-rot_quat["z"])
                             , to_wow_quat(-rot_quat["x"])
+                            , to_wow_quat(rot_quat["z"])
                         )))
 
     def save_geosets(self, selected_only, fill_textures):
