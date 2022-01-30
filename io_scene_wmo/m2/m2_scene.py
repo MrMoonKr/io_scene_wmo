@@ -1514,37 +1514,6 @@ class BlenderM2Scene:
             self.m2.add_dummy_anim_set(get_origin_position())
             return
 
-        # collect bone rotation quaternions
-        bone_quats = {}
-        for obj in bpy.data.objects:
-            if obj.type == "ARMATURE":
-                bone_quats[obj.name] = {}
-                bpy.ops.object.select_all(action='DESELECT')
-                obj.select_set(True)
-                bpy.ops.object.mode_set(mode='EDIT')
-                for bone in obj.data.edit_bones:
-                    # we use x+ as the neutral pose
-                    y = bone.tail[0] - bone.head[0]
-                    x = bone.tail[1] - bone.head[1]
-                    z = bone.tail[2] - bone.head[2]
-
-                    pitch = (asin(z))
-                    yaw = (atan2(y,x))
-                    roll = (bone.roll)
-
-                    qx = sin(roll/2) * cos(pitch/2) * cos(yaw/2) - cos(roll/2) * sin(pitch/2) * sin(yaw/2)
-                    qy = cos(roll/2) * sin(pitch/2) * cos(yaw/2) + sin(roll/2) * cos(pitch/2) * sin(yaw/2)
-                    qz = cos(roll/2) * cos(pitch/2) * sin(yaw/2) - sin(roll/2) * sin(pitch/2) * cos(yaw/2)
-                    qw = cos(roll/2) * cos(pitch/2) * cos(yaw/2) + sin(roll/2) * sin(pitch/2) * sin(yaw/2)
-                    bone_quats[obj.name][bone.name] = {
-                        "w":qw,
-                        "x":qx,
-                        "y":qy,
-                        "z":qz,
-                    }
-                bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_all(action='DESELECT')
-
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
         texture_weight = self.m2.root.texture_weights.new()
         if self.m2.root.version >= M2Versions.WOTLK:
@@ -1630,7 +1599,6 @@ class BlenderM2Scene:
                             # no real values should ever be outside this range.
                             if value > 1: value = 1
                             if value < -1: value = -1
-
                             value = value * 32767
                             if value <= 0: value += 32767
                             else: value -= 32768
@@ -1643,7 +1611,8 @@ class BlenderM2Scene:
                                 "z" : q1["x"] * q2["y"] - q1["y"] * q2["x"] + q1["z"] * q2["w"] + q1["w"] * q2["z"],
                                 "w" : -q1["x"] * q2["x"] - q1["y"] * q2["y"] - q1["z"] * q2["z"] + q1["w"] * q2["w"],
                         }
-                        rot_quat = rotate_quat(bone_quats[obj.name][bone_name],keyframe["values"])
+
+                        rot_quat = keyframe["values"]
 
                         track_values.add(M2CompQuaternion((
                               to_wow_quat(rot_quat["w"])
