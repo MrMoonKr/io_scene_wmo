@@ -138,7 +138,7 @@ class WMO_OT_root_elements_components_change(bpy.types.Operator):
                 d_set.wow_wmo_doodad_set.enabled = True
 
                 if not len(bpy.context.scene.wow_wmo_root_elements.doodad_sets):
-                    d_set.name = '$SetDefaultGlobal'
+                    d_set.name = 'Set_$DefaultGlobal'
                 else:
                     d_set.name = 'Doodad_Set'
 

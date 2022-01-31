@@ -69,7 +69,13 @@ class BlenderWMOScene:
 
             mat.wow_wmo_material.blending_mode = str(wmo_material.blend_mode)
             mat.wow_wmo_material.emissive_color = [x / 255 for x in wmo_material.emissive_color]
-            mat.wow_wmo_material.diff_color = [x / 255 for x in wmo_material.diff_color]
+            mat.wow_wmo_material.diff_color = (wmo_material.diff_color[2] / 255,
+                                               wmo_material.diff_color[1] / 255,
+                                               wmo_material.diff_color[0] / 255,
+                                               wmo_material.diff_color[3] / 255
+                                              )
+
+
             mat.wow_wmo_material.terrain_type = str(wmo_material.terrain_type)
 
             mat_flags = set()
@@ -120,10 +126,11 @@ class BlenderWMOScene:
             elif wmo_material.blend_mode == 1:
                 mat.blend_method = 'CLIP'
                 mat.alpha_threshold = 0.9
-            elif wmo_material.blend_mode in (3, 7, 10):
-                mat.blend_method = 'ADD'
-            elif wmo_material.blend_mode in (4, 5):
-                mat.blend_method = 'MULTIPLY'
+            # those blending modes don't exist anymore in 2.9+
+            # elif wmo_material.blend_mode in (3, 7, 10):
+            #     mat.blend_method = 'ADD'
+            # elif wmo_material.blend_mode in (4, 5):
+            #     mat.blend_method = 'MULTIPLY'
             else:
                 mat.blend_method = 'BLEND'
 
@@ -395,6 +402,8 @@ class BlenderWMOScene:
             flags.add("2")
         if self.wmo.mohd.flags & 0x8:
             flags.add("1")
+        if self.wmo.mohd.flags & 0x4:
+            flags.add("3")
 
         properties.flags = flags
         properties.skybox_path = self.wmo.mosb.skybox
@@ -476,6 +485,11 @@ class BlenderWMOScene:
 
             doodads = []
             for doodad in slot.doodads:
+                if not doodad.pointer:
+                    print("Skipping bugged doodad reference")
+                    # raise Exception("Error : Doodad reference is linked with a non existing object, check and fix your doodad references.")
+                    continue
+                    
                 group = find_nearest_object(doodad.pointer, group_objects)
                 rel = group.wow_wmo_group.relations.doodads.add()
                 rel.id = doodad_counter
@@ -519,9 +533,9 @@ class BlenderWMOScene:
                                       int(mat.wow_wmo_material.emissive_color[2] * 255),
                                       int(mat.wow_wmo_material.emissive_color[3] * 255)
                                     )
-                                  , ( int(mat.wow_wmo_material.diff_color[0] * 255),
+                                  , ( int(mat.wow_wmo_material.diff_color[2] * 255),
                                       int(mat.wow_wmo_material.diff_color[1] * 255),
-                                      int(mat.wow_wmo_material.diff_color[2] * 255),
+                                      int(mat.wow_wmo_material.diff_color[0] * 255),
                                       int(mat.wow_wmo_material.diff_color[3] * 255)
                                     )
                                  )
@@ -535,7 +549,10 @@ class BlenderWMOScene:
         group_info.bounding_box_corner2 = bounding_box[1].copy()
         group_info.name_ofs = self.wmo.mogn.add_string(name)  # 0xFFFFFFFF
 
-        desc_ofs = self.wmo.mogn.add_string(desc)
+        if desc:
+            desc_ofs = self.wmo.mogn.add_string(desc)
+        else:
+            desc_ofs = 0
 
         self.wmo.mogi.infos.append(group_info)
 
@@ -827,8 +844,8 @@ class BlenderWMOScene:
             self.wmo.mohd.flags |= 0x02
         if "1" in flags:
             self.wmo.mohd.flags |= 0x08
-
-        self.wmo.mohd.flags |= 0x4
+        if "3" in flags:
+            self.wmo.mohd.flags |= 0x4
 
 
 

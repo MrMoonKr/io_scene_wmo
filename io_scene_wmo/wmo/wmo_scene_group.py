@@ -145,7 +145,7 @@ class BlenderWMOSceneGroup:
             elif basic_liquid_type == 2:
                 real_liquid_type = 19
             elif basic_liquid_type == 15:
-                real_liquid_type = 17
+                real_liquid_type = 15
             elif basic_liquid_type == 3:
                 real_liquid_type = 20
         else:
@@ -191,8 +191,8 @@ class BlenderWMOSceneGroup:
         mesh.update(calc_edges=True)
         mesh.validate()
 
-        # create uv map if liquid is lava
-        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12}:
+        # create uv map if liquid is lava or slime
+        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
             uv_map = {}
 
             for vertex in mesh.vertices:
@@ -219,6 +219,8 @@ class BlenderWMOSceneGroup:
                 for loop in poly.loop_indices:
                     if tile_flag & bit:
                         vc_layer.data[loop].color = (0, 0, 255, 255)
+                    else:
+                        vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
 
         # set mesh location
@@ -636,7 +638,7 @@ class BlenderWMOSceneGroup:
                     if angle is None or angle >= pi * 0.5:
                         continue
 
-                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.view_layer, g_center, direction)
+                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center, direction)
 
                     if not ray_cast_result[0] \
                             or ray_cast_result[4].name == portal_obj.name \
@@ -740,8 +742,8 @@ class BlenderWMOSceneGroup:
 
         group.mogp.flags |= 0x1000  # do we really need that?
 
-        types_1 = {3, 7, 11}
-        types_2 = {4, 8, 12}
+        types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
+        types_2 = {4, 8, 12, 20, 21} # slime
 
         texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
 
@@ -751,9 +753,9 @@ class BlenderWMOSceneGroup:
         elif group.mogp.liquid_type in types_2:
             texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
 
-        diff_color = (int(ob.wow_wmo_liquid.color[0] * 255),
+        diff_color = (int(ob.wow_wmo_liquid.color[2] * 255),
                       int(ob.wow_wmo_liquid.color[1] * 255),
-                      int(ob.wow_wmo_liquid.color[2] * 255),
+                      int(ob.wow_wmo_liquid.color[0] * 255),
                       int(ob.wow_wmo_liquid.color[3] * 255)
                      )
 
@@ -825,6 +827,17 @@ class BlenderWMOSceneGroup:
         # create bmesh
         bm = bmesh.new()
         bm.from_object(obj, bpy.context.evaluated_depsgraph_get())
+        
+        # handle separate collision
+        if obj.wow_wmo_group.collision_mesh:
+            col_mesh = obj.wow_wmo_group.collision_mesh.data.copy()
+
+            for poly in col_mesh.polygons:
+                poly.material_index = 0xFF
+
+            bm.from_mesh(col_mesh)
+            bm.verts.ensure_lookup_table()
+            bm.faces.ensure_lookup_table()
 
         # triangulate bmesh
         bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
@@ -870,16 +883,6 @@ class BlenderWMOSceneGroup:
 
         if obj_blend_map:
             self.wmo_scene.wmo.mohd.flags |= 0x2
-
-        if obj.wow_wmo_group.collision_mesh:
-            col_mesh = obj.wow_wmo_group.collision_mesh.data.copy()
-
-            for poly in col_mesh.polygons:
-                poly.material_index = 0xFF
-
-            bm.from_mesh(col_mesh)
-            bm.verts.ensure_lookup_table()
-            bm.faces.ensure_lookup_table()
 
         faces_set = set(faces)
         batches = {}
@@ -1033,6 +1036,10 @@ class BlenderWMOSceneGroup:
         group.mogp.bounding_box_corner1 = [32767.0, 32767.0, 32767.0]
         group.mogp.bounding_box_corner2 = [-32768.0, -32768.0, -32768.0]
 
+        if len(group.movt.vertices) > 65535:
+            raise Exception('\nThe group \"{}\" has too many vertices : {} (max allowed = 65535)'.format(
+                obj.name, str(len(group.movt.vertices))))
+
         for vtx in group.movt.vertices:
             for j in range(0, 3):
                 group.mogp.bounding_box_corner1[j] = min(group.mogp.bounding_box_corner1[j], vtx[j])
@@ -1119,7 +1126,7 @@ class BlenderWMOSceneGroup:
         else:
             group.mliq = None
             group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
-            group.root.mohd.flags |= 0x4
+            # group.root.mohd.flags |= 0x4 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
 
         if not has_lights:
             group.molr = None

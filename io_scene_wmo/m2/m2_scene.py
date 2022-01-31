@@ -1026,7 +1026,7 @@ class BlenderM2Scene:
                                     'data.wow_m2_light.{}'.format(prop_name), prop_track)
 
         for i, light in enumerate(self.m2.root.lights):
-            bpy.ops.object.lamp_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
+            bpy.ops.object.light_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.data.wow_m2_light.type = str(light.type)
 
@@ -1509,7 +1509,7 @@ class BlenderM2Scene:
 
         # if there are no actions, make a default Stand anim.
         if not len(bpy.data.actions):
-            self.m2.add_dummy_anim_set()
+            self.m2.add_dummy_anim_set(get_origin_position())
 
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
         texture_weight = self.m2.root.texture_weights.new()
@@ -1726,9 +1726,11 @@ class BlenderM2Scene:
                 self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id,
                                                 tex_unit_coord, priority_plane, mat_layer, texture_count)
 
+        bpy.data.objects.remove(new_obj, do_unlink=True)
+
         # remove temporary objects
-        for obj in proxy_objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
+        # for obj in proxy_objects:
+        #     bpy.data.objects.remove(obj, do_unlink=True)
 
     def save_collision(self, selected_only):
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects

@@ -165,11 +165,12 @@ def on_depsgraph_update(_):
                     DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = True
 
                     # handle object copies
-                    if obj.active_material.users > 1:
-                        for i, mat in enumerate(obj.data.materials):
-                            mat = mat.copy()
-                            obj.data.materials[i] = mat
-                            is_duplicated = True
+                    if obj.active_material:
+                        if obj.active_material.users > 1:
+                            for i, mat in enumerate(obj.data.materials):
+                                mat = mat.copy()
+                                obj.data.materials[i] = mat
+                                is_duplicated = True
 
                     if is_duplicated:
                         continue
@@ -231,7 +232,7 @@ def on_depsgraph_update(_):
                             bpy.app.timers.register(partial(_liquid_edit_mode_timer, override), first_interval=0.1)
 
                         # enforce object mode or sculpt mode
-                        elif obj.mode not in ('OBJECT', 'SCULPT'):
+                        elif obj.mode not in ('OBJECT', 'SCULPT', 'EDIT', 'VERTEX_PAINT'):
                             bpy.context.view_layer.objects.active = obj
                             bpy.ops.object.mode_set(mode='OBJECT')
 

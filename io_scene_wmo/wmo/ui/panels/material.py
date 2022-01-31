@@ -85,10 +85,11 @@ def update_blending_mode(self, context):
     elif blend_mode == 1:
         material.blend_method = 'CLIP'
         material.alpha_threshold = 0.9
-    elif blend_mode in (3, 7, 10):
-        material.blend_method = 'ADD'
-    elif blend_mode in (4, 5):
-        material.blend_method = 'MULTIPLY'
+    # those blending modes don't exist anymore in 2.9+
+    # elif wmo_material.blend_mode in (3, 7, 10):
+    #     mat.blend_method = 'ADD'
+    # elif wmo_material.blend_mode in (4, 5):
+    #     mat.blend_method = 'MULTIPLY'
     else:
         material.blend_method = 'BLEND'
 
