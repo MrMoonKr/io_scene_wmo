@@ -845,6 +845,13 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
         max=65535
     )
 
+    VariationNext: bpy.props.IntProperty(
+        name='Next Variation',
+        description='Id of the following animation of this animation_id',
+        min=-1,
+        update=update_animation_collection
+    )
+
     alias_next:  bpy.props.IntProperty(
         name='Alias',
         description='Index of animation used as a alias for this one',
