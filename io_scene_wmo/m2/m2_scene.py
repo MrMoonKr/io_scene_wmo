@@ -401,7 +401,7 @@ class BlenderM2Scene:
             # TODO: other settings
 
             if not tex_unit.skin_section_index in self.materials:
-	            self.materials[tex_unit.skin_section_index] = []
+                self.materials[tex_unit.skin_section_index] = []
 
             self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
 
