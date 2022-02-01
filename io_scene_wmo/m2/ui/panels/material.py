@@ -48,6 +48,8 @@ class M2_PT_material_panel(bpy.types.Panel):
 
 
 class WowM2MaterialPropertyGroup(bpy.types.PropertyGroup):
+    
+    enabled:  bpy.props.BoolProperty()
 
     flags:  bpy.props.EnumProperty(
         name="Material flags",
@@ -132,6 +134,8 @@ class WowM2MaterialPropertyGroup(bpy.types.PropertyGroup):
         description='Automatically update this material on scene frame changes, if global live update is on. May decrease FPS.',
         default=False
     )
+    
+    self_pointer: bpy.props.PointerProperty(type=bpy.types.Material)
 
 
 def register():

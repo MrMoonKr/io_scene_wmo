@@ -15,7 +15,10 @@ class M2_PT_texture_panel(bpy.types.Panel):
         col.separator()
         col.prop(context.edit_image.wow_m2_texture, "texture_type")
         col.separator()
-        col.prop(context.edit_image.wow_m2_texture, "path", text='Path')
+        print(context.edit_image.wow_m2_texture.texture_type)
+        # only show path setting if texture type is hardcoded
+        if context.edit_image.wow_m2_texture.texture_type == "0":
+            col.prop(context.edit_image.wow_m2_texture, "path", text='Path')
 
     @classmethod
     def poll(cls, context):
@@ -25,6 +28,8 @@ class M2_PT_texture_panel(bpy.types.Panel):
 
 
 class WowM2TexturePropertyGroup(bpy.types.PropertyGroup):
+    
+    enabled:  bpy.props.BoolProperty()
 
     flags:  bpy.props.EnumProperty(
         name="Texture flags",
@@ -44,6 +49,8 @@ class WowM2TexturePropertyGroup(bpy.types.PropertyGroup):
         name='Path',
         description='Path to .blp file in wow file system.'
     )
+
+    # self_pointer: bpy.props.PointerProperty(type=bpy.types.Image)
 
 def register():
     bpy.types.Image.wow_m2_texture = bpy.props.PointerProperty(type=WowM2TexturePropertyGroup)

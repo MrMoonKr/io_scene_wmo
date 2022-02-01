@@ -1,3 +1,4 @@
+from collections import namedtuple
 import bpy
 from ..enums import *
 
@@ -62,6 +63,9 @@ def update_geoset_uv_transform(self, context):
 
 
 class WowM2GeosetPropertyGroup(bpy.types.PropertyGroup):
+    
+    enabled:  bpy.props.BoolProperty()
+    
     collision_mesh:  bpy.props.BoolProperty(
         name='Collision mesh',
         default=False
@@ -123,6 +127,7 @@ class M2_OT_add_texture_transform(bpy.types.Operator):
 
         return {'FINISHED'}
 
+#############
 
 def register():
     bpy.types.Object.wow_m2_geoset = bpy.props.PointerProperty(type=WowM2GeosetPropertyGroup)
