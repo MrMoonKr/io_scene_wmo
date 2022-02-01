@@ -128,6 +128,7 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
         col1_row1.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
         col1_row2 = col1_col.row(align=True)
         col1_row3 = col1_col.row(align=True)
+        col1_row3.operator("scene.wow_add_light", text='Light', icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
         col.separator()
 
         if game_data_loaded:
@@ -158,11 +159,11 @@ class WMO_PT_tools_object_mode_actions(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout.split()
         col = layout.column(align=True)
+        col.separator()
+        box_col = col.column(align=True)
+        box_col.operator("scene.wow_wmo_generate_minimaps", text='Generate minimaps', icon='SHADING_RENDERED')
 
         if bpy.context.selected_objects:
-
-            col.separator()
-            box_col = col.column(align=True)
             box_col.operator("scene.wow_wmo_generate_materials", text='Generate materials', icon='MATERIAL')
             box_col.operator("scene.wow_fill_textures", text='Fill texture paths', icon='SEQ_SPLITVIEW')
             box_col.operator("scene.wow_quick_collision", text='Quick collision', icon='MOD_TRIANGULATE')
