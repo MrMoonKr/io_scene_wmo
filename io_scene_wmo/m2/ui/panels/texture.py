@@ -15,7 +15,6 @@ class M2_PT_texture_panel(bpy.types.Panel):
         col.separator()
         col.prop(context.edit_image.wow_m2_texture, "texture_type")
         col.separator()
-        print(context.edit_image.wow_m2_texture.texture_type)
         # only show path setting if texture type is hardcoded
         if context.edit_image.wow_m2_texture.texture_type == "0":
             col.prop(context.edit_image.wow_m2_texture, "path", text='Path')
