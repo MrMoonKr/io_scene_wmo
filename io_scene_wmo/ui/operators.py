@@ -1,11 +1,12 @@
 import bpy
+import json
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy_extras.io_utils import ExportHelper
 
 from ..wmo.import_wmo import import_wmo_to_blender_scene
 from ..wmo.export_wmo import export_wmo_from_blender_scene
 from ..m2.import_m2 import import_m2
-from ..m2.export_m2 import export_m2
+from ..m2.export_m2 import export_m2, create_m2
 from ..utils.misc import load_game_data
 
 #############################################################
@@ -194,7 +195,6 @@ class WBS_OT_m2_import(bpy.types.Operator):
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
-
 class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
     """Save M2 mesh data"""
     bl_idname = "export_mesh.m2"
@@ -233,6 +233,66 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
             return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')
+
+class WBS_OT_M2_test(bpy.types.Operator):
+    """Read M2 file and compare output with input"""
+    bl_idname = "test.m2"
+    bl_label = "Test M2"
+    bl_options = {'UNDO', 'REGISTER'}
+
+    filepath: StringProperty(
+        subtype='FILE_PATH',
+        )
+
+    filter_glob: StringProperty(
+        default="*.m2",
+        options={'HIDDEN'}
+        )
+
+    def execute(self, context):
+        m2_in = import_m2(int(context.scene.wow_scene.version), self.filepath, True)
+        context.scene.wow_scene.type = 'M2'
+        m2_out = create_m2(int(context.scene.wow_scene.version), self.filepath, False, False)
+
+        def diff(obj1,obj2):
+            if type(obj1) != type(obj2):
+                return 'TypeError('+type(obj1)+','+type(obj2)+')'
+            dtype = type(obj1)
+            if dtype is dict:
+                diffObj = {}
+                for k in obj1:
+                    if not k in obj2:
+                        diffObj[k] = 'LeftOnly'
+                    else:
+                        diffVal = diff(obj1[k],obj2[k])
+                        if not diffVal is None:
+                            diffObj[k] = diffVal
+                for k in obj2:
+                    if not k in obj1:
+                        diffObj[k] = 'RightOnly'
+                return diffObj if len(diffObj) > 0 else None
+            elif dtype is list or dtype is tuple:
+                diffObj = {}
+                if len(obj1) != len(obj2):
+                    diffObj["len"] = str(len(obj1)) + " != " + str(len(obj2))
+                for i in range(min(len(obj1),len(obj2))):
+                    diffVal = diff(obj1[i],obj2[i])
+                    if not diffVal is None:
+                        if not "values" in diffObj:
+                            diffObj["values"] = {}
+                        diffObj["values"][i] = diffVal
+                return diffObj if len(diffObj) > 0 else None
+            else:
+                return str(obj1) + ' != ' + str(obj2) if obj1 != obj2 else None
+
+        with open(self.filepath+".json",'w') as f:
+            f.write(json.dumps(diff(m2_in.to_obj(),m2_out.to_obj()),indent=4))
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        wm.fileselect_add(self)
+        return {'RUNNING_MODAL'}
 
 
 '''
