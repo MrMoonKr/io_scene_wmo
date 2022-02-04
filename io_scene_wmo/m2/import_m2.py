@@ -72,7 +72,8 @@ def import_m2(version, filepath, is_local_file=False):
     bl_m2.load_geosets()
     bl_m2.load_texture_transforms()
     bl_m2.load_collision()
-    bl_m2.load_attachments()
+    # TODO: disabled because it throws errors
+    #bl_m2.load_attachments()
     bl_m2.load_lights()
     bl_m2.load_events()
     #bl_m2.load_cameras()
