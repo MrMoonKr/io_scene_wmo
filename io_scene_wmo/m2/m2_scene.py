@@ -5,6 +5,7 @@ from math import sqrt, isinf, asin, atan2, sin, cos
 from functools import partial
 
 import bpy
+import ctypes
 from mathutils import Vector
 
 from .bl_render import update_m2_mat_node_tree
@@ -430,14 +431,16 @@ class BlenderM2Scene:
 
         for i, bone in enumerate(self.m2.root.bones):  # add bones to armature.
             bl_edit_bone = armature.edit_bones.new(bone.name)
-            bl_edit_bone.wow_m2_bone.sort_index = i
             bl_edit_bone.head = Vector(bone.pivot)
 
             bl_edit_bone.tail.x = bl_edit_bone.head.x + 0.1  # TODO: mess with bones parenting even more
             bl_edit_bone.tail.y = bl_edit_bone.head.y
             bl_edit_bone.tail.z = bl_edit_bone.head.z
 
+            bl_edit_bone.wow_m2_bone.sort_index = i
             bl_edit_bone.wow_m2_bone.flags = parse_bitfield(bone.flags)
+            bl_edit_bone.wow_m2_bone.submesh_id = bone.submesh_id
+            bl_edit_bone.wow_m2_bone.bone_name_crc = ctypes.c_int(bone.bone_name_crc).value
 
             try:
                 bl_edit_bone.wow_m2_bone.key_bone_id = str(bone.key_bone_id)
@@ -1442,7 +1445,14 @@ class BlenderM2Scene:
             parent_bone = self.bone_ids[bl_bone.parent.name] if bl_bone.parent else -1
             pivot = bl_bone.head
 
-            self.bone_ids[bl_bone.name] = self.m2.add_bone(pivot, key_bone_id, flags, parent_bone)
+            m2_bone = self.bone_ids[bl_bone.name] = self.m2.add_bone(
+                pivot,
+                key_bone_id,
+                flags,
+                parent_bone,
+                bl_bone.wow_m2_bone.submesh_id,
+                ctypes.c_uint(bl_bone.wow_m2_bone.bone_name_crc).value
+            )
 
         rigs = list(filter(lambda ob: ob.type == 'ARMATURE' and not ob.hide_get(), bpy.context.scene.objects))
 
