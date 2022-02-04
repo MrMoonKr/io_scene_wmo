@@ -430,6 +430,7 @@ class BlenderM2Scene:
 
         for i, bone in enumerate(self.m2.root.bones):  # add bones to armature.
             bl_edit_bone = armature.edit_bones.new(bone.name)
+            bl_edit_bone.wow_m2_bone.sort_index = i
             bl_edit_bone.head = Vector(bone.pivot)
 
             bl_edit_bone.tail.x = bl_edit_bone.head.x + 0.1  # TODO: mess with bones parenting even more
@@ -1455,43 +1456,54 @@ class BlenderM2Scene:
 
             armature = rig.data
 
-            # find root bone, check if we only have one root bone
-            root_bone = None
-            global_bones = []
+            has_unsorted_bones = False
             for bone in armature.edit_bones:
-                if root_bone is not None and bone.parent is None and bone.children:
-                    raise Exception('Error: M2 exporter does not support more than one global root bone.')
+                if bone.wow_m2_bone.sort_index < 0:
+                    has_unsorted_bones = True
+                    break
 
-                if bone.parent is None:
-                    if bone.children:
-                        root_bone = bone
-                        add_bone(root_bone)
-                    else:
-                        global_bones.append(bone)
+            if has_unsorted_bones:
+                # find root bone, check if we only have one root bone
+                root_bone = None
+                global_bones = []
+                for bone in armature.edit_bones:
+                    if root_bone is not None and bone.parent is None and bone.children:
+                        raise Exception('Error: M2 exporter does not support more than one global root bone.')
 
-            # add global bones
-            for bone in global_bones:
-                add_bone(bone)
+                    if bone.parent is None:
+                        if bone.children:
+                            root_bone = bone
+                            add_bone(root_bone)
+                        else:
+                            global_bones.append(bone)
 
-            # find root keybone, write additional bones
-            root_keybone = None
-
-            if root_bone:
-                for bone in root_bone.children:
-
-                    if bone.wow_m2_bone.key_bone_id == '26':
-                        root_keybone = bone
-                        continue
-
+                # add global bones
+                for bone in global_bones:
                     add_bone(bone)
-                    for child_bone in bone.children_recursive:
-                        add_bone(child_bone)
 
-            # write root keybone and its children
-            if root_keybone:
-                add_bone(root_keybone)
-                for bone in root_keybone.children_recursive:
-                    add_bone(bone)
+                # find root keybone, write additional bones
+                root_keybone = None
+
+                if root_bone:
+                    for bone in root_bone.children:
+
+                        if bone.wow_m2_bone.key_bone_id == '26':
+                            root_keybone = bone
+                            continue
+
+                        add_bone(bone)
+                        for child_bone in bone.children_recursive:
+                            add_bone(child_bone)
+
+                # write root keybone and its children
+                if root_keybone:
+                    add_bone(root_keybone)
+                    for bone in root_keybone.children_recursive:
+                        add_bone(bone)
+            else:
+                all_bones = [bone for bone in armature.edit_bones]
+                all_bones.sort(key=lambda x:x.wow_m2_bone.sort_index)
+                for bone in all_bones: add_bone(bone)
 
             bpy.ops.object.mode_set(mode='OBJECT')
 

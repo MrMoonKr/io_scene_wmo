@@ -14,6 +14,8 @@ class M2_PT_bone_panel(bpy.types.Panel):
         col.prop(context.edit_bone.wow_m2_bone, "key_bone_id")
         col.separator()
         col.prop(context.edit_bone.wow_m2_bone, "flags")
+        col.separator()
+        col.prop(context.edit_bone.wow_m2_bone, "sort_index")
 
     @classmethod
     def poll(cls, context):
@@ -34,6 +36,12 @@ class WowM2BonePropertyGroup(bpy.types.PropertyGroup):
         description="WoW bone flags",
         items=BONE_FLAGS,
         options={"ENUM_FLAG"}
+    )
+
+    sort_index:  bpy.props.IntProperty(
+        name='Sort Index',
+        description="Used to sort bones when exporting M2 files. All bones must have this >= 0 or this setting is ignored",
+        default=-1
     )
 
 
