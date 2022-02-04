@@ -994,7 +994,7 @@ class BlenderM2Scene:
                     if not len(attachment.animate_attached.timestamps[anim_index]):
                         continue
 
-                    field_name = seq_name_table.get_field(sequence.id, 'Name')
+                    field_name = seq_name_table.get_sequence_name(sequence.id)
                     name = 'AT_{}_{}_UnkAnim'.format(i, obj.name, str(j).zfill(3)) \
                          if not field_name else "AT_{}_{}_{}_({})".format(i, obj.name, str(j).zfill(3), field_name,
                                                                           sequence.variation_index)
