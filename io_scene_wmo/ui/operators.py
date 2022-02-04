@@ -287,6 +287,7 @@ class WBS_OT_M2_test(bpy.types.Operator):
 
         with open(self.filepath+".json",'w') as f:
             f.write(json.dumps(diff(m2_in.to_obj(),m2_out.to_obj()),indent=4))
+        m2_out.write(self.filepath[:-2]+"out.m2")
         return {'FINISHED'}
 
     def invoke(self, context, event):
