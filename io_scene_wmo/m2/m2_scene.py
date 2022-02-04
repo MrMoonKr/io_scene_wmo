@@ -1524,14 +1524,20 @@ class BlenderM2Scene:
             if len(wow_action.anim_pairs) == 0:
                 continue
 
-            # temp: just take the first animation added here
-            anim_pair = wow_action.anim_pairs[0]
-            if anim_pair.action is None or anim_pair.object is None:
-                print("Null action or object in animtion", wow_action.name)
-                continue
+            # TODO i'm not sure how to select a pair here
+            blender_action = None
+            obj = None
 
-            blender_action = anim_pair.action
-            obj = anim_pair.object
+            for pair in wow_action.anim_pairs:
+                if pair.action is None or pair.object is None:
+                    continue
+                else:
+                    blender_action = pair.action
+                    obj = pair.object
+
+            if blender_action is None or obj is None:
+                print("Null action or object in animation", wow_action.name)
+                continue
 
             # Create animation chunk
             seq_id = self.m2.add_anim(
@@ -1550,22 +1556,26 @@ class BlenderM2Scene:
 
             # Track pass 1: Collect data into more readable format
             armature_data = {} # {location|rotation|scale:{[timestamps]:<PointType>[]}}
-            for curve in blender_action.fcurves:
-                def next_dict(cur,key):
-                    if not key in cur: cur[key] = {}
-                    return cur[key]
-                bone = re.search('"(.+?)"',curve.data_path).group(1)
-                curve_type = re.search('([a-zA-Z_]+)$',curve.data_path).group(0)
-                bone_data = next_dict(armature_data,bone)
-                track_data = next_dict(bone_data,curve_type)
-                index = curve.array_index
-                for i,point in enumerate(curve.keyframe_points):
-                    keyframe_data = next_dict(track_data,point.co[0])
-                    if curve_type == "rotation_quaternion":
-                        key = ["w","x","y","z"][index]
-                    else:
-                        key = ["x","y","z"][index]
-                    keyframe_data[key] = point.co[1]
+            # TODO temp try/except to ignore weird curve names
+            try:
+                for curve in blender_action.fcurves:
+                    def next_dict(cur,key):
+                        if not key in cur: cur[key] = {}
+                        return cur[key]
+                    bone = re.search('"(.+?)"',curve.data_path).group(1)
+                    curve_type = re.search('([a-zA-Z_]+)$',curve.data_path).group(0)
+                    bone_data = next_dict(armature_data,bone)
+                    track_data = next_dict(bone_data,curve_type)
+                    index = curve.array_index
+                    for i,point in enumerate(curve.keyframe_points):
+                        keyframe_data = next_dict(track_data,point.co[0])
+                        if curve_type == "rotation_quaternion":
+                            key = ["w","x","y","z"][index]
+                        else:
+                            key = ["x","y","z"][index]
+                        keyframe_data[key] = point.co[1]
+            except:
+                continue
 
             # Track pass 2: Sort tracks by timestamp
             # armature_data -> {location|rotation|scale: {timestamp,<PointType>[]}[]}
