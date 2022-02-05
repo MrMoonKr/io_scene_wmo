@@ -1542,33 +1542,41 @@ class BlenderM2Scene:
             texture_weight.timestamps.new().add(0)
             texture_weight.values.new().add(32767)
 
-        for i, wow_action in enumerate(self.scene.wow_m2_animations):
+        # 1. Collect valid actions
+        actions = []
+        global_sequences = 0
+        for wow_action in self.scene.wow_m2_animations:
             if wow_action.is_global_sequence:
+                global_sequences+=1
                 continue
 
-            if len(wow_action.anim_pairs) == 0:
+            if "64" in wow_action.flags:
+                actions.append((wow_action,None,None))
                 continue
 
-            # TODO i'm not sure how to select a pair here
             blender_action = None
-            obj = None
+            armature = None
 
             for pair in wow_action.anim_pairs:
-                if pair.action is None or pair.object is None:
-                    continue
-                else:
+                if pair.action != None and pair.object != None:
                     blender_action = pair.action
-                    obj = pair.object
+                    armature = pair.object
+                    break
 
-            if blender_action is None or obj is None:
-                print("Null action or object in animation", wow_action.name)
-                continue
+            if blender_action != None and armature != None:
+                actions.append((wow_action,blender_action,armature))
+            else:
+                raise ValueError("Null action/object in animation " + wow_action.name)
 
-            # Create animation chunk
+        # 2. Write actions
+        for (wow_action,blender_action,armature) in actions:
+            is_alias = "64" in wow_action.flags
+            range_action = blender_action if not is_alias else actions[wow_action.alias_next-global_sequences][1]
+
             seq_id = self.m2.add_anim(
                 int(wow_action.animation_id),
                 wow_action.chain_index, # titi, to test
-                blender_action.frame_range.to_tuple(),
+                range_action.frame_range.to_tuple(),
                 wow_action.move_speed,
                 construct_bitfield(wow_action.flags),
                 wow_action.frequency,
@@ -1576,8 +1584,11 @@ class BlenderM2Scene:
                 wow_action.blend_time,  # TODO: multiversioning
                 ((self.m2.root.bounding_box.min, self.m2.root.bounding_box.max), self.m2.root.bounding_sphere_radius), # TODO using root boundings, better than nothing
                 wow_action.VariationNext,
-                wow_action.alias_next
+                max(0,wow_action.alias_next-global_sequences)
             )
+
+            if is_alias:
+                continue
 
             # Track pass 1: Collect data into more readable format
             armature_data = {} # {location|rotation|scale:{[timestamps]:<PointType>[]}}
