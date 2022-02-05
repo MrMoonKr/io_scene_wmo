@@ -1543,6 +1543,9 @@ class BlenderM2Scene:
             texture_weight.values.new().add(32767)
 
         for i, wow_action in enumerate(self.scene.wow_m2_animations):
+            if wow_action.is_global_sequence:
+                continue
+
             if len(wow_action.anim_pairs) == 0:
                 continue
 
