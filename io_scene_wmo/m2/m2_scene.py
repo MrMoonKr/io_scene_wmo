@@ -585,7 +585,7 @@ class BlenderM2Scene:
             # add animation properties
             anim.animation_id = str(sequence.id)
             anim.flags = parse_bitfield(sequence.flags, 0x800)
-            anim.movespeed = sequence.movespeed
+            anim.move_speed = sequence.movespeed
             anim.frequency = sequence.frequency
             anim.replay_min = sequence.replay.minimum
             anim.replay_max = sequence.replay.maximum
