@@ -53,7 +53,8 @@ class WowRootPropertyGroup(bpy.types.PropertyGroup):
         description="WoW WMO root flags",
         items=root_flags_enum,
         options={"ENUM_FLAG"},
-        update=update_flags
+        update=update_flags,
+        default= {"3"}
         )
 
     ambient_color:  bpy.props.FloatVectorProperty(
