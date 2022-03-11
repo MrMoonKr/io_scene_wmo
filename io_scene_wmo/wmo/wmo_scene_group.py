@@ -245,21 +245,6 @@ class BlenderWMOSceneGroup:
                     else:
                         vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
-            
-        
-        # load legacy liquid type (vanilla/bc models) from MLIQ tiles flags
-        legacy_liquid_type = 0
-        for poly in mesh.polygons:
-            bit = 1
-            tile_flags = 0
-            while bit <= 0x8:
-                tile_flag = group.mliq.tile_flags[poly.index]
-                if tile_flag & bit:
-                    tile_flags += bit
-                bit <<= 1
-            if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
-                legacy_liquid_type = tile_flags
-                break
 
         # set mesh location
         obj.location = pos
@@ -289,6 +274,19 @@ class BlenderWMOSceneGroup:
         if self.wmo_scene.wmo.mohd.flags & 0x4:
             real_liquid_type = group.mogp.liquid_type
         else:
+            # load legacy liquid type (vanilla/bc models) from MLIQ tiles flags
+            legacy_liquid_type = 0
+            for poly in mesh.polygons:
+                bit = 1
+                tile_flags = 0
+                while bit <= 0x8:
+                    tile_flag = group.mliq.tile_flags[poly.index]
+                    if tile_flag & bit:
+                        tile_flags += bit
+                    bit <<= 1
+                if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
+                    legacy_liquid_type = tile_flags
+                    break
             real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
             # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
 
@@ -634,7 +632,7 @@ class BlenderWMOSceneGroup:
         else:
             # getting Liquid Type ID
 
-            if self.wmo_scene.wmo.mohd.flags & 0x4:
+            if self.wmo_scene.wmo.mohd.flags & MOHDFlags.UseLiquidTypeDBCId: 
                 real_liquid_type = group.mogp.liquid_type
             else:
                 real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
