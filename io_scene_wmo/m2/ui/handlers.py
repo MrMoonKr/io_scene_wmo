@@ -64,8 +64,6 @@ def _add_col_items(scene):
                         prop_group.enabled = False
                         slot = col.add()
                         slot.pointer = obj
-        else:
-            print("no parent")
 
 
 @persistent
