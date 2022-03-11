@@ -259,7 +259,7 @@ class BlenderWMOSceneGroup:
                 bit <<= 1
             if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
                 legacy_liquid_type = tile_flags
-                continue
+                break
 
         # set mesh location
         obj.location = pos
