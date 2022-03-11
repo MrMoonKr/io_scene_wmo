@@ -128,7 +128,8 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
         col1_row1.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
         col1_row2 = col1_col.row(align=True)
         col1_row3 = col1_col.row(align=True)
-        col1_row3.operator("scene.wow_add_light", text='Light', icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
+        col1_row3.operator("scene.wow_add_light", text='Light', icon='LIGHT')
+        col1_row4 = col1_col.row(align=True)
         col.separator()
 
         if game_data_loaded:
@@ -139,6 +140,7 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
                                icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
             col1_row3.operator("scene.wow_add_scale_reference", text='Scale',
                                icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+            col1_row4.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
 
         else:
             col1_col.operator("scene.wow_add_scale_reference", text='Scale',
