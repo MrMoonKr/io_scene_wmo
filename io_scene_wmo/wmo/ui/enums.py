@@ -14,7 +14,7 @@ shader_enum = [
 
 ]
 
-terrain_type_enum = [
+terrain_type_enum = [ # can be loaded from DBC. TODO: legion terrain types
     ('0', "Dirt", ""), ('1', "Metallic", ""), ('2', "Stone", ""),
     ('3', "Snow", ""), ('4', "Wood", ""), ('5', "Grass", ""),
     ('6', "Leaves", ""), ('7', "Sand", ""), ('8', "Soggy", ""),

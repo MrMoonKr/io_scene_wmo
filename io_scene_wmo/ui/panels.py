@@ -36,7 +36,8 @@ class WowScenePropertyGroup(bpy.types.PropertyGroup):
         description='Sets up the UI to work with a specific WoW game format',
         items=[
             ('M2', 'M2', 'M2 model', 'FILE_VOLUME', 0),
-            ('WMO', 'WMO', 'World Map Object (WMO)', 'FILE_3D', 1)]
+            ('WMO', 'WMO', 'World Map Object (WMO)', 'FILE_3D', 1)],
+            default='WMO'
     )
 
     game_path:  bpy.props.StringProperty(

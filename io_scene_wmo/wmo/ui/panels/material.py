@@ -3,6 +3,8 @@ from ..enums import *
 from ...bl_render import update_wmo_mat_node_tree
 from ....utils.callbacks import on_release
 
+from ....pywowlib import WoWVersions
+
 
 class WMO_PT_material(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
@@ -27,10 +29,12 @@ class WMO_PT_material(bpy.types.Panel):
         if context.material.wow_wmo_material.diff_texture_1:
             box.prop(context.material.wow_wmo_material.diff_texture_1.wow_wmo_texture, "path")
 
-        box.prop(context.material.wow_wmo_material, "diff_texture_2")
+        # only display 2nd texture for multi tetxure shader types
+        if int(context.material.wow_wmo_material.shader) in (3, 5, 6, 7, 8, 9, 11, 12, 13, 15, 17):
+            box.prop(context.material.wow_wmo_material, "diff_texture_2")
 
-        if context.material.wow_wmo_material.diff_texture_2:
-            box.prop(context.material.wow_wmo_material.diff_texture_2.wow_wmo_texture, "path")
+            if context.material.wow_wmo_material.diff_texture_2:
+                box.prop(context.material.wow_wmo_material.diff_texture_2.wow_wmo_texture, "path")
 
         col.separator()
         col.prop(context.material.wow_wmo_material, "flags")
@@ -64,8 +68,7 @@ def update_flags(self, context):
 
 def update_shader(self, context):
     material = self.self_pointer
-
-    if int(self.shader) in (3, 5, 6, 7, 8, 9, 11, 12, 13, 15):
+    if int(self.shader) in (3, 5, 6, 7, 8, 9, 11, 12, 13, 15, 17):
         material.pass_index |= 0x4  # BlenderWMOMaterialRenderFlags.IsTwoLayered
     else:
         material.pass_index &= ~0x4
@@ -123,6 +126,27 @@ def update_wmo_material_enabled(self, context):
         update_wmo_mat_node_tree(self.self_pointer)
 
 
+def set_shader_enum(self, context):
+    wow_version = int(bpy.context.scene.wow_scene.version)
+    if wow_version == WoWVersions.WOTLK:
+        tmp_shader_enum = [x for x in shader_enum if int(x[0]) < 7]
+    # elif wow_version == WoWVersions.LEGION:
+    #     shader_enum = shader_enum
+    else:
+        tmp_shader_enum = shader_enum
+
+    return tmp_shader_enum
+
+def set_terraintype_enum(self, context):
+    wow_version = int(bpy.context.scene.wow_scene.version)
+    if wow_version == WoWVersions.WOTLK:
+        tmp_terrain_type_enum = [x for x in terrain_type_enum if int(x[0]) < 12]
+    else:
+        tmp_terrain_type_enum = terrain_type_enum
+
+    return tmp_terrain_type_enum
+
+
 class WowMaterialPropertyGroup(bpy.types.PropertyGroup):
 
     enabled:  bpy.props.BoolProperty()
@@ -136,7 +160,7 @@ class WowMaterialPropertyGroup(bpy.types.PropertyGroup):
         )
 
     shader:  bpy.props.EnumProperty(
-        items=shader_enum,
+        items=set_shader_enum,
         name="Shader",
         description="WoW shader assigned to this material",
         update=update_shader
@@ -169,7 +193,7 @@ class WowMaterialPropertyGroup(bpy.types.PropertyGroup):
         )
 
     terrain_type:  bpy.props.EnumProperty(
-        items=terrain_type_enum,
+        items=set_terraintype_enum,
         name="Terrain Type",
         description="Terrain type assigned to this material. Used for producing correct footstep sounds."
         )
