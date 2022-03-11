@@ -18,6 +18,7 @@ from ..utils.misc import find_nearest_object
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
+from ..pywowlib import WoWVersionManager, WoWVersions
 
 from ..third_party.tqdm import tqdm
 
@@ -402,8 +403,8 @@ class BlenderWMOScene:
             flags.add("2")
         if self.wmo.mohd.flags & 0x8:
             flags.add("1")
-        if self.wmo.mohd.flags & 0x4:
-            flags.add("3")
+        # if self.wmo.mohd.flags & 0x4:
+        #     flags.add("3")
 
         properties.flags = flags
         properties.skybox_path = self.wmo.mosb.skybox
@@ -844,7 +845,10 @@ class BlenderWMOScene:
             self.wmo.mohd.flags |= 0x02
         if "1" in flags:
             self.wmo.mohd.flags |= 0x08
-        if "3" in flags:
+        # if "3" in flags:
+        #     self.wmo.mohd.flags |= 0x4
+        version = int(bpy.context.scene.wow_scene.version)
+        if version >= WoWVersions.WOTLK:
             self.wmo.mohd.flags |= 0x4
 
 

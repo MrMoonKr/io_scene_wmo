@@ -6,10 +6,12 @@ import inspect
 
 from math import pi, ceil, floor
 
+from ..pywowlib.file_formats.wmo_format_root import MOHDFlags
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, TriangleMaterial, Batch
 from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
+from ..pywowlib import WoWVersionManager, WoWVersions
 
 
 class BlenderWMOSceneGroup:
@@ -145,13 +147,34 @@ class BlenderWMOSceneGroup:
             elif basic_liquid_type == 2:
                 real_liquid_type = 19
             elif basic_liquid_type == 15:
-                real_liquid_type = 15
+                real_liquid_type = 17
             elif basic_liquid_type == 3:
                 real_liquid_type = 20
         else:
             real_liquid_type = basic_liquid_type + 1
 
         return real_liquid_type
+
+    def get_legacy_water_type(self, liquid_type):
+    # Copied 1:1 from blizzard's decompiled code...
+        liquid_type += 1
+        if  (liquid_type - 1) <= 0x13 :
+            newwater = (liquid_type - 1) & 3
+            if  newwater == 1 :
+                liquid_type = 14
+                return liquid_type
+
+            if newwater >= 1:
+                if newwater == 2:
+                    liquid_type = 19
+                elif newwater == 3:
+                    liquid_type = 20
+
+                return liquid_type
+
+            liquid_type = 13
+
+        return liquid_type
 
     # return array of vertice and array of faces in a tuple
     def load_liquids(self, group_name, pos):
@@ -222,6 +245,21 @@ class BlenderWMOSceneGroup:
                     else:
                         vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
+            
+        
+        # load legacy liquid type (vanilla/bc models) from MLIQ tiles flags
+        legacy_liquid_type = 0
+        for poly in mesh.polygons:
+            bit = 1
+            tile_flags = 0
+            while bit <= 0x8:
+                tile_flag = group.mliq.tile_flags[poly.index]
+                if tile_flag & bit:
+                    tile_flags += bit
+                bit <<= 1
+            if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
+                legacy_liquid_type = tile_flags
+                continue
 
         # set mesh location
         obj.location = pos
@@ -251,7 +289,8 @@ class BlenderWMOSceneGroup:
         if self.wmo_scene.wmo.mohd.flags & 0x4:
             real_liquid_type = group.mogp.liquid_type
         else:
-            real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
+            real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
+            # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
 
         obj.wow_wmo_liquid.color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
 
@@ -740,7 +779,7 @@ class BlenderWMOSceneGroup:
         group.mliq.y_verts = group.mliq.y_tiles + 1
         group.mliq.position = mesh.vertices[start_vertex].co.to_tuple()
 
-        group.mogp.flags |= 0x1000  # do we really need that?
+        group.mogp.flags |= MOGPFlags.HasWater # do we really need that?
 
         types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
         types_2 = {4, 8, 12, 20, 21} # slime
@@ -793,6 +832,7 @@ class BlenderWMOSceneGroup:
                 vertex.height = mesh.vertices[j].co[2]
                 group.mliq.vertex_map.append(vertex)
 
+        # TODO : Save Vanilla/BC liquid type as tile flags
         for poly in mesh.polygons:
             tile_flag = 0
             blue = [0.0, 0.0, 1.0]
@@ -882,7 +922,7 @@ class BlenderWMOSceneGroup:
                            or (obj.wow_wmo_group.place_type == '8192' and '1' not in obj.wow_wmo_group.flags)
 
         if obj_blend_map:
-            self.wmo_scene.wmo.mohd.flags |= 0x2
+            self.wmo_scene.wmo.mohd.flags |= MOHDFlags.UnifiedRenderPath
 
         faces_set = set(faces)
         batches = {}
@@ -1126,7 +1166,9 @@ class BlenderWMOSceneGroup:
         else:
             group.mliq = None
             group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
-            # group.root.mohd.flags |= 0x4 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+            wow_version = int(bpy.context.scene.wow_scene.version)
+            if wow_version >= WoWVersions.WOTLK:
+                group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId # this flag causes wmo groups to fill with liquid if liquid type is not 0.
 
         if not has_lights:
             group.molr = None
