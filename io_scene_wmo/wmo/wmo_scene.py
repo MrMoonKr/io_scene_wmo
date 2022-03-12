@@ -282,10 +282,10 @@ class BlenderWMOScene:
                         doodad_prototypes[path_hash] = nobj
                     else:
                         nobj = proto_obj.copy()
-                        nobj.data = nobj.data.copy()
+                        # nobj.data = nobj.data.copy()
 
-                        for j, mat in enumerate(nobj.data.materials):
-                            nobj.data.materials[j] = mat.copy()
+                        # for j, mat in enumerate(nobj.data.materials):
+                        #     nobj.data.materials[j] = mat.copy()
 
                     nobj.parent = anchor
                     bpy.context.collection.objects.link(nobj)
