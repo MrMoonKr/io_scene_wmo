@@ -35,8 +35,9 @@ def update_doodad_color(self, context):
 
     with DepsgraphLock():
         for mat in mesh.materials:
-            mat.node_tree.nodes['DoodadColor'].outputs[0].default_value = self.color
-
+            # mat.node_tree.nodes['DoodadColor'].outputs[0].default_value = self.color
+            mat.node_tree.nodes['DoodadColor'].attribute_type = 'OBJECT'
+            mat.node_tree.nodes['DoodadColor'].attribute_name = 'wow_wmo_doodad.color'
 
 
 class WoWDoodadPropertyGroup(bpy.types.PropertyGroup):

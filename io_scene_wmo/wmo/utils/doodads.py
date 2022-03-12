@@ -257,7 +257,9 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
         tex_image = tree_builder.add_node('ShaderNodeTexImage', "Texture", 0, 0)
         tex_image.image = img
 
-        doodad_color = tree_builder.add_node('ShaderNodeRGB', "DoodadColor", 0, 2)
+        # doodad_color = tree_builder.add_node('ShaderNodeRGB', "DoodadColor", 0, 2)
+
+        doodad_color= tree_builder.add_node('ShaderNodeAttribute', "DoodadColor", 0, 2)
 
         mix_rgb = tree_builder.add_node('ShaderNodeMixRGB', "ApplyColor", 1, 1)
         mix_rgb.inputs['Fac'].default_value = 1.0
