@@ -37,7 +37,7 @@ def update_wow_visibility(self, context):
                 obj.hide_set('3' not in values)
             elif obj.wow_wmo_liquid.enabled:
                 obj.hide_set('4' not in values)
-        elif obj.type == "LAMP" and obj.data.wow_wmo_light.enabled:
+        elif obj.type == "LIGHT" and obj.wow_wmo_light.enabled:
             obj.hide_set('5' not in values)
 
         obj['wow_hide'] = obj.hide_get()
