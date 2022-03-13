@@ -197,7 +197,7 @@ class BlenderWMOScene:
 
             fog_obj = create_fog_object(  name="{}_Fog_{}".format(self.wmo.display_name, str(i).zfill(2))
                                         , location=wmo_fog.position
-                                        , radius=wmo_fog.big_radius
+                                        # , radius=wmo_fog.big_radius
                                         , color=(wmo_fog.color1[2] / 255,
                                                  wmo_fog.color1[1] / 255,
                                                  wmo_fog.color1[0] / 255,
@@ -205,6 +205,7 @@ class BlenderWMOScene:
                                                 )
                                         )
 
+            fog_obj.scale = (wmo_fog.big_radius,wmo_fog.big_radius,wmo_fog.big_radius)
             # move fogs to collection
             scn = bpy.context.scene
 
