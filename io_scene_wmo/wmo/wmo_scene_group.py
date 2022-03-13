@@ -1,3 +1,4 @@
+from logging import exception
 import bpy
 import mathutils
 import bmesh
@@ -213,9 +214,30 @@ class BlenderWMOSceneGroup:
         mesh.from_pydata(vertices, [], faces)
         mesh.update(calc_edges=True)
         mesh.validate()
+        
+        # getting Liquid Type ID
+        if self.wmo_scene.wmo.mohd.flags & 0x4:
+            real_liquid_type = group.mogp.liquid_type
+        else:
+            # load legacy liquid type (vanilla/bc models) from MLIQ tiles flags
+            legacy_liquid_type = 0
+            for poly in mesh.polygons:
+                bit = 1
+                tile_flags = 0
+                while bit <= 0x8:
+                    tile_flag = group.mliq.tile_flags[poly.index]
+                    if tile_flag & bit:
+                        tile_flags += bit
+                    bit <<= 1
+                if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
+                    legacy_liquid_type = tile_flags
+                    break
+            real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
+            # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
+
 
         # create uv map if liquid is lava or slime
-        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
+        if real_liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
             uv_map = {}
 
             for vertex in mesh.vertices:
@@ -234,6 +256,10 @@ class BlenderWMOSceneGroup:
         bit = 1
         counter = 0
         while bit <= 0x80:
+            # if bit == 0x8: # hackfix to make layer 4 the vertex layer used by the WMO shader
+            #     vc_layer = mesh.vertex_colors.new(name="Col")
+            # else:
+            #     vc_layer = mesh.vertex_colors.new(name="flag_" + str(counter))
             vc_layer = mesh.vertex_colors.new(name="flag_" + str(counter))
             counter += 1
 
@@ -245,6 +271,55 @@ class BlenderWMOSceneGroup:
                     else:
                         vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
+
+        # assign WMO liquid material
+        liquid_material = self.wmo_scene.bl_materials[group.mliq.material_id]#titi
+        mesh.materials.append(liquid_material)
+
+        # assign ghost material to unrendered tiles
+        mat_ghost = bpy.data.materials.get("WowMaterial_ghost_Liquid")
+        if mat_ghost is None:
+            mat_ghost = bpy.data.materials.new("WowMaterial_ghost_Liquid")
+            mat_ghost.blend_method = 'BLEND'
+            mat_ghost.use_nodes = True
+            mat_ghost.node_tree.nodes.remove(mat_ghost.node_tree.nodes.get('Principled BSDF'))
+            material_output = mat_ghost.node_tree.nodes.get('Material Output')
+            transparent = mat_ghost.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+            mat_ghost.node_tree.links.new(material_output.inputs[0], transparent.outputs[0])
+            mat_ghost.node_tree.nodes["Transparent BSDF"].inputs[0].default_value = (1, 1, 1, 1)
+        mesh.materials.append(mat_ghost)
+
+        # create a material for blender rendering
+        liquid_render_mat = bpy.data.materials.new("WowMaterial_" + name)
+        liquid_render_mat.blend_method = 'BLEND'
+        liquid_render_mat.use_nodes = True
+        liquid_render_mat.node_tree.nodes.remove(liquid_render_mat.node_tree.nodes.get('Principled BSDF'))
+        material_output = liquid_render_mat.node_tree.nodes.get('Material Output')
+        # transparent = liquid_render_mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+        transparent = liquid_render_mat.node_tree.nodes.new('ShaderNodeBsdfDiffuse') # diffuse looks better ?
+        liquid_render_mat.node_tree.links.new(material_output.inputs[0], transparent.outputs[0])
+
+        if real_liquid_type in {3, 7, 11, 15, 19, 121, 141}:# lava
+            material_color = (1, 0.1, 0.0, 1.0) # orange
+        elif real_liquid_type in {4, 8, 12, 20, 21}: # slime
+            material_color = (0.06274, 0.77647, 0.0, 1.0) # green
+        else:
+            material_color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
+
+        # liquid_render_mat.node_tree.nodes["Transparent BSDF"].inputs[0].default_value = material_color
+        liquid_render_mat.node_tree.nodes["Diffuse BSDF"].inputs[0].default_value = material_color
+        mesh.materials.append(liquid_render_mat)
+
+        for poly in mesh.polygons:
+            tile_flag = group.mliq.tile_flags[poly.index]
+            if tile_flag & 0x1 and tile_flag & 0x2 and tile_flag & 0x4 and tile_flag & 0x8:
+                poly.material_index = 1 # assign ghost_material to non rendered tiles
+            else:
+                # if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
+                #     poly.material_index = 0
+                # else:
+                #     poly.material_index = 2
+                poly.material_index = 2
 
         # set mesh location
         obj.location = pos
@@ -270,25 +345,6 @@ class BlenderWMOSceneGroup:
 
         obj.wow_wmo_liquid.enabled = True
 
-        # getting Liquid Type ID
-        if self.wmo_scene.wmo.mohd.flags & 0x4:
-            real_liquid_type = group.mogp.liquid_type
-        else:
-            # load legacy liquid type (vanilla/bc models) from MLIQ tiles flags
-            legacy_liquid_type = 0
-            for poly in mesh.polygons:
-                bit = 1
-                tile_flags = 0
-                while bit <= 0x8:
-                    tile_flag = group.mliq.tile_flags[poly.index]
-                    if tile_flag & bit:
-                        tile_flags += bit
-                    bit <<= 1
-                if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
-                    legacy_liquid_type = tile_flags
-                    break
-            real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
-            # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
 
         obj.wow_wmo_liquid.color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
 
@@ -779,16 +835,10 @@ class BlenderWMOSceneGroup:
 
         group.mogp.flags |= MOGPFlags.HasWater # do we really need that?
 
+
+
         types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
         types_2 = {4, 8, 12, 20, 21} # slime
-
-        texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
-
-        if group.mogp.liquid_type in types_1:
-            texture1 = "DUNGEONS\\TEXTURES\\METAL\\BM_BRSPIRE_CATWALK01.BLP"
-
-        elif group.mogp.liquid_type in types_2:
-            texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
 
         diff_color = (int(ob.wow_wmo_liquid.color[2] * 255),
                       int(ob.wow_wmo_liquid.color[1] * 255),
@@ -796,7 +846,22 @@ class BlenderWMOSceneGroup:
                       int(ob.wow_wmo_liquid.color[3] * 255)
                      )
 
-        group.mliq.material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
+        try:
+            if not mesh.materials[0].wow_wmo_material.enabled:
+                raise exception()
+            group.mliq.material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+                    mesh.materials[0].name)
+            print("proc")
+        except: # if no mat or if the mat isn't a wmo mat, create a new one
+            texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
+
+            if group.mogp.liquid_type in types_1:
+                texture1 = "DUNGEONS\\TEXTURES\\METAL\\BM_BRSPIRE_CATWALK01.BLP"
+
+            elif group.mogp.liquid_type in types_2:
+                texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
+
+            group.mliq.material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
 
         if group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2:
 
