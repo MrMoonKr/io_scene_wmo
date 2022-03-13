@@ -227,8 +227,8 @@ class BlenderWMOSceneGroup:
 
             for poly in mesh.polygons:
                 for loop_index in poly.loop_indices:
-                    uv_layer1.data[loop_index].uv = (uv_map.get(mesh.loops[loop_index].vertex_index)[0],
-                                                     - uv_map.get(mesh.loops[loop_index].vertex_index)[1])
+                    uv_layer1.data[loop_index].uv = (uv_map.get(mesh.loops[loop_index].vertex_index)[0] / 255,
+                                                     - uv_map.get(mesh.loops[loop_index].vertex_index)[1] / 255)
 
         # setting flags in a hacky way using vertex colors
         bit = 1
@@ -814,8 +814,8 @@ class BlenderWMOSceneGroup:
                     vertex.is_water = False
                     group.mliq.is_water = False
 
-                    vertex.u = int(uv_map.get(mesh.vertices[i].index)[0])
-                    vertex.v = int(uv_map.get(mesh.vertices[i].index)[1])
+                    vertex.u = int(uv_map.get(mesh.vertices[i].index)[0] * 255)
+                    vertex.v = int(uv_map.get(mesh.vertices[i].index)[1] * 255)
 
                     vertex.height = (ob.matrix_world @ mesh.vertices[i].co)[2]
                     group.mliq.vertex_map.append(vertex)
