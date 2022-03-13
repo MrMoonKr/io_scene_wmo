@@ -214,6 +214,7 @@ class WMO_MT_mesh_wow_components_add(bpy.types.Menu):
         col.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
         col.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
         col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+        col.operator("scene.wow_add_light", text='Light', icon='LIGHT')
 
         if hasattr(bpy, "wow_game_data") and bpy.wow_game_data.files:
             col.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
