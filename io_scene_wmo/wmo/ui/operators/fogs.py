@@ -9,7 +9,24 @@ class WMO_OT_add_fog(bpy.types.Operator):
 
     def execute(self, context):
 
-        fog = create_fog_object()
+        fog_obj = create_fog_object()
 
-        self.report({'INFO'}, "Successfully сreated WoW fog: " + fog.name)
+        # move fogs to collection
+        scn = bpy.context.scene
+        fog_collection = bpy.data.collections.get("Fogs")
+        if not fog_collection:
+            fog_collection = bpy.data.collections.new("Fogs")
+            scn.collection.children.link(fog_collection)
+        fog_collection.objects.link(fog_obj)
+        bpy.context.view_layer.objects.active = fog_obj
+        # applying object properties
+        fog_obj.wow_wmo_fog.enabled = True
+
+        fog_obj.scale = (5.0, 5.0, 5.0) # default size to 5
+
+        fog_obj.wow_wmo_fog.color2 = (0.0, 0.0, 1.0) # set underwater color as blue
+
+
+
+        self.report({'INFO'}, "Successfully created WoW fog: " + fog_obj.name)
         return {'FINISHED'}
