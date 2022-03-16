@@ -313,7 +313,7 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
     
                 mesh = bm.data
 
-                renderflag_layer = mesh.vertex_colors['flag_3']
+                renderflag_layer = mesh.vertex_colors['flag_0']
 
                 def comp_colors(color1, color2):
                     for i in range(3):

@@ -215,23 +215,31 @@ class BlenderWMOSceneGroup:
         mesh.update(calc_edges=True)
         mesh.validate()
         
+        render_state_list = []
+        
+        # load legacy liquid type (vanilla/bc models) and render state from MLIQ tiles flags
+        legacy_liquid_type = 0
+        for poly in mesh.polygons:
+            bit = 1
+            tile_flags = 0
+            while bit <= 0x8:
+                tile_flag = group.mliq.tile_flags[poly.index]
+                if tile_flag & bit:
+                    tile_flags += bit
+                bit <<= 1
+            if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
+                legacy_liquid_type = tile_flags
+                # break
+                render_state = True
+            else:
+                render_state = False
+
+            render_state_list.append(render_state)
+
         # getting Liquid Type ID
         if self.wmo_scene.wmo.mohd.flags & 0x4:
             real_liquid_type = group.mogp.liquid_type
         else:
-            # load legacy liquid type (vanilla/bc models) from MLIQ tiles flags
-            legacy_liquid_type = 0
-            for poly in mesh.polygons:
-                bit = 1
-                tile_flags = 0
-                while bit <= 0x8:
-                    tile_flag = group.mliq.tile_flags[poly.index]
-                    if tile_flag & bit:
-                        tile_flags += bit
-                    bit <<= 1
-                if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
-                    legacy_liquid_type = tile_flags
-                    break
             real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
             # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
 
@@ -263,6 +271,9 @@ class BlenderWMOSceneGroup:
             vc_layer = mesh.vertex_colors.new(name="flag_" + str(counter))
             counter += 1
 
+            if bit <= 0x8:
+                bit <<= 1
+                continue # ignore legacy liquid type flags
             for poly in mesh.polygons:
                 tile_flag = group.mliq.tile_flags[poly.index]
                 for loop in poly.loop_indices:
@@ -272,8 +283,24 @@ class BlenderWMOSceneGroup:
                         vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
 
+        # legacy liquid flags, if "no render", set all 4, else set none. Cleanup blizzlike data to make flag 4 the "no render flag" used by the liquid flag editor.
+        for i, poly in enumerate(mesh.polygons):
+            render_state = render_state_list[i]
+
+            bit = 1
+            counter = 0
+            while bit <= 0x8:
+                vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
+                for loop in poly.loop_indices:
+                    if not render_state:
+                        vc_layer.data[loop].color = (0, 0, 255, 255)
+                    else:
+                        vc_layer.data[loop].color = (255, 255, 255, 255)
+                bit <<= 1
+                counter += 1
+
         # assign WMO liquid material
-        liquid_material = self.wmo_scene.bl_materials[group.mliq.material_id]#titi
+        liquid_material = self.wmo_scene.bl_materials[group.mliq.material_id]   
         mesh.materials.append(liquid_material)
 
         # assign ghost material to unrendered tiles
@@ -851,7 +878,6 @@ class BlenderWMOSceneGroup:
                 raise exception()
             group.mliq.material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
                     mesh.materials[0].name)
-            print("proc")
         except: # if no mat or if the mat isn't a wmo mat, create a new one
             texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
 
@@ -895,18 +921,28 @@ class BlenderWMOSceneGroup:
                 vertex.height = mesh.vertices[j].co[2]
                 group.mliq.vertex_map.append(vertex)
 
-        # TODO : Save Vanilla/BC liquid type as tile flags
         for poly in mesh.polygons:
             tile_flag = 0
             blue = [0.0, 0.0, 1.0]
 
             counter = 0
             bit = 1
+            not_rendered = False
             while bit <= 0x80:
                 vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
+                
+                if bit == 0x1:
+                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
+                        not_rendered = True
 
-                if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
-                    tile_flag |= bit
+                if bit <= 0x8: # legacy/no render tile flags : set not rendered from layer 0
+                    if not_rendered:
+                        tile_flag |= bit
+                    # TODO : For vanilla/BC, set liquid type flags here
+                else:
+                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
+                        tile_flag |= bit
+
                 bit <<= 1
 
                 counter += 1
