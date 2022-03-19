@@ -963,27 +963,29 @@ class BlenderWMOSceneGroup:
         if mesh.has_custom_normals:
             mesh.calc_normals_split()
 
-        # prepare seams for splitting edges
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        # old seams
-        old_seams = [e for e in mesh.edges if e.use_seam]
-        # unmark old seams, they are restored later
-        for e in old_seams:
-            e.use_seam = False
-        # mark new seams from uv islands. This is just to obtain the edge to split
-        bpy.ops.uv.seams_from_islands()
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # prepare seams for splitting edges if indoors
+        if obj.wow_wmo_group.place_type == '8192':
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            # old seams
+            old_seams = [e for e in mesh.edges if e.use_seam]
+            # unmark old seams, they are restored later
+            for e in old_seams:
+                e.use_seam = False
+            # mark new seams from uv islands. This is just to obtain the edge to split
+            bpy.ops.uv.seams_from_islands()
+            bpy.ops.object.mode_set(mode='OBJECT')
 
 
         # create bmesh
         bm = bmesh.new()
         bm.from_object(obj, bpy.context.evaluated_depsgraph_get())
 
-        # split on seams
-        bm_seams = [e for e in bm.edges if e.seam]
-        bmesh.ops.split_edges(bm, edges=bm_seams)
-        bm.edges.ensure_lookup_table()
+        # split on seams if indoors
+        if obj.wow_wmo_group.place_type == '8192':
+            bm_seams = [e for e in bm.edges if e.seam]
+            bmesh.ops.split_edges(bm, edges=bm_seams)
+            bm.edges.ensure_lookup_table()
 
         # handle separate collision
         if obj.wow_wmo_group.collision_mesh:
@@ -1189,13 +1191,13 @@ class BlenderWMOSceneGroup:
         # free bmesh
         bm.free()
 
-        # could clear new seams
-        seams = [e for e in mesh.edges if e.use_seam]
-        for e in seams:
-            e.use_seam = False
-        # re instate old seams
-        for e in old_seams:
-            e.use_seam = True
+        # clear new seams and re instate old seams if indoors
+        if obj.wow_wmo_group.place_type == '8192':
+            seams = [e for e in mesh.edges if e.use_seam]
+            for e in seams:
+                e.use_seam = False
+            for e in old_seams:
+                e.use_seam = True
 
         # write header
         group.mogp.bounding_box_corner1 = [32767.0, 32767.0, 32767.0]
