@@ -23,6 +23,12 @@ def import_wmo_to_blender_scene(filepath, client_version):
     addon_prefs = get_addon_prefs()
     game_data = load_game_data()
 
+    if not bpy.wow_game_data.files:
+        raise Exception("WoW game data is not loaded. Check settings.")
+    
+    if not addon_prefs.cache_dir_path:
+        raise Exception("Cache directory is not set, textures might not work. Check settings.")
+
     with DepsgraphLock():
         wmo = WMOFile(client_version, filepath=filepath)
         wmo.read()
