@@ -25,11 +25,12 @@ before_script:
   - pip install virtualenv
   - virtualenv venv
   - source venv/bin/activate
+  - sudo apt install libglu1-mesa-dev freeglut3-dev
+  - pip install Cython
 
 
 package:
   script: 
-  - pip install Cython
   - python3 io_scene_wmo/build.py | gzip > packaged.gz
   artifacts:
     paths:
