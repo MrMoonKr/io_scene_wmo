@@ -1,0 +1,8 @@
+wbs_kernel/build
+
+*.so
+*.pyd
+*.lib
+*.a
+*.dylib
+*.dll
