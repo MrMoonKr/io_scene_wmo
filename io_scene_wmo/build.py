@@ -1,5 +1,8 @@
+#!/usr/bin/env python
 import subprocess
-from distutils.core import run_setup
+import sys
+
+PYTHON_PATH = sys.executable
 
 
 def build_project():
@@ -22,26 +25,32 @@ def build_project():
     addon_root_path = os.path.realpath(os.path.dirname(os.path.abspath(__file__)).replace('\\', '/'))
 
     extension_dirs = (
-        "pywowlib/archives/casc/",
-        "pywowlib/archives/mpq/native/",
-        "pywowlib/blp/BLP2PNG/",
-        "pywowlib/blp/PNG2BLP/",
-        "wbs_kernel/"
-
+        "wbs_kernel/",
     )
 
-    print('\nBuilding pywowlib C++ extensions.')
-    try:
-        for module_relpath in extension_dirs:
-            os.chdir(os.path.join(addon_root_path, module_relpath))
-            run_setup('setup.py', script_args=['build_clib', 'build_ext', '--inplace'])
+    print('\nBuilding C++ extensions.')
 
-    except PermissionError:
-        raise PermissionError("\nThis build script may need to be called with admin (root) rights.")
+    for module_relpath in extension_dirs:
+        try:
+            os.chdir(os.path.join(addon_root_path, module_relpath))
+            status = subprocess.call([PYTHON_PATH, "setup.py", 'build_clib', 'build_ext', '--inplace'])
+
+            if status:
+                print (f"\nProcess returned error code {status} while building module \"{module_relpath}\"")
+                sys.exit(1)
+
+        except PermissionError:
+            raise PermissionError("\nThis build script may need to be called with admin (root) rights.")
+            sys.exit(1)
+
+        except RuntimeError:
+            print ("\nUnknown error occured.")
+            sys.exit(1)
 
     os.chdir(addon_root_path)
 
-    #return  # TEMP
+    subprocess.call([PYTHON_PATH, "pywowlib/build.py"])
+    os.chdir(addon_root_path)
 
     print('\nInstalling third-party modules.')
 
@@ -57,7 +66,8 @@ def build_project():
     with open('pywowlib/requirements.txt') as f:
         install_requirements(f)
 
+    print('\nWBS building finished successfully.')
+
 
 if __name__ == "__main__":
     build_project()
-
