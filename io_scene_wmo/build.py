@@ -49,7 +49,11 @@ def build_project():
 
     os.chdir(addon_root_path)
 
-    subprocess.call([PYTHON_PATH, "pywowlib/build.py"])
+    status = subprocess.call([PYTHON_PATH, "pywowlib/build.py"])
+    if status:
+        print("\nError building pywowlib.")
+        sys.exit(1)
+
     os.chdir(addon_root_path)
 
     print('\nInstalling third-party modules.')
