@@ -1,5 +1,7 @@
 import bpy
 import time
+import os
+import struct
 
 from ..utils.misc import load_game_data
 from .wmo_scene import BlenderWMOScene
@@ -11,7 +13,7 @@ from ..ui import get_addon_prefs
 from .ui.handlers import DepsgraphLock
 
 
-def import_wmo_to_blender_scene(filepath, client_version):
+def import_wmo_to_blender_scene(filepath: str, client_version: int):
     """ Read and import WoW WMO object to Blender scene"""
 
     start_time = time.time()
@@ -52,3 +54,36 @@ def import_wmo_to_blender_scene(filepath, client_version):
     print("\nDone importing WMO. \nTotal import time: ",
           time.strftime("%M minutes %S seconds.\a", time.gmtime(time.time() - start_time)))
 
+
+def import_wmo_to_blender_scene_gamedata(filepath: str, client_version: int):
+
+    game_data = load_game_data()
+
+    if not game_data or not game_data.files:
+        raise FileNotFoundError("Game data is not loaded.")
+
+    addon_prefs = get_addon_prefs()
+    cache_dir = addon_prefs.cache_dir_path
+
+    game_data.extract_file(cache_dir, filepath)
+
+    if os.name != 'nt':
+        filepath = filepath.lower()
+        root_path = os.path.join(cache_dir, filepath.replace('\\', '/'))
+    else:
+        root_path = os.path.join(cache_dir, filepath)
+
+    with open(root_path, 'rb') as f:
+        f.seek(24)
+        n_groups = struct.unpack('I', f.read(4))[0]
+
+    group_paths = ["{}_{}.wmo".format(filepath[:-4], str(i).zfill(3)) for i in range(n_groups)]
+
+    game_data.extract_files(cache_dir, group_paths)
+
+    import_wmo_to_blender_scene(root_path, client_version)
+
+    # clean up unnecessary files and directories
+    os.remove(root_path)
+    for group_path in group_paths:
+        os.remove(os.path.join(cache_dir, *group_path.split('\\')))

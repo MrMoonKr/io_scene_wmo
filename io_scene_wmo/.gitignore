@@ -1,4 +1,6 @@
 wbs_kernel/build
+venv/
+__pycache__/
 
 *.so
 *.pyd
