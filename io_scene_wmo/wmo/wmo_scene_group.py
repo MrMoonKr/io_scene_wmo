@@ -118,7 +118,8 @@ class BlenderWMOSceneGroup:
                         if l_loop.face is link_face:
                             if isclose(l_loop[uv].uv[0], loop[uv].uv[0]) and isclose(l_loop[uv].uv[1], loop[uv].uv[1]):
                                 linked_uvs += 1
-                            if uv2 and isclose(l_loop[uv2].uv[0], loop[uv2].uv[0]) and isclose(l_loop[uv2].uv[1], loop[uv2].uv[1]):
+                            if uv2 and isclose(l_loop[uv2].uv[0], loop[uv2].uv[0]) and isclose(l_loop[uv2].uv[1],
+                                                                                               loop[uv2].uv[1]):
                                 linked_uvs += 1
 
                 if (not uv2 and linked_uvs < 2) or (uv2 and linked_uvs < 4):
@@ -227,7 +228,8 @@ class BlenderWMOSceneGroup:
                 if tile_flag & bit:
                     tile_flags += bit
                 bit <<= 1
-            if tile_flags != 15: # 15 = don't render/no liquid, ignore those tiles and get the flags from the first non 15 tile.
+            if tile_flags != 15:  # 15 = don't render/no liquid, ignore those tiles
+                # and get the flags from the first non 15 tile.
                 legacy_liquid_type = tile_flags
                 # break
                 render_state = True
@@ -242,7 +244,6 @@ class BlenderWMOSceneGroup:
         else:
             real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
             # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
-
 
         # create uv map if liquid is lava or slime
         if real_liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
@@ -558,10 +559,12 @@ class BlenderWMOSceneGroup:
                                                                 1.0)
 
             if batch_map_a:
-                mesh.vertex_colors['BatchmapTrans'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_a_range else (0, 0, 0, 0)
+                mesh.vertex_colors['BatchmapTrans'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_a_range \
+                    else (0, 0, 0, 0)
 
             if batch_map_b:
-                mesh.vertex_colors['BatchmapInt'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_b_range else (0, 0, 0, 0)
+                mesh.vertex_colors['BatchmapInt'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_b_range \
+                    else (0, 0, 0, 0)
         '''
         # set faces material
         for i in range(len(mesh.polygons)):
@@ -757,7 +760,8 @@ class BlenderWMOSceneGroup:
                     if angle is None or angle >= pi * 0.5:
                         continue
 
-                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center, direction)
+                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center,
+                                                                 direction)
 
                     if not ray_cast_result[0] \
                             or ray_cast_result[4].name == portal_obj.name \
@@ -1096,7 +1100,8 @@ class BlenderWMOSceneGroup:
                                 if not uv2 and vert_info[3] is not None:
                                     continue
 
-                                if uv2 and (not isclose(vert_info[3][0], uv2[0]) or not isclose(vert_info[3][1], uv2[1])):
+                                if uv2 and (not isclose(vert_info[3][0], uv2[0]) or not isclose(vert_info[3][1],
+                                                                                                uv2[1])):
                                     continue
 
                                 v_index_local, is_collideable = vert_info[0], vert_info[1]
@@ -1291,10 +1296,11 @@ class BlenderWMOSceneGroup:
             self.save_liquid(obj.wow_wmo_group.liquid_mesh)
         else:
             group.mliq = None
-            group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
+            group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
             wow_version = int(bpy.context.scene.wow_scene.version)
             if wow_version >= WoWVersions.WOTLK:
-                group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+                # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+                group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         if not has_lights:
             group.molr = None
