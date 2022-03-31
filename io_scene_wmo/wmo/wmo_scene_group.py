@@ -5,7 +5,7 @@ import bmesh
 import sys
 import inspect
 
-from math import pi, ceil, floor
+from math import pi, ceil, floor, isclose
 
 from ..pywowlib.file_formats.wmo_format_root import MOHDFlags
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, TriangleMaterial, Batch
@@ -116,9 +116,9 @@ class BlenderWMOSceneGroup:
 
                     for l_loop in loop.vert.link_loops:
                         if l_loop.face is link_face:
-                            if l_loop[uv].uv == loop[uv].uv:
+                            if isclose(l_loop[uv].uv[0], loop[uv].uv[0]) and isclose(l_loop[uv].uv[1], loop[uv].uv[1]):
                                 linked_uvs += 1
-                            if uv2 and l_loop[uv2].uv == loop[uv2].uv:
+                            if uv2 and isclose(l_loop[uv2].uv[0], loop[uv2].uv[0]) and isclose(l_loop[uv2].uv[1], loop[uv2].uv[1]):
                                 linked_uvs += 1
 
                 if (not uv2 and linked_uvs < 2) or (uv2 and linked_uvs < 4):
@@ -157,11 +157,11 @@ class BlenderWMOSceneGroup:
         return real_liquid_type
 
     def get_legacy_water_type(self, liquid_type):
-    # Copied 1:1 from blizzard's decompiled code...
+        # Copied 1:1 from blizzard's decompiled code...
         liquid_type += 1
-        if  (liquid_type - 1) <= 0x13 :
+        if (liquid_type - 1) <= 0x13:
             newwater = (liquid_type - 1) & 3
-            if  newwater == 1 :
+            if newwater == 1:
                 liquid_type = 14
                 return liquid_type
 
@@ -177,7 +177,7 @@ class BlenderWMOSceneGroup:
 
         return liquid_type
 
-    # return array of vertice and array of faces in a tuple
+    # return array of vertices and array of faces in a tuple
     def load_liquids(self, group_name, pos):
         """ Load liquid plane of the WMO group. Should only be called if MLIQ is present. """
 
@@ -452,13 +452,12 @@ class BlenderWMOSceneGroup:
 
         # set vertex color
         vertex_color_layer = None
-        lightmap = None
         if group.mogp.flags & MOGPFlags.HasVertexColor:
             flag_set = nobj.wow_wmo_group.flags
             flag_set.add('0')
             nobj.wow_wmo_group.flags = flag_set
             vertex_color_layer = mesh.vertex_colors.new(name="Col")
-            lightmap = mesh.vertex_colors.new(name="Lightmap")
+            mesh.vertex_colors.new(name="Lightmap")
 
             pass_index |= BlenderWMOObjectRenderFlags.HasVertexColor
             pass_index |= BlenderWMOObjectRenderFlags.HasLightmap
@@ -963,29 +962,9 @@ class BlenderWMOSceneGroup:
         if mesh.has_custom_normals:
             mesh.calc_normals_split()
 
-        # prepare seams for splitting edges if indoors
-        if obj.wow_wmo_group.place_type == '8192':
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            # old seams
-            old_seams = [e for e in mesh.edges if e.use_seam]
-            # unmark old seams, they are restored later
-            for e in old_seams:
-                e.use_seam = False
-            # mark new seams from uv islands. This is just to obtain the edge to split
-            bpy.ops.uv.seams_from_islands()
-            bpy.ops.object.mode_set(mode='OBJECT')
-
-
         # create bmesh
         bm = bmesh.new()
         bm.from_object(obj, bpy.context.evaluated_depsgraph_get())
-
-        # split on seams if indoors
-        if obj.wow_wmo_group.place_type == '8192':
-            bm_seams = [e for e in bm.edges if e.seam]
-            bmesh.ops.split_edges(bm, edges=bm_seams)
-            bm.edges.ensure_lookup_table()
 
         # handle separate collision
         if obj.wow_wmo_group.collision_mesh:
@@ -1094,11 +1073,41 @@ class BlenderWMOSceneGroup:
 
                     collision_counter = 0
                     for j, vertex in enumerate(face.verts):
-                        vert_info = vertex_map.get(vertex.index)
+
+                        uv1 = face.loops[j][uv].uv
+                        uv2 = face.loops[j][uv2].uv[0] if uv2 else None
+
+                        vert_infos = vertex_map.get(vertex.index)
 
                         dvert = vertex[deform] if deform else None
 
-                        if vert_info is None:
+                        needs_new_vert = vert_infos is None
+
+                        v_index_local, is_collideable = None, None
+
+                        # check if vertex is shared by different per-loop UVs
+                        if not needs_new_vert:
+
+                            for vert_info in vert_infos:
+                                if not isclose(vert_info[2][0], uv1[0]) and not isclose(vert_info[2][1], uv1[1]):
+                                    continue
+
+                                if uv2 and vert_info[3] is None:
+                                    continue
+
+                                if not uv2 and vert_info[3] is not None:
+                                    continue
+
+                                if uv2 and not isclose(vert_info[3][0], uv2[0]) and not isclose(vert_info[3][1], uv2[1]):
+                                    continue
+
+                                v_index_local, is_collideable = vert_info[0], vert_info[1]
+                                break
+
+                            else:
+                                needs_new_vert = True
+
+                        if needs_new_vert:
 
                             # determine if vertex is collideable
                             is_collideable = (obj_collision_vg and dvert and (vg_collision_index in dvert)) \
@@ -1107,7 +1116,9 @@ class BlenderWMOSceneGroup:
                             if is_collideable:
                                 collision_counter += 1
 
-                            vertex_map[vertex.index] = next_v_index_local, is_collideable
+                            vertex_map.setdefault(vertex.index, []).append((next_v_index_local, is_collideable,
+                                                                           face.loops[j][uv].uv,
+                                                                           face.loops[j][uv2].uv if uv2 else None))
                             v_index_local = next_v_index_local
                             next_v_index_local += 1
 
@@ -1163,8 +1174,6 @@ class BlenderWMOSceneGroup:
                                                            int(ceil((obj.matrix_world @ vertex.co)[l])))
 
                         else:
-                            v_index_local, is_collideable = vert_info
-
                             if is_collideable:
                                 collision_counter += 1
 
