@@ -1087,7 +1087,7 @@ class BlenderWMOSceneGroup:
                         if not needs_new_vert:
 
                             for vert_info in vert_infos:
-                                if not isclose(vert_info[2][0], uv1[0]) and not isclose(vert_info[2][1], uv1[1]):
+                                if not isclose(vert_info[2][0], uv1[0]) or not isclose(vert_info[2][1], uv1[1]):
                                     continue
 
                                 if uv2 and vert_info[3] is None:
@@ -1096,7 +1096,7 @@ class BlenderWMOSceneGroup:
                                 if not uv2 and vert_info[3] is not None:
                                     continue
 
-                                if uv2 and not isclose(vert_info[3][0], uv2[0]) and not isclose(vert_info[3][1], uv2[1]):
+                                if uv2 and (not isclose(vert_info[3][0], uv2[0]) or not isclose(vert_info[3][1], uv2[1])):
                                     continue
 
                                 v_index_local, is_collideable = vert_info[0], vert_info[1]
