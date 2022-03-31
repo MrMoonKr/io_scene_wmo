@@ -861,8 +861,6 @@ class BlenderWMOSceneGroup:
 
         group.mogp.flags |= MOGPFlags.HasWater # do we really need that?
 
-
-
         types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
         types_2 = {4, 8, 12, 20, 21} # slime
 
@@ -1199,14 +1197,6 @@ class BlenderWMOSceneGroup:
 
         # free bmesh
         bm.free()
-
-        # clear new seams and re instate old seams if indoors
-        if obj.wow_wmo_group.place_type == '8192':
-            seams = [e for e in mesh.edges if e.use_seam]
-            for e in seams:
-                e.use_seam = False
-            for e in old_seams:
-                e.use_seam = True
 
         # write header
         group.mogp.bounding_box_corner1 = [32767.0, 32767.0, 32767.0]
