@@ -1164,6 +1164,11 @@ class BlenderWMOSceneGroup:
                                 blend_factor = round(face.loops[j][obj_blend_map][0] * 255) if obj_blend_map else 1
                                 group.mocv2.vert_colors.append((0, 0, 0, blend_factor))
 
+                            if v_index_local > 65535:
+                                raise Exception(
+                                    '\nThe group \"{}\" has too many polygon indices : {} (max allowed = 65535)'.format(
+                                        obj.name, str(len(group.movt.vertices))))
+
                             group.movi.indices.append(v_index_local)
                             # tri_indices[j] = v_index_local
 
@@ -1179,6 +1184,11 @@ class BlenderWMOSceneGroup:
                         else:
                             if is_collideable:
                                 collision_counter += 1
+
+                            if v_index_local > 65535:
+                                raise Exception(
+                                    '\nThe group \"{}\" has too many polygon indices : {} (max allowed = 65535)'.format(
+                                        obj.name, str(len(group.movt.vertices))))
 
                             group.movi.indices.append(v_index_local)
 
@@ -1204,8 +1214,8 @@ class BlenderWMOSceneGroup:
         bm.free()
 
         # write header
-        group.mogp.bounding_box_corner1 = [32767.0, 32767.0, 32767.0]
-        group.mogp.bounding_box_corner2 = [-32768.0, -32768.0, -32768.0]
+        group.mogp.bounding_box_corner1 = [sys.float_info.max, sys.float_info.max, sys.float_info.max]
+        group.mogp.bounding_box_corner2 = [-sys.float_info.max, -sys.float_info.max, -sys.float_info.max]
 
         if len(group.movt.vertices) > 65535:
             raise Exception('\nThe group \"{}\" has too many vertices : {} (max allowed = 65535)'.format(
