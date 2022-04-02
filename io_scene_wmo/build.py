@@ -36,15 +36,15 @@ def build_project():
             status = subprocess.call([PYTHON_PATH, "setup.py", 'build_clib', 'build_ext', '--inplace'])
 
             if status:
-                print (f"\nProcess returned error code {status} while building module \"{module_relpath}\"")
+                print(f"\nProcess returned error code {status} while building module \"{module_relpath}\"")
                 sys.exit(1)
 
         except PermissionError:
-            raise PermissionError("\nThis build script may need to be called with admin (root) rights.")
+            print("\nThis build script may need to be called with admin (root) rights.")
             sys.exit(1)
 
         except RuntimeError:
-            print ("\nUnknown error occured.")
+            print ("\nUnknown error occurred.")
             sys.exit(1)
 
     os.chdir(addon_root_path)
@@ -60,9 +60,10 @@ def build_project():
 
     def install_requirements(f):
         for line in f.readlines():
-            status = subprocess.call(['pip3', 'install', line, '-t', 'third_party', '--upgrade'])
+            status = subprocess.call([PYTHON_PATH, '-m', 'pip', 'install', line, '-t', 'third_party', '--upgrade'])
             if status:
                 print('\nError: failed installing module \"{}\". See pip error above.'.format(line))
+                sys.exit(1)
 
     with open('requirements.txt') as f:
         install_requirements(f)
