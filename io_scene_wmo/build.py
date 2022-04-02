@@ -10,7 +10,8 @@ def build_project():
     try:
         import Cython
     except ImportError:
-        raise Exception("\nCython is required to build this project")
+        print("\nCython is required to build this project")
+        sys.exit(1)
 
     try:
         from pip import main as pipmain
@@ -18,7 +19,8 @@ def build_project():
         try:
             from pip._internal import main as pipmain
         except ImportError:
-            raise Exception("\npip is required to build this project")
+            print("\npip is required to build this project.")
+            sys.exit(1)
 
     import os
 
@@ -28,7 +30,7 @@ def build_project():
         "wbs_kernel/",
     )
 
-    print('\nBuilding C++ extensions.')
+    print('\nBuilding C++ extensions...')
 
     for module_relpath in extension_dirs:
         try:
@@ -44,7 +46,7 @@ def build_project():
             sys.exit(1)
 
         except RuntimeError:
-            print ("\nUnknown error occurred.")
+            print("\nUnknown error occurred.")
             sys.exit(1)
 
     os.chdir(addon_root_path)
@@ -56,7 +58,7 @@ def build_project():
 
     os.chdir(addon_root_path)
 
-    print('\nInstalling third-party modules.')
+    print('\nInstalling third-party modules...')
 
     def install_requirements(f):
         for line in f.readlines():
