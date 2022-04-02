@@ -467,7 +467,7 @@ bool WMODrawingMesh::update_geometry_nonindexed()
       for (int j = 0; j < 3; ++j)
       {
         this->vertices_co[global_vertex_index * 3 + j] = this->mesh->mvert[loop->v].co[j];
-        this->normals[global_vertex_index * 3 + j] = this->mesh->mvert[loop->v].no[j];
+        //this->normals[global_vertex_index * 3 + j] = this->mesh->mvert[loop->v].no[j];
       }
 
       // UVs
@@ -641,7 +641,7 @@ bool WMODrawingMesh::update_geometry_indexed()
       for (int j = 0; j < 3; ++j)
       {
         this->vertices_co[global_vertex_index * 3 + j] = this->mesh->mvert[loop->v].co[j];
-        this->normals[global_vertex_index * 3 + j] = this->mesh->mvert[loop->v].no[j];
+        //this->normals[global_vertex_index * 3 + j] = this->mesh->mvert[loop->v].no[j];
 
         // bounding box calculations
         bound_box[0][j] = std::min(bound_box[0][j], this->mesh->mvert[loop->v].co[j]);
