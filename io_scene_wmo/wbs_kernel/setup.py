@@ -6,15 +6,15 @@ from Cython.Build import cythonize
 
 
 def main():
-    if platform.system() != 'Darwin':
-        extra_compile_args = ['-O3']
-        extra_link_args = []
-
-    else:
+    if platform.system() == 'Darwin':
         extra_compile_args = ['-g3', '-O0', '-stdlib=libc++']
         extra_link_args = ['-stdlib=libc++']
-
-    extra_compile_args.extend(['-std=c++17'])
+    elif platform.system() == 'Windows':
+        extra_compile_args = ['/std:c++17']
+        extra_link_args = []
+    else:
+        extra_compile_args = ['-std=c++17']
+        extra_link_args = []
 
     glew = ('glew', {'sources': ["src/extern/glew/src/glew.c"], 'include_dirs': ["src/extern/glew/include/"]})
 
@@ -24,7 +24,7 @@ def main():
                   "src/render/m2_drawing_mesh.cpp",
                   "src/render/wmo_drawing_mesh.cpp",
                   "src/render/wmo_drawing_batch.cpp",
-                  "src/render/opengl_utils.cpp"
+                  "src/render/opengl_utils.cpp",
               ]
 
     include_dirs = [
@@ -56,7 +56,7 @@ def main():
 
     formatted_includes = '\n'.join([f"${{CMAKE_SOURCE_DIR}}/{include_dir}" for include_dir in include_dirs])
     formatted_sources = '\n'.join([f"${{CMAKE_SOURCE_DIR}}/{source_file}"
-                        for source_file in filter(lambda x: os.path.splitext(x)[1] in ('.hpp', '.cpp'), sources)])
+                        for source_file in filter(lambda x: os.path.splitext(x)[1] in ('.hpp', '.cpp', 'inl'), sources)])
 
     cmake_stub = \
         f"""
@@ -81,6 +81,7 @@ def main():
 
     with open('CMakeLists.txt', 'w') as f:
         f.write(cmake_stub)
+
 
 if __name__ == '__main__':
     main()
