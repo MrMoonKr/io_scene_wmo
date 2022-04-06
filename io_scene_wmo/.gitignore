@@ -1,6 +1,8 @@
 wbs_kernel/build
 wbs_kernel/cmake-build-debug
 wbs_kernel/cmake-build-release
+wbs_kernel/src/cmake-build-debug
+wbs_kernel/src/cmake-build-release
 wbs_kernel/.idea
 
 venv/
