@@ -1,5 +1,7 @@
-from libc.stdint cimport uintptr_t, uint32_t
+from libc.stdint cimport uintptr_t, uint32_t, uint16_t
 from libcpp.vector cimport vector
+from libcpp.string cimport string
+from libcpp.unordered_map cimport unordered_map
 from libcpp cimport bool
 
 
@@ -66,3 +68,41 @@ cdef extern from "render/opengl_utils.hpp" namespace "wbs_kernel":
         @staticmethod
         void set_blend_func(int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) except +
 
+cdef extern from "bl_utils/mesh/wmo/batch_geometry.hpp" namespace "wbs_kernel::bl_utils::math_utils":
+    cdef struct Vector3D:
+        float x
+        float y
+        float z
+
+cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh::wmo":
+
+    cdef struct BufferKey:
+        const char* data
+        size_t size
+
+    cdef enum WMOGeometryBatcherError:
+        NO_ERROR = 0,
+        LOOSE_MATERIAL_ID = 1
+
+    cdef cppclass WMOGeometryBatcher:
+        WMOGeometryBatcher(uintptr_t mesh_ptr
+                           , bool use_large_material_id
+                           , bool use_vertex_color
+                           , int vg_collision_index
+                           , const unordered_map[string, int]& material_mapping)
+
+        BufferKey batches() const
+        BufferKey normals() const
+        BufferKey vertices() const
+        BufferKey triangle_indices() const
+        BufferKey triangle_materials() const
+        BufferKey tex_coords() const
+        BufferKey tex_coords2() const
+        BufferKey vertex_colors() const
+        BufferKey vertex_colors2() const
+        uint16_t trans_batch_count() const
+        uint16_t int_batch_count() const
+        uint16_t ext_batch_count() const
+        const Vector3D* bb_min() const
+        const Vector3D* bb_max() const
+        WMOGeometryBatcherError get_last_error() const

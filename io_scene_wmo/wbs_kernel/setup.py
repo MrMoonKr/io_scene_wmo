@@ -25,6 +25,9 @@ def main():
                   "src/render/wmo_drawing_mesh.cpp",
                   "src/render/wmo_drawing_batch.cpp",
                   "src/render/opengl_utils.cpp",
+                  "src/bl_utils/math_utils.cpp",
+                  "src/bl_utils/mesh/custom_data.cpp",
+                  "src/bl_utils/mesh/wmo/batch_geometry.cpp"
               ]
 
     include_dirs = [
