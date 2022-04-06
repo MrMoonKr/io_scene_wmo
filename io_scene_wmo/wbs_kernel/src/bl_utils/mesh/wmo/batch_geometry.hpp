@@ -48,8 +48,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
   struct MOBABoundingBox
   {
-    std::uint16_t min[3];
-    std::uint16_t max[3];
+    std::int16_t min[3];
+    std::int16_t max[3];
   };
 
   struct MOBAMaterialIDLarge

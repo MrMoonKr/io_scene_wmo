@@ -375,6 +375,12 @@ void WMOGeometryBatcher::_create_new_batch(std::uint16_t mat_id
   cur_batch->start_index = _triangle_indices.size();
   cur_batch->indices_count = 0;
   cur_batch->min_index = _vertices.size();
+  cur_batch->bb_box.min[0] = std::numeric_limits<std::int16_t>::max();
+  cur_batch->bb_box.min[1] = std::numeric_limits<std::int16_t>::max();
+  cur_batch->bb_box.min[2] = std::numeric_limits<std::int16_t>::max();
+  cur_batch->bb_box.max[0] = std::numeric_limits<std::int16_t>::lowest();
+  cur_batch->bb_box.max[1] = std::numeric_limits<std::int16_t>::lowest();
+  cur_batch->bb_box.max[2] = std::numeric_limits<std::int16_t>::lowest();
 
   if (_use_large_material_id && mat_id > 255)
   {
@@ -484,13 +490,13 @@ void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_bat
   if (_use_large_material_id)
     return;
 
-  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::uint16_t>(vertex->co[0]));
-  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::uint16_t>(vertex->co[1]));
-  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::uint16_t>(vertex->co[2]));
+  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(vertex->co[0]));
+  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(vertex->co[1]));
+  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(vertex->co[2]));
 
-  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::uint16_t>(vertex->co[0]));
-  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::uint16_t>(vertex->co[1]));
-  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::uint16_t>(vertex->co[2]));
+  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(vertex->co[0]));
+  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(vertex->co[1]));
+  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(vertex->co[2]));
 }
 
 
