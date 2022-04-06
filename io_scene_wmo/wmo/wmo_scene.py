@@ -549,8 +549,8 @@ class BlenderWMOScene:
         group_info = GroupInfo()
 
         group_info.flags = flags  # 8
-        group_info.bounding_box_corner1 = bounding_box[0].copy()
-        group_info.bounding_box_corner2 = bounding_box[1].copy()
+        group_info.bounding_box_corner1 = bounding_box[0][:]
+        group_info.bounding_box_corner2 = bounding_box[1][:]
         group_info.name_ofs = self.wmo.mogn.add_string(name)  # 0xFFFFFFFF
 
         if desc:

@@ -1,7 +1,8 @@
 cimport wbs_kernel
 from typing import Dict
 from cython.operator cimport dereference
-from libcpp.cast cimport reinterpret_cast
+from cpython.memoryview cimport PyMemoryView_FromMemory
+from cpython.buffer cimport PyBUF_READ
 
 from typing import List, Optional, Tuple
 from enum import Enum
@@ -73,15 +74,6 @@ cdef class OpenGLUtils:
     def glBlendFuncSeparate(int srcRGB, int dstRGB, int srcAlpha, int dstAlpha):
          COpenGLUtils.set_blend_func(srcRGB, dstRGB, srcAlpha, dstAlpha)
 
-
-class CBufferKey:
-    buffer: int
-    size: int
-
-    def __init__(self, buffer: int, size: int):
-        self.buffer = buffer
-        self.size = size
-
 class CBatchCountInfo:
     n_batches_trans: int
     n_batches_int: int
@@ -112,86 +104,83 @@ cdef class CWMOGeometryBatcher:
                   , bool use_large_material_id
                   , bool use_vertex_color
                   , int vg_collision_index
-                  , material_mapping: Dict[str, int]):
+                  , material_mapping: List[int]):
 
-        cdef unordered_map[string, int] c_material_mapping
+        cdef vector[int] c_material_mapping = material_mapping
+        self._c_batcher = new WMOGeometryBatcher(mesh_pointer, use_large_material_id, use_vertex_color
+                                                 , vg_collision_index, c_material_mapping)
 
-        for name, index in material_mapping.items():
-            c_material_mapping[name] = index
-
-        self._c_batcher = new WMOGeometryBatcher(mesh_pointer, use_large_material_id, use_vertex_color, vg_collision_index, c_material_mapping)
-
-    def batches(self) -> Optional[CBufferKey]:
+    def batches(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.batches()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def normals(self) -> Optional[CBufferKey]:
+    def normals(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.normals()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def vertices(self) -> Optional[CBufferKey]:
+    def vertices(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.vertices()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def triangle_indices(self) -> Optional[CBufferKey]:
+    def triangle_indices(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.triangle_indices()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def triangle_materials(self) -> Optional[CBufferKey]:
+    def triangle_materials(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.triangle_materials()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def tex_coords(self) -> Optional[CBufferKey]:
+    def tex_coords(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.tex_coords()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def tex_coords2(self) -> Optional[CBufferKey]:
+    def tex_coords2(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.tex_coords2()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def vertex_colors(self) -> Optional[CBufferKey]:
+    def vertex_colors(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.vertex_colors()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
-    def vertex_colors2(self) -> Optional[CBufferKey]:
+    def vertex_colors2(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.vertex_colors2()
 
         if c_key.data == NULL or not c_key.size:
             return None
 
-        return CBufferKey(reinterpret_cast[uintptr_t](c_key.data), c_key.size)
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
 
     def batch_count_info(self) -> CBatchCountInfo:
         return CBatchCountInfo(self._c_batcher.trans_batch_count()

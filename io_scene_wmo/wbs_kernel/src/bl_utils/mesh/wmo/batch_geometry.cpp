@@ -24,7 +24,7 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   , bool use_large_material_id
   , bool use_vertex_color
   , int vg_collision_index
-  , std::unordered_map<std::string, int> const& material_mapping
+  , std::vector<int> const& material_mapping
 )
 : _mesh(reinterpret_cast<Mesh*>(mesh_ptr))
 , _trans_batch_count(0)
@@ -52,26 +52,10 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _bl_uv(get_custom_data_layer_named<MLoopUV>(&_mesh->ldata, "UVMap"))
 , _bl_uv2(get_custom_data_layer_named<MLoopUV>(&_mesh->ldata, "UVMap.001"))
 , _last_error(WMOGeometryBatcherError::NO_ERROR)
+, _material_ids(material_mapping)
 {
   assert(!_mesh->runtime.vert_normals_dirty && "Vertex normals were not calculated.");
   assert(!_mesh->runtime.poly_normals_dirty && "Poly normals were not calculated.");
-
-  // Construct mesh material ID mapping for export purposes
-  _material_ids.resize(_mesh->totcol);
-  for (int i = 0; i < _mesh->totcol; ++i)
-  {
-    auto it = material_mapping.find(_mesh->mat[i]->id.name);
-
-    if (it != material_mapping.end())
-    {
-      _material_ids[i] = it->second;
-    }
-    else
-    {
-      _set_last_error(WMOGeometryBatcherError::LOOSE_MATERIAL_ID);
-      return;
-    }
-  }
 
   if (_has_collision_vg)
   {
@@ -106,13 +90,12 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   std::uint16_t cur_batch_mat_id = 0;
   BatchType cur_batch_type = BatchType::TRANS;
 
-  std::size_t poly_counter = 0;
   for (auto [poly, batch_type] : polys_per_mat)
   {
     // handle collision-only geometry later, collisions non-batched geometry comes last.
     // stop iterating the list when collision is encountered, not more real batches should follow.
     if (poly->mat_nr == COLLISION_MAT_NR)
-      break;
+      continue;
 
     if (WMOGeometryBatcher::_needs_new_batch(cur_batch, poly, cur_batch_type,
                                              batch_type, cur_batch_mat_id))
@@ -121,14 +104,14 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     }
 
     _create_new_render_triangle(poly, cur_batch);
-
-    poly_counter++;
   }
 
   // handle collision only faces
-  for (std::size_t i = poly_counter; i < polys_per_mat.size(); ++i)
+  for (auto [poly, batch_type] : polys_per_mat)
   {
-    const MPoly* poly = polys_per_mat[i].first;
+    if (poly->mat_nr != COLLISION_MAT_NR)
+      continue;
+
     _create_new_collision_triangle(poly);
   }
 
@@ -143,7 +126,7 @@ void WMOGeometryBatcher::_create_new_collision_triangle(const MPoly* poly)
   tri_mat.flags.F_COLLISION = true;
   tri_mat.material_id = 0xFF;
 
-  for (int j = 0; j < _mesh->totloop; ++j)
+  for (int j = 0; j < poly->totloop; ++j)
   {
     const MLoop* loop = &_bl_loops[poly->loopstart + j];
     const MVert* vert = &_bl_verts[loop->v];
@@ -167,29 +150,26 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
     , MOPYTriangleMaterial& tri_mat
     , unsigned loop_index)
 {
-  if (_use_vertex_color)
+  if (_use_vertex_color && _bl_vertex_color)
   {
+    const MLoopCol* color = &_bl_vertex_color[loop_index];
+    v_info.col.r = color->r;
+    v_info.col.g = color->g;
+    v_info.col.b = color->b;
 
-    if (_bl_vertex_color)
+    if (_bl_lightmap)
     {
-      const MLoopCol* color = &_bl_vertex_color[loop_index];
-      v_info.col.r = color->r;
-      v_info.col.g = color->g;
-      v_info.col.b = color->b;
+      unsigned char attenuation = _get_grayscale_factor(&_bl_lightmap[loop_index]);
 
-      if (_bl_lightmap)
+      // TODO: verify what this actually does and if needed
+      if (attenuation > 0)
       {
-        unsigned char attenuation = _get_grayscale_factor(&_bl_lightmap[loop_index]);
-
-        // TODO: verify what this actually does and if needed
-        if (attenuation > 0)
-        {
-          tri_mat.flags.F_UNK_0x01 = true;
-        }
-
-        v_info.col.a = attenuation;
+        tri_mat.flags.F_UNK_0x01 = true;
       }
+
+      v_info.col.a = attenuation;
     }
+
   }
 
   if (_bl_blendmap)
@@ -515,48 +495,50 @@ void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_bat
 
 
 
-BufferKey WMOGeometryBatcher::batches() const
+BufferKey WMOGeometryBatcher::batches()
 {
-  return {reinterpret_cast<const char*>(_batches.data()), _batches.size()};
+  return {reinterpret_cast<char*>(_batches.data()), _batches.size() * sizeof(MOBABatch)};
 }
 
-BufferKey WMOGeometryBatcher::normals() const
+BufferKey WMOGeometryBatcher::normals()
 {
-  return {reinterpret_cast<const char*>(_normals.data()), _normals.size()};
+  return {reinterpret_cast<char*>(_normals.data()), _normals.size() * sizeof(Vector3D)};
 }
 
-BufferKey WMOGeometryBatcher::vertices() const
+BufferKey WMOGeometryBatcher::vertices()
 {
-  return {reinterpret_cast<const char*>(_vertices.data()), _vertices.size()};
+  return {reinterpret_cast<char*>(_vertices.data()), _vertices.size() * sizeof(Vector3D)};
 }
 
-BufferKey WMOGeometryBatcher::triangle_indices() const
+BufferKey WMOGeometryBatcher::triangle_indices()
 {
-  return {reinterpret_cast<const char*>(_triangle_indices.data()), _triangle_indices.size()};
+  return {reinterpret_cast<char*>(_triangle_indices.data()),
+          _triangle_indices.size() * sizeof(std::uint16_t)};
 }
 
-BufferKey WMOGeometryBatcher::triangle_materials() const
+BufferKey WMOGeometryBatcher::triangle_materials()
 {
-  return {reinterpret_cast<const char*>(_triangle_materials.data()), _triangle_materials.size()};
+  return {reinterpret_cast<char*>(_triangle_materials.data()),
+          _triangle_materials.size() * sizeof(MOPYTriangleMaterial)};
 }
 
-BufferKey WMOGeometryBatcher::tex_coords() const
+BufferKey WMOGeometryBatcher::tex_coords()
 {
-  return {reinterpret_cast<const char*>(_tex_coords.data()), _tex_coords.size()};
+  return {reinterpret_cast<char*>(_tex_coords.data()), _tex_coords.size()  * sizeof(Vector2D)};
 }
 
-BufferKey WMOGeometryBatcher::tex_coords2() const
+BufferKey WMOGeometryBatcher::tex_coords2()
 {
-  return {reinterpret_cast<const char*>(_tex_coords2.data()), _tex_coords2.size()};
+  return {reinterpret_cast<char*>(_tex_coords2.data()), _tex_coords2.size() * sizeof(Vector2D)};
 }
 
-BufferKey WMOGeometryBatcher::vertex_colors() const
+BufferKey WMOGeometryBatcher::vertex_colors()
 {
-  return {reinterpret_cast<const char*>(_vertex_colors.data()), _vertex_colors.size()};
+  return {reinterpret_cast<char*>(_vertex_colors.data()), _vertex_colors.size() * sizeof(RGBA)};
 }
 
-BufferKey WMOGeometryBatcher::vertex_colors2() const
+BufferKey WMOGeometryBatcher::vertex_colors2()
 {
-  return {reinterpret_cast<const char*>(_vertex_colors2.data()), _vertex_colors2.size()};
+  return {reinterpret_cast<char*>(_vertex_colors2.data()), _vertex_colors2.size() * sizeof(RGBA)};
 }
 

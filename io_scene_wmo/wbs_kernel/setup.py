@@ -6,6 +6,9 @@ from Cython.Build import cythonize
 
 
 def main():
+
+    print("\nBuilding WBS kernel...")
+
     if platform.system() == 'Darwin':
         extra_compile_args = ['-g3', '-O0', '-stdlib=libc++']
         extra_link_args = ['-stdlib=libc++']
@@ -13,7 +16,7 @@ def main():
         extra_compile_args = ['/std:c++17']
         extra_link_args = []
     else:
-        extra_compile_args = ['-std=c++17']
+        extra_compile_args = ['-std=c++17', '-O3']  # '-O0', '-g'
         extra_link_args = []
 
     glew = ('glew', {'sources': ["src/extern/glew/src/glew.c"], 'include_dirs': ["src/extern/glew/include/"]})
@@ -70,20 +73,22 @@ def main():
         \nset(CMAKE_CXX_STANDARD 17)
         \nset(CMAKE_CXX_STANDARD_REQUIRED ON)
         \nset(CMAKE_CXX_FLAGS_DEBUG "${{CMAKE_CXX_FLAGS_DEBUG}} -O0")
-                       
+
         \ninclude_directories(
           \n{formatted_includes}
         \n)
-        
+
         \nadd_library(wbs_kernel
           \n{formatted_sources}
         \n)
-        
+
         \nset_target_properties(wbs_kernel PROPERTIES PREFIX "" OUTPUT_NAME "wbs_kernel<$<CONFIG:Debug>:d>")
         """
 
     with open('CMakeLists.txt', 'w') as f:
         f.write(cmake_stub)
+
+    print("\nSuccessfully built WBS kernel.")
 
 
 if __name__ == '__main__':

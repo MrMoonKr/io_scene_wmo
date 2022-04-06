@@ -1,7 +1,6 @@
 from libc.stdint cimport uintptr_t, uint32_t, uint16_t
 from libcpp.vector cimport vector
 from libcpp.string cimport string
-from libcpp.unordered_map cimport unordered_map
 from libcpp cimport bool
 
 
@@ -77,7 +76,7 @@ cdef extern from "bl_utils/mesh/wmo/batch_geometry.hpp" namespace "wbs_kernel::b
 cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh::wmo":
 
     cdef struct BufferKey:
-        const char* data
+        char* data
         size_t size
 
     cdef enum WMOGeometryBatcherError:
@@ -89,7 +88,7 @@ cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh
                            , bool use_large_material_id
                            , bool use_vertex_color
                            , int vg_collision_index
-                           , const unordered_map[string, int]& material_mapping)
+                           , const vector[int]& material_mapping)
 
         BufferKey batches() const
         BufferKey normals() const

@@ -66,7 +66,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
       MOBAMaterialIDLarge material_id_large;
     };
 
-    std::uint16_t start_index;
+    std::uint32_t start_index;
     std::uint16_t indices_count;
     std::uint16_t min_index;
     std::uint16_t max_index;
@@ -99,7 +99,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
   struct BufferKey
   {
-    const char* data;
+    char* data;
     std::size_t size;
   };
 
@@ -119,18 +119,18 @@ namespace wbs_kernel::bl_utils::mesh::wmo
                        , bool use_large_material_id
                        , bool use_vertex_color
                        , int vg_collision_index
-                       , std::unordered_map<std::string, int> const& material_mapping
+                       , std::vector<int> const& material_mapping
     );
 
-    BufferKey batches() const;
-    BufferKey normals() const;
-    BufferKey vertices() const;
-    BufferKey triangle_indices() const;
-    BufferKey triangle_materials() const;
-    BufferKey tex_coords() const;
-    BufferKey tex_coords2() const;
-    BufferKey vertex_colors() const;
-    BufferKey vertex_colors2() const;
+    BufferKey batches();
+    BufferKey normals();
+    BufferKey vertices();
+    BufferKey triangle_indices();
+    BufferKey triangle_materials();
+    BufferKey tex_coords();
+    BufferKey tex_coords2();
+    BufferKey vertex_colors();
+    BufferKey vertex_colors2();
     std::uint16_t trans_batch_count() const { return _trans_batch_count; };
     std::uint16_t int_batch_count() const { return _int_batch_count; };
     std::uint16_t ext_batch_count() const { return _ext_batch_count; };
@@ -212,7 +212,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     std::unordered_map<unsigned, std::vector<BatchVertexInfo>> _cur_batch_vertex_map;
     std::unordered_map<unsigned, unsigned> _collision_vertex_map;
-    std::vector<int> _material_ids;
+    std::vector<int> const& _material_ids;
 
     WMOGeometryBatcherError _last_error;
 
