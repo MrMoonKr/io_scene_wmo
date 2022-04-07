@@ -30,7 +30,8 @@ def main():
                   "src/render/opengl_utils.cpp",
                   "src/bl_utils/math_utils.cpp",
                   "src/bl_utils/mesh/custom_data.cpp",
-                  "src/bl_utils/mesh/wmo/batch_geometry.cpp"
+                  "src/bl_utils/mesh/wmo/batch_geometry.cpp",
+                  "src/bl_utils/mesh/wmo/bsp_tree.cpp"
               ]
 
     include_dirs = [

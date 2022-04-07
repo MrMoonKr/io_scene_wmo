@@ -104,11 +104,12 @@ cdef class CWMOGeometryBatcher:
                   , bool use_large_material_id
                   , bool use_vertex_color
                   , int vg_collision_index
+                  , unsigned node_size
                   , material_mapping: List[int]):
 
         cdef vector[int] c_material_mapping = material_mapping
         self._c_batcher = new WMOGeometryBatcher(mesh_pointer, use_large_material_id, use_vertex_color
-                                                 , vg_collision_index, c_material_mapping)
+                                                 , vg_collision_index, node_size, c_material_mapping)
 
     def batches(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.batches()
@@ -176,6 +177,22 @@ cdef class CWMOGeometryBatcher:
 
     def vertex_colors2(self) -> Optional[bytes]:
         cdef BufferKey c_key = self._c_batcher.vertex_colors2()
+
+        if c_key.data == NULL or not c_key.size:
+            return None
+
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
+
+    def bsp_nodes(self) -> Optional[bytes]:
+        cdef BufferKey c_key = self._c_batcher.bsp_nodes()
+
+        if c_key.data == NULL or not c_key.size:
+            return None
+
+        return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
+
+    def bsp_faces(self) -> Optional[bytes]:
+        cdef BufferKey c_key = self._c_batcher.bsp_faces()
 
         if c_key.data == NULL or not c_key.size:
             return None

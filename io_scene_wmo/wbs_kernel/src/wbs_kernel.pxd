@@ -88,17 +88,20 @@ cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh
                            , bool use_large_material_id
                            , bool use_vertex_color
                            , int vg_collision_index
+                           , unsigned node_size
                            , const vector[int]& material_mapping)
 
-        BufferKey batches() const
-        BufferKey normals() const
-        BufferKey vertices() const
-        BufferKey triangle_indices() const
-        BufferKey triangle_materials() const
-        BufferKey tex_coords() const
-        BufferKey tex_coords2() const
-        BufferKey vertex_colors() const
-        BufferKey vertex_colors2() const
+        BufferKey batches()
+        BufferKey normals()
+        BufferKey vertices()
+        BufferKey triangle_indices()
+        BufferKey triangle_materials()
+        BufferKey tex_coords()
+        BufferKey tex_coords2()
+        BufferKey vertex_colors()
+        BufferKey vertex_colors2()
+        BufferKey bsp_nodes()
+        BufferKey bsp_faces()
         uint16_t trans_batch_count() const
         uint16_t int_batch_count() const
         uint16_t ext_batch_count() const

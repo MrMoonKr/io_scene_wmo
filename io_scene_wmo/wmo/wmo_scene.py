@@ -26,17 +26,17 @@ from ..third_party.tqdm import tqdm
 class BlenderWMOScene:
     """ This class is used for assembling a Blender scene from a WNO file or saving the scene back to it."""
 
-    def __init__(self, wmo : WMOFile, prefs):
-        self.wmo : WMOFile = wmo
+    def __init__(self, wmo: WMOFile, prefs):
+        self.wmo: WMOFile = wmo
         self.settings = prefs
 
-        self.bl_materials   : Dict[int, bpy.types.Material]  = {}
-        self.bl_groups      : List[BlenderWMOSceneGroup]     = []
-        self.bl_portals     : List[bpy.types.Object]         = []
-        self.bl_fogs        : List[bpy.types.Object]         = []
-        self.bl_lights      : List[bpy.types.Object]         = []
-        self.bl_liquids     : List[bpy.types.Object]         = []
-        self.bl_doodad_sets : Dict[str, bpy.types.Object]    = {}
+        self.bl_materials: Dict[int, bpy.types.Material] = {}
+        self.bl_groups: List[BlenderWMOSceneGroup] = []
+        self.bl_portals: List[bpy.types.Object] = []
+        self.bl_fogs: List[bpy.types.Object] = []
+        self.bl_lights: List[bpy.types.Object] = []
+        self.bl_liquids: List[bpy.types.Object] = []
+        self.bl_doodad_sets: Dict[str, bpy.types.Object] = {}
 
     def load_materials(self, texture_dir=None):
         """ Load materials from WoW WMO root file """
@@ -143,9 +143,9 @@ class BlenderWMOScene:
     def load_lights(self):
         """ Load WoW WMO MOLT lights """
 
-        for i, wmo_light in tqdm(list(enumerate(self.wmo.molt.lights)), desc='Importing lights', ascii=True):
+        bl_light_types = ['POINT', 'SPOT', 'SUN', 'POINT']
 
-            bl_light_types = ['POINT', 'SPOT', 'SUN', 'POINT']
+        for i, wmo_light in tqdm(list(enumerate(self.wmo.molt.lights)), desc='Importing lights', ascii=True):
 
             try:
                 l_type = bl_light_types[wmo_light.light_type]
@@ -635,7 +635,7 @@ class BlenderWMOScene:
             -(vec_a.x * vec_b.x + vec_a.y * vec_b.y + vec_a.z * vec_b.z)) + pi
 
     @staticmethod
-    def traverse(  cur_vtx: BMVert
+    def traverse(cur_vtx: BMVert
                  , nodes_to_hit: List
                  , nodes_hit: List
                  , origin: BMVert) -> List:

@@ -2,6 +2,7 @@
 #define WBS_KERNEL_MATH_UTILS_HPP
 
 #include <cmath>
+#include <cassert>
 
 extern "C"
 {
@@ -15,12 +16,108 @@ namespace wbs_kernel::bl_utils::math_utils
     float x;
     float y;
     float z;
+
+    float& operator[](unsigned index)
+    {
+      assert(index <= 2);
+
+      switch(index)
+      {
+        case 0:
+          return x;
+        case 1:
+          return y;
+        case 2:
+          return z;
+        default:
+          assert(false);
+      }
+    }
+
+    float operator[](unsigned index) const
+    {
+      assert(index <= 2);
+
+      switch(index)
+      {
+        case 0:
+          return x;
+        case 1:
+          return y;
+        case 2:
+          return z;
+        default:
+          assert(false);
+      }
+    }
+
+    Vector3D operator-(Vector3D const& v) const
+    {
+      return Vector3D{
+          x - v.x,
+          y - v.y,
+          z - v.z};
+    }
+
+    Vector3D operator*(Vector3D const& v) const
+    {
+      return Vector3D{
+          x * v.x,
+          y * v.y,
+          z * v.z};
+    }
+
+    [[nodiscard]]
+    Vector3D cross(Vector3D const& v) const
+    {
+      return Vector3D{
+          y * v.z - v.y * z,
+          z * v.x - v.z * x,
+          x * v.y - v.x * y};
+    }
+
+    [[nodiscard]]
+    float dot(Vector3D const& v) const
+    {
+      Vector3D tmp(*this * v);
+      return tmp.x + tmp.y + tmp.z;
+    }
   };
 
   struct Vector2D
   {
     float x;
     float y;
+
+    float& operator[](unsigned index)
+    {
+      assert(index <= 1);
+
+      switch(index)
+      {
+        case 0:
+          return x;
+        case 1:
+          return y;
+        default:
+          assert(false);
+      }
+    }
+
+    float operator[](unsigned index) const
+    {
+      assert(index <= 1);
+
+      switch(index)
+      {
+        case 0:
+          return x;
+        case 1:
+          return y;
+        default:
+          assert(false);
+      }
+    }
   };
 
 

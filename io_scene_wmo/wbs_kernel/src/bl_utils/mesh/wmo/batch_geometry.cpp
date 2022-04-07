@@ -1,5 +1,6 @@
 #include "batch_geometry.hpp"
 #include <bl_utils/mesh/custom_data.hpp>
+#include <bl_utils/mesh/wmo/bsp_tree.hpp>
 
 #include <cassert>
 #include <algorithm>
@@ -24,7 +25,9 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   , bool use_large_material_id
   , bool use_vertex_color
   , int vg_collision_index
+  , unsigned node_size
   , std::vector<int> const& material_mapping
+
 )
 : _mesh(reinterpret_cast<Mesh*>(mesh_ptr))
 , _trans_batch_count(0)
@@ -115,6 +118,9 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     _create_new_collision_triangle(poly);
   }
 
+  // calculate BSP tree
+  BoundingBox bb_box{_bounding_box_min, _bounding_box_max};
+  _bsp_tree = new BSPTree{_vertices, _triangle_indices, bb_box, node_size};
 }
 
 void WMOGeometryBatcher::_create_new_collision_triangle(const MPoly* poly)
@@ -425,15 +431,10 @@ void WMOGeometryBatcher::_create_new_render_triangle(const MPoly* poly, MOBABatc
   tri_mat.flags_int = 0;
   tri_mat.flags.F_RENDER = true;
 
-  if (cur_batch->flags & MOBAFlags::FLAG_USE_MATERIAL_ID_LARGE)
-  {
-    // TODO: figure out what to do here
-    tri_mat.material_id = 0;
-  }
-  else
-  {
-    tri_mat.material_id = cur_batch->material_id;
-  }
+  // overflow may occur here, and is intended. uint8_t overflow for values > 255 corresponds to the data
+  // found in Blizzard files.
+  tri_mat.material_id = cur_batch->material_id;
+
 
   assert(poly->totloop == 3 && "Mesh was not triangulated");
 
@@ -546,5 +547,15 @@ BufferKey WMOGeometryBatcher::vertex_colors()
 BufferKey WMOGeometryBatcher::vertex_colors2()
 {
   return {reinterpret_cast<char*>(_vertex_colors2.data()), _vertex_colors2.size() * sizeof(RGBA)};
+}
+
+BufferKey WMOGeometryBatcher::bsp_nodes()
+{
+  return {reinterpret_cast<char*>(_bsp_tree->nodes().data()), _bsp_tree->nodes().size() * sizeof(BSPNode)};
+}
+
+BufferKey WMOGeometryBatcher::bsp_faces()
+{
+  return {reinterpret_cast<char*>(_bsp_tree->faces().data()), _bsp_tree->faces().size() * sizeof(std::uint16_t)};
 }
 

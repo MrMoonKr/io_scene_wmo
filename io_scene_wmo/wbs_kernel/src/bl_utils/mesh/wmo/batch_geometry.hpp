@@ -15,8 +15,11 @@ struct MLoop;
 struct MLoopCol;
 struct MDeformVert;
 
+
 namespace wbs_kernel::bl_utils::mesh::wmo
 {
+  class BSPTree;
+
   inline constexpr short COLLISION_MAT_NR = 32767;
 
   struct RGBA
@@ -119,23 +122,59 @@ namespace wbs_kernel::bl_utils::mesh::wmo
                        , bool use_large_material_id
                        , bool use_vertex_color
                        , int vg_collision_index
+                       , unsigned node_size
                        , std::vector<int> const& material_mapping
     );
 
+    [[nodiscard]]
     BufferKey batches();
+
+    [[nodiscard]]
     BufferKey normals();
+
+    [[nodiscard]]
     BufferKey vertices();
+
+    [[nodiscard]]
     BufferKey triangle_indices();
+
+    [[nodiscard]]
     BufferKey triangle_materials();
+
+    [[nodiscard]]
     BufferKey tex_coords();
+
+    [[nodiscard]]
     BufferKey tex_coords2();
+
+    [[nodiscard]]
     BufferKey vertex_colors();
+
+    [[nodiscard]]
     BufferKey vertex_colors2();
+
+    [[nodiscard]]
+    BufferKey bsp_nodes();
+
+    [[nodiscard]]
+    BufferKey bsp_faces();
+
+    [[nodiscard]]
     std::uint16_t trans_batch_count() const { return _trans_batch_count; };
+
+    [[nodiscard]]
     std::uint16_t int_batch_count() const { return _int_batch_count; };
+
+    [[nodiscard]]
     std::uint16_t ext_batch_count() const { return _ext_batch_count; };
+
+    [[nodiscard]]
     const math_utils::Vector3D* bb_min() const { return &_bounding_box_min; };
+
+    [[nodiscard]]
     const math_utils::Vector3D* bb_max() const { return &_bounding_box_max; };
+
+    [[nodiscard]]
     WMOGeometryBatcherError get_last_error() const { return _last_error; };
 
   private:
@@ -163,8 +202,10 @@ namespace wbs_kernel::bl_utils::mesh::wmo
                           , std::uint16_t& cur_batch_mat_id
                           , BatchType& cur_batch_type);
 
+    [[nodiscard]]
     bool _needs_new_vert(unsigned vert_index, BatchVertexInfo& cur_v_info);
 
+    [[nodiscard]]
     bool _is_vertex_collidable(unsigned vert_index);
 
     void _calculate_bounding_for_vertex(const MVert* vertex);
@@ -173,19 +214,23 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     void _set_last_error(WMOGeometryBatcherError error) { _last_error = error; };
 
+    [[nodiscard]]
     bool _needs_new_batch(MOBABatch* cur_batch
         , const MPoly* cur_poly
         , BatchType cur_batch_type
         , BatchType cur_poly_batch_type
         , std::uint16_t cur_batch_mat_id);
 
+    [[nodiscard]]
     static unsigned char _get_grayscale_factor(const MLoopCol* color);
 
+    [[nodiscard]]
     static bool _compare_colors(RGBA const& v1, RGBA const& v2);
 
-
+    [[nodiscard]]
     static bool comp_color_key(RGBA const& color);
 
+    [[nodiscard]]
     static BatchType get_batch_type(const MPoly* poly
         , const MLoopCol* batch_map_trans
         , const MLoopCol* batch_map_int);
@@ -235,6 +280,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     MLoopUV* _bl_uv;
     MLoopUV* _bl_uv2;
     MDeformVert* _bl_vg_data;
+
+    BSPTree* _bsp_tree;
 
 
   };

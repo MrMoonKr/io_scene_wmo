@@ -1032,6 +1032,7 @@ class BlenderWMOSceneGroup:
                                       , False
                                       , use_vertex_color
                                       , vg_collision_index
+                                      , obj.wow_wmo_vertex_info.node_size
                                       , material_mapping)
 
         self.wmo_group.movt.from_bytes(batcher.vertices())
@@ -1041,6 +1042,8 @@ class BlenderWMOSceneGroup:
         self.wmo_group.mopy.from_bytes(batcher.triangle_materials())
         self.wmo_group.motv.from_bytes(batcher.tex_coords())
         self.wmo_group.mocv.from_bytes(batcher.vertex_colors())
+        self.wmo_group.mobn.from_bytes(batcher.bsp_nodes())
+        self.wmo_group.mobr.from_bytes(batcher.bsp_faces())
 
         if has_blending:
             self.wmo_group.motv2.from_bytes(batcher.tex_coords2())
@@ -1051,9 +1054,12 @@ class BlenderWMOSceneGroup:
         group.mogp.bounding_box_corner1 = bb.min
         group.mogp.bounding_box_corner2 = bb.max
 
+        '''
         if len(group.movt.vertices) > 65535:
             raise Exception('\nThe group \"{}\" has too many vertices : {} (max allowed = 65535)'.format(
                 obj.name, str(len(group.movt.vertices))))
+                
+        '''
 
         batch_count_info = batcher.batch_count_info()
         group.mogp.n_batches_a = batch_count_info.n_batches_trans
@@ -1117,12 +1123,6 @@ class BlenderWMOSceneGroup:
             group.mogp.flags |= MOGPFlags.HasDoodads
         else:
             group.modr = None
-
-        bsp_tree = BSPTree()
-        bsp_tree.generate_bsp(group.movt.vertices, group.movi.indices, obj.wow_wmo_vertex_info.node_size)
-
-        group.mobn.nodes = bsp_tree.Nodes
-        group.mobr.faces = bsp_tree.Faces
 
         if '0' not in obj.wow_wmo_group.flags:
             if obj.wow_wmo_group.place_type == '8192':
