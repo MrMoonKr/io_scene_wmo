@@ -559,3 +559,8 @@ BufferKey WMOGeometryBatcher::bsp_faces()
   return {reinterpret_cast<char*>(_bsp_tree->faces().data()), _bsp_tree->faces().size() * sizeof(std::uint16_t)};
 }
 
+WMOGeometryBatcher::~WMOGeometryBatcher()
+{
+  delete _bsp_tree;
+}
+

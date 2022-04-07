@@ -1091,14 +1091,14 @@ class BlenderWMOSceneGroup:
                 obj.wow_wmo_group.fog3,
                 obj.wow_wmo_group.fog4)
 
-        lamps = obj.wow_wmo_group.relations.lights
 
         # set fog references
         group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,
-                                  fogs[1].wow_wmo_fog.fog_id if fogs[0] else 0,
-                                  fogs[2].wow_wmo_fog.fog_id if fogs[0] else 0,
-                                  fogs[3].wow_wmo_fog.fog_id if fogs[0] else 0)
+                                  fogs[1].wow_wmo_fog.fog_id if fogs[1] else 0,
+                                  fogs[2].wow_wmo_fog.fog_id if fogs[2] else 0,
+                                  fogs[3].wow_wmo_fog.fog_id if fogs[3] else 0)
         # save lamps
+        lamps = obj.wow_wmo_group.relations.lights
         if lamps:
             has_lights = True
             for lamp in lamps:

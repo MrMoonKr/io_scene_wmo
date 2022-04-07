@@ -126,6 +126,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
                        , std::vector<int> const& material_mapping
     );
 
+    ~WMOGeometryBatcher();
+
     [[nodiscard]]
     BufferKey batches();
 
