@@ -116,13 +116,14 @@ def create_distribution(addon_root_path: str, dist_path: str):
     )
 
     for path in paths_to_remove:
-        if not os.path.exists(path):
+        new_path = os.path.join(final_dist_path, path)
+        if not os.path.exists(new_path):
             continue
 
-        if os.path.isdir(path):
-            shutil.rmtree(os.path.join(final_dist_path, path), ignore_errors=True)
+        if os.path.isdir(new_path):
+            shutil.rmtree(new_path, ignore_errors=True)
         else:
-            os.remove(path)
+            os.remove(new_path)
 
     print_succes("\nSuccessfully created WBS distribution.")
 
@@ -230,7 +231,6 @@ def build_project(debug: bool, clean: bool, no_req: bool, dist_path: Optional[st
     print_succes('\nWBS building finished successfully.',
        "\nTotal build time: ", time.strftime("%M minutes %S seconds\a", time.gmtime(time.time() - start_time)))
 
-    return
     if do_distribute:
         create_distribution(addon_root_path, dist_path)
 
