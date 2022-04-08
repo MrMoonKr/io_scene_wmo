@@ -105,6 +105,7 @@ std::int16_t BSPTree::_add_node(const BoundingBox& box, const std::vector<std::u
   std::int16_t i_child1;
   std::int16_t i_child2;
   // don't add child if there is no faces inside
+
   if (child1_faces.empty())
     i_child1 = -1;
   else
@@ -115,12 +116,13 @@ std::int16_t BSPTree::_add_node(const BoundingBox& box, const std::vector<std::u
   else
     i_child2 = _add_node(child2_box, child2_faces);
 
-  node.plane_type = plane_type;
-  node.children[0] = i_child1;
-  node.children[1] = i_child2;
-  node.num_faces = 0;
-  node.first_face = 0;
-  node.dist = split_dist;
+  auto& this_node = _nodes[i_node]; // needed here because of reference invalidation
+  this_node.plane_type = plane_type;
+  this_node.children[0] = i_child1;
+  this_node.children[1] = i_child2;
+  this_node.num_faces = 0;
+  this_node.first_face = 0;
+  this_node.dist = split_dist;
 
   return i_node;
 }

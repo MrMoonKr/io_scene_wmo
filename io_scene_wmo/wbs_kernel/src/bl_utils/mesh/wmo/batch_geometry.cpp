@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <algorithm>
-#include <unordered_map>
 #include <limits>
 
 extern "C"
@@ -30,6 +29,7 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 
 )
 : _mesh(reinterpret_cast<Mesh*>(mesh_ptr))
+, _bsp_tree(nullptr)
 , _trans_batch_count(0)
 , _int_batch_count(0)
 , _ext_batch_count(0)
