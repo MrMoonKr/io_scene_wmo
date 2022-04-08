@@ -1,23 +1,51 @@
 import os
+import sys
 import platform
-from typing import List
+import argparse
+
 from distutils.core import setup, Extension
 from Cython.Build import cythonize
 
 
-def main():
+def print_error(*s: str):
+    print("\033[91m {}\033[00m".format(' '.join(s)))
 
-    print("\nBuilding WBS kernel...")
+
+def print_succes(*s: str):
+    print("\033[92m {}\033[00m".format(' '.join(s)))
+
+
+def print_info(*s: str):
+    print("\033[93m {}\033[00m".format(' '.join(s)))
+
+
+def main(debug: bool):
+
+    print_info("\nBuilding WBS kernel...")
+    print(f"Target mode: {'Debug' if debug else 'Release'}")
 
     if platform.system() == 'Darwin':
-        extra_compile_args = ['-g3', '-O0', '-stdlib=libc++']
-        extra_link_args = ['-stdlib=libc++']
+        if debug:
+            extra_compile_args = ['-g3', '-O0', '-stdlib=libc++']
+            extra_link_args = ['-stdlib=libc++']
+        else:
+            extra_compile_args = ['-O3', '-stdlib=libc++']
+            extra_link_args = ['-stdlib=libc++']
+
     elif platform.system() == 'Windows':
-        extra_compile_args = ['/std:c++17']
-        extra_link_args = []
+        if debug:
+            extra_compile_args = ['/std:c++17', '/Zi']
+            extra_link_args = ['/DEBUG:FULL']
+        else:
+            extra_compile_args = ['/std:c++17']
+            extra_link_args = []
     else:
-        extra_compile_args = ['-std=c++17', '-O3']  # '-O0', '-g'
-        extra_link_args = []
+        if debug:
+            extra_compile_args = ['-std=c++17', '-O0', '-g']
+            extra_link_args = []
+        else:
+            extra_compile_args = ['-std=c++17', '-O3']
+            extra_link_args = []
 
     glew = ('glew', {'sources': ["src/extern/glew/src/glew.c"], 'include_dirs': ["src/extern/glew/include/"]})
 
@@ -89,8 +117,18 @@ def main():
     with open('CMakeLists.txt', 'w') as f:
         f.write(cmake_stub)
 
-    print("\nSuccessfully built WBS kernel.")
+    print_succes("\nSuccessfully built WBS kernel.")
+
+
 
 
 if __name__ == '__main__':
-    main()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--wbs_debug', action='store_true', help='Compile WBS kernel in debug mode.')
+    args, unknown = parser.parse_known_args()
+
+    if args.wbs_debug:
+        sys.argv.remove('--wbs_debug')
+
+    main(args.wbs_debug)

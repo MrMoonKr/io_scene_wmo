@@ -286,7 +286,7 @@ bool BSPTree::_proj_overlap(float poly1_min, float poly1_max, float poly2_min, f
   return !(poly1_max < poly2_min || poly2_max < poly1_min);
 }
 
-bool BSPTree::_check_overlaps(Vector3D const& projected_box_min, Vector3D const & projected_box_max,
+bool BSPTree::_check_overlaps(Vector3D const& projected_box_min, Vector3D const& projected_box_max,
                                Vector3D const& projected_triangle_min, Vector3D const& projected_triangle_max)
 {
   return (!BSPTree::_proj_overlap(projected_box_min.x,
