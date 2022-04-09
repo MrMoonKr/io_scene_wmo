@@ -70,17 +70,15 @@ namespace wbs_kernel::bl_utils::math_utils
     [[nodiscard]]
     Vector3D cross(Vector3D const& v) const
     {
-      return Vector3D{
-          y * v.z - v.y * z,
-          z * v.x - v.z * x,
-          x * v.y - v.x * y};
+      return Vector3D{y * v.z - z * v.y,
+                      z * v.x - x * v.z,
+                      x * v.y - y * v.x};
     }
 
     [[nodiscard]]
     float dot(Vector3D const& v) const
     {
-      Vector3D tmp(*this * v);
-      return tmp.x + tmp.y + tmp.z;
+      return x * v.x + y * v.y + z * v.z;
     }
   };
 
