@@ -5,15 +5,15 @@ windows:
     - windows-1809
 
   before_script:
-    - choco install python --version=3.1.2 -y -f
+    - choco install python --version=3.10.2 -y -f
     - choco install cmake
 
 
   script:
     - python -m pip install Cython
-    - python io_scene_wmo/build.py
+    - python io_scene_wmo/build.py --dist=dist/
 
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
     paths:
-      - io_scene_wmo/
+      - dist/
