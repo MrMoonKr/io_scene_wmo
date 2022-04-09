@@ -10,8 +10,8 @@ windows:
 
 
   script:
-    - python -m pip install Cython
-    - python io_scene_wmo/build.py --dist=dist/
+    - C:\Python310\python.exe -m pip install Cython
+    - C:\Python310\python.exe io_scene_wmo/build.py --dist=dist/
 
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
