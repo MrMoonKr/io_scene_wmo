@@ -10,6 +10,7 @@ windows:
   before_script:
     - choco install python --version=3.10.2 -y -f
     - choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y -f
+    - $env:Path += ';C:\Program Files\CMake\bin'
 
 
   script:
