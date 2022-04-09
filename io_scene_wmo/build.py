@@ -50,7 +50,7 @@ def build_type_mismatch(debug: bool) -> bool:
 
 def clean_build_data(ext_dirs: Iterable[str]):
     for ext_dir in ext_dirs:
-        shutil.rmtree(os.path.join(ext_dir, "build"), ignore_errors=False, onerror=None)
+        shutil.rmtree(os.path.join(ext_dir, "build"), ignore_errors=True)
 
 
 def create_distribution(addon_root_path: str, dist_path: str):
