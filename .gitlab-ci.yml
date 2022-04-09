@@ -1,4 +1,10 @@
+
+stages:
+  - build
+
 windows:
+  stage: build
+  
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
 
