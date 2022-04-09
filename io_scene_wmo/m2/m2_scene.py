@@ -1527,8 +1527,6 @@ class BlenderM2Scene:
             else:
                 origin = get_origin_position()
 
-            self.m2.add_dummy_anim_set(origin)
-
     def save_animations(self):
 
         # if there are no actions, make a default Stand anim.
