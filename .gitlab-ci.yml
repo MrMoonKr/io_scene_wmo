@@ -1,4 +1,7 @@
 windows:
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+
   tags:
     - shared-windows
     - windows
