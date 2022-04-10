@@ -7,7 +7,7 @@ from typing import List
 
 from .drawing_batch import M2DrawingBatch
 from ..utils import render_debug
-from ...wbs_kernel.wbs_kernel import CM2DrawingMesh, CM2DrawingBatch
+from ...wbs_kernel.render import CM2DrawingMesh, CM2DrawingBatch
 from ..bgl_ext import glCheckError
 
 

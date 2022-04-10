@@ -4,7 +4,7 @@ import bgl
 from .drawing_manager import DrawingManager
 from .utils import render_debug
 from .bgl_ext import create_framebuffer, glCheckError
-from ..wbs_kernel.wbs_kernel import OpenGLUtils
+from ..wbs_kernel.render import OpenGLUtils
 
 
 class WoWRenderEngine(bpy.types.RenderEngine):

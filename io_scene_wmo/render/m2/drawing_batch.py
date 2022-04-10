@@ -7,8 +7,8 @@ from typing import Union
 from bgl import *
 
 from ..drawing_batch import DrawingBatch
-from ...wbs_kernel.wbs_kernel import CM2DrawingBatch
-from ...wbs_kernel.wbs_kernel import OpenGLUtils
+from ...wbs_kernel.render import CM2DrawingBatch
+from ...wbs_kernel.render import OpenGLUtils
 from .shaders import M2ShaderPermutations, EGxBLend
 from .drawing_material import M2DrawingMaterial
 from ..drawing_elements import ElementTypes

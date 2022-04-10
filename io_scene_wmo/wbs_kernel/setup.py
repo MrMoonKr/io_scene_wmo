@@ -49,42 +49,74 @@ def main(debug: bool):
 
     glew = ('glew', {'sources': ["src/extern/glew/src/glew.c"], 'include_dirs': ["src/extern/glew/include/"]})
 
-    sources = [
-                  "src/wbs_kernel.pyx",
-                  "src/render/m2_drawing_batch.cpp",
-                  "src/render/m2_drawing_mesh.cpp",
-                  "src/render/wmo_drawing_mesh.cpp",
-                  "src/render/wmo_drawing_batch.cpp",
-                  "src/render/opengl_utils.cpp",
-                  "src/bl_utils/math_utils.cpp",
-                  "src/bl_utils/mesh/custom_data.cpp",
-                  "src/bl_utils/mesh/wmo/batch_geometry.cpp",
-                  "src/bl_utils/mesh/wmo/bsp_tree.cpp"
-              ]
+    common_include_dirs = [
+        "src/bl_src/source/blender/blenkernel/",
+        "src/bl_src/source/blender/blenlib/",
+        "src/bl_src/source/blender/makesdna/",
+        "src/bl_src/source/blender/makesrna/",
+        "src/"
+    ]
 
-    include_dirs = [
-                       "src/",
-                       "src/render/",
-                       "src/extern/glew/include/GL/",
-                       "src/extern/glm/",
-                       "src/extern/",
-                       "src/bl_src/source/blender/blenkernel/",
-                       "src/bl_src/source/blender/blenlib/",
-                       "src/bl_src/source/blender/makesdna/",
-                       "src/bl_src/source/blender/makesrna/",
-                   ]
+    wmo_utils_sources = [
+        "src/wmo_utils.pyx",
+        "src/bl_utils/math_utils.cpp",
+        "src/bl_utils/mesh/custom_data.cpp",
+        "src/bl_utils/mesh/wmo/batch_geometry.cpp",
+        "src/bl_utils/mesh/wmo/bsp_tree.cpp"
+    ]
+
+    wmo_utils_include_dirs = [
+        "src/bl_utils",
+        "src/bl_utils/mesh",
+        "src/bl_utils/wmo"
+    ]
+
+    render_sources = [
+        "src/render.pyx",
+        "src/render/m2_drawing_batch.cpp",
+        "src/render/m2_drawing_mesh.cpp",
+        "src/render/wmo_drawing_mesh.cpp",
+        "src/render/wmo_drawing_batch.cpp",
+        "src/render/opengl_utils.cpp",
+  ]
+
+    render_include_dirs = [
+       "src/render/",
+       "src/extern/glew/include/GL/",
+       "src/extern/glm/",
+       "src/extern/"
+    ]
+
+    sources = wmo_utils_sources + render_sources
+    include_dirs = common_include_dirs + wmo_utils_include_dirs + render_include_dirs
 
     setup(
-        name='WoW Blender Studio Kernel',
-        ext_modules=cythonize([Extension(
-            "wbs_kernel",
-            sources=sources,
-            include_dirs=include_dirs,
-            language="c++",
-            extra_compile_args=extra_compile_args,
-            extra_link_args=extra_link_args,
-            libraries=['opengl32'] if platform.system() == 'Windows' else []
-        )]
+        name='WBS kernel : wmo_utils',
+        ext_modules=cythonize([
+            Extension(
+                "wmo_utils",
+                sources=wmo_utils_sources,
+                include_dirs=wmo_utils_include_dirs + common_include_dirs,
+                language="c++",
+                extra_compile_args=extra_compile_args,
+                extra_link_args=extra_link_args
+            )]
+        ),
+        requires=['Cython'])
+
+    setup(
+        name='WBS kernel : render',
+        ext_modules=cythonize([
+            Extension(
+                "render",
+                sources=render_sources,
+                include_dirs=render_include_dirs + common_include_dirs,
+                language="c++",
+                extra_compile_args=extra_compile_args,
+                extra_link_args=extra_link_args,
+                libraries=['opengl32'] if platform.system() == 'Windows' else []
+            )
+        ]
         ),
         libraries=[glew],
         requires=['Cython'])

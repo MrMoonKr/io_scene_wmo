@@ -13,7 +13,7 @@ from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
 from ..pywowlib import WoWVersionManager, WoWVersions
-from ..wbs_kernel.wbs_kernel import CWMOGeometryBatcher
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher
 
 
 class BlenderWMOSceneGroup:
@@ -285,7 +285,8 @@ class BlenderWMOSceneGroup:
                         vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
 
-        # legacy liquid flags, if "no render", set all 4, else set none. Cleanup blizzlike data to make flag 4 the "no render flag" used by the liquid flag editor.
+        # legacy liquid flags, if "no render", set all 4, else set none.
+        # Cleanup blizzlike data to make flag 4 the "no render flag" used by the liquid flag editor.
         for i, poly in enumerate(mesh.polygons):
             render_state = render_state_list[i]
 
