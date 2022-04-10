@@ -31,6 +31,7 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
     bl_scene.save_doodad_sets()
     bl_scene.save_lights()
     bl_scene.save_fogs()
+    bl_scene.prepare_groups()
     bl_scene.save_portals()
     bl_scene.save_groups()
     bl_scene.save_root_header()

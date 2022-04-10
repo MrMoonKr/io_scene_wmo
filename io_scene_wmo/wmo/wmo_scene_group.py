@@ -6,7 +6,7 @@ import inspect
 
 from math import pi, ceil, floor, isclose
 from logging import exception
-from typing import Tuple
+from typing import Tuple, Optional
 
 from ..pywowlib.file_formats.wmo_format_root import MOHDFlags, PortalRelation
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex
@@ -731,24 +731,22 @@ class BlenderWMOSceneGroup:
 
     @staticmethod
     def try_calculate_direction(group_obj: bpy.types.Object
+                                , group_mesh_eval: bpy.types.Mesh
                                 , portal_obj: bpy.types.Object
                                 , portal_bmesh: bmesh.types.BMesh
-                                , bound_relation: PortalRelation):
+                                , bound_relation: Optional[PortalRelation]):
 
-        mesh = group_obj.data
+        mesh = group_mesh_eval
         normal = portal_bmesh.faces[0].normal
 
-        for poly in mesh.faces:
+        for poly in mesh.polygons:
             poly_normal = mathutils.Vector(poly.normal)
-            g_center = poly.calc_center_median() + poly_normal * sys.float_info.epsilon
+            g_center = poly.center + poly_normal * sys.float_info.epsilon
 
-            dist = normal[0] * g_center[0] + normal[1] * g_center[1] \
-                   + normal[2] * g_center[2] - portal_bmesh.faces[0].normal[0] \
-                   * portal_bmesh.verts[portal_bmesh.faces[0].verts[0]].co[0] \
-                   - portal_bmesh.faces[0].normal[1] \
-                   * portal_bmesh.verts[portal_bmesh.faces[0].verts[0]].co[1] \
-                   - portal_bmesh.faces[0].normal[2] \
-                   * portal_bmesh.verts[portal_bmesh.faces[0].verts[0]].co[2]
+            portal_face = portal_bmesh.faces[0]
+            any_vert = portal_face.verts[0]
+            dist = normal[0] * g_center[0] + normal[1] * g_center[1] + normal[2] * g_center[2] - portal_face.normal[0] \
+                * any_vert.co[0] - portal_face.normal[1] * any_vert.co[1] - portal_face.normal[2] * any_vert.co[2]
 
             if dist == 0:
                 continue
@@ -774,7 +772,7 @@ class BlenderWMOSceneGroup:
                      ray_cast_result[1][2] - g_center[2])).length > length:
                     result = 1 if dist > 0 else -1
 
-                    if bound_relation.side == 0:
+                    if bound_relation and bound_relation.side == 0:
                         bound_relation.side = -result
 
                     return result
@@ -784,7 +782,8 @@ class BlenderWMOSceneGroup:
     def get_portal_direction(self
                              , portal_obj: bpy.types.Object
                              , portal_bmesh: bmesh.types.BMesh
-                             , group_obj: bpy.types.Object):
+                             , group_obj: bpy.types.Object
+                             , group_mesh_eval: bpy.types.Mesh):
         """ Get the direction of MOPR portal relation given a portal object and a target group """
 
         # check if this portal was already processed
@@ -801,7 +800,9 @@ class BlenderWMOSceneGroup:
         if portal_obj.wow_wmo_portal.algorithm != '0':
             return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, portal_obj, portal_bmesh, bound_relation)
+        portal_bmesh.verts.ensure_lookup_table()
+        portal_bmesh.faces.ensure_lookup_table()
+        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
 
         if result:
             return result
@@ -811,7 +812,7 @@ class BlenderWMOSceneGroup:
         portal_bmesh.verts.ensure_lookup_table()
         portal_bmesh.faces.ensure_lookup_table()
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, portal_obj, portal_bmesh, bound_relation)
+        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
 
         if result:
             return result
@@ -825,7 +826,7 @@ class BlenderWMOSceneGroup:
 
         return 0
 
-    def save_liquid(self, ob):
+    def save_liquid(self, ob: bpy.types.Object):
 
         group = self.wmo_group
 
@@ -957,6 +958,10 @@ class BlenderWMOSceneGroup:
         bpy.context.view_layer.objects.active = obj
         mesh = obj_eval.data
 
+        # apply transforms
+        for vert in mesh.vertices:
+            vert.co = obj_eval.matrix_world @ vert.co
+
         if mesh.has_custom_normals:
             mesh.calc_normals_split()
 
@@ -966,7 +971,11 @@ class BlenderWMOSceneGroup:
 
         # handle separate collision
         if obj.wow_wmo_group.collision_mesh:
-            col_mesh_eval = obj.wow_wmo_group.collision_mesh.evaluated_get(depsgraph).data
+            col_obj_eval = obj.wow_wmo_group.collision_mesh.evaluated_get(depsgraph)
+            col_mesh_eval = col_obj_eval.data
+
+            for vert in col_mesh_eval.vertices:
+                vert.co = col_obj_eval.matrix_world @ vert.co
 
             for poly in col_mesh_eval.polygons:
                 poly.material_index = 32767

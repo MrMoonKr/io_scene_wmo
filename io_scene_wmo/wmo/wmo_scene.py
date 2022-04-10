@@ -15,7 +15,7 @@ from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui import get_addon_prefs
 from ..utils.misc import find_nearest_object
-from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
@@ -38,6 +38,8 @@ class BlenderWMOScene:
         self.bl_lights: List[bpy.types.Object] = []
         self.bl_liquids: List[bpy.types.Object] = []
         self.bl_doodad_sets: Dict[str, bpy.types.Object] = {}
+        self.groups_eval: List[bpy.types.Mesh] = []
+        self.group_batch_params: List[WMOGeometryBatcherMeshParams] = []
 
     def load_materials(self, texture_dir=None):
         """ Load materials from WoW WMO root file """
@@ -702,9 +704,9 @@ class BlenderWMOScene:
         self.wmo.mopt.infos = len(self.bl_portals) * [PortalInfo()]
         depsgraph = bpy.context.evaluated_depsgraph_get()
 
-        for bl_group in tqdm(self.bl_groups, desc='Saving portals', ascii=True):
+        for bl_group, group_mesh_eval in tqdm(zip(self.bl_groups, self.groups_eval), desc='Saving portals', ascii=True):
 
-            group_obj = bl_group.bl_object.evaluated_get(depsgraph)
+            group_obj = bl_group.bl_object
             portal_relations = group_obj.wow_wmo_group.relations.portals
             bl_group.wmo_group.mogp.portal_start = len(self.wmo.mopr.relations)
 
@@ -715,6 +717,15 @@ class BlenderWMOScene:
 
                 bm = bmesh.new()
                 bm.from_mesh(portal_mesh)
+                bm.verts.ensure_lookup_table()
+
+                # apply transforms
+                for vert in bm.verts:
+                    vert.co = portal_obj.matrix_world @ vert.co
+
+                bm.faces.ensure_lookup_table()
+
+                bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 
                 if portal_index not in saved_portals_ids:
                     portal_info = PortalInfo()
@@ -742,7 +753,7 @@ class BlenderWMOScene:
 
                     portal_info.unknown = v_D / sqrt(v_A * v_A + v_B * v_B + v_C * v_C)
                     portal_info.n_vertices = len(self.wmo.mopv.portal_vertices) - portal_info.start_vertex
-                    portal_info.normal = tuple(portal_mesh.polygons[0].normal)
+                    portal_info.normal = tuple(bm.faces[0].normal)
 
                     self.wmo.mopt.infos[portal_index] = portal_info
                     saved_portals_ids.append(portal_index)
@@ -754,30 +765,31 @@ class BlenderWMOScene:
                 relation = PortalRelation()
                 relation.portal_index = portal_index
                 relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.name \
-                                                                     else first.wow_wmo_group.group_id
+                    else first.wow_wmo_group.group_id
 
-                relation.side = bl_group.get_portal_direction(portal_obj, bm, group_obj)
+                relation.side = bl_group.get_portal_direction(portal_obj, bm, group_obj, group_mesh_eval)
                 bm.free()
 
                 self.wmo.mopr.relations.append(relation)
 
             bl_group.wmo_group.mogp.portal_count = len(self.wmo.mopr.relations) - bl_group.wmo_group.mogp.portal_start
 
-    def save_groups(self):
-        temp_meshes = []
-        batch_params = []
-
+    def prepare_groups(self):
         for bl_group in tqdm(self.bl_groups, desc='Preparing groups', ascii=True):
             if bl_group.wmo_group.export:
                 mesh, params = bl_group.create_batching_parameters()
-                temp_meshes.append(mesh)
-                batch_params.append(params)
+                self.groups_eval.append(mesh)
+                self.group_batch_params.append(params)
 
-        for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
-            batcher = CWMOGeometryBatcher(batch_params)
-
-        for mesh in tqdm(temp_meshes, desc='Cleaning up temporary meshes', ascii=True):
+    def clean_up_temp_meshes(self):
+        for mesh in tqdm(self.groups_eval, desc='Cleaning up temporary meshes', ascii=True):
             bpy.data.meshes.remove(mesh)
+
+    def save_groups(self):
+        for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
+            batcher = CWMOGeometryBatcher(self.group_batch_params)
+
+        self.clean_up_temp_meshes()
 
         for i, bl_group in enumerate(tqdm(self.bl_groups, desc='Saving groups', ascii=True)):
 
