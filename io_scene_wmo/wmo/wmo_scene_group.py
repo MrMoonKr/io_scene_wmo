@@ -1049,6 +1049,9 @@ class BlenderWMOSceneGroup:
             self.wmo_group.motv2.from_bytes(batcher.tex_coords2())
             self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2())
 
+        # bsp = BSPTree()
+        # bsp.generate_bsp(self.wmo_group.movt.vertices, self.wmo_group.movi.indices, obj.wow_wmo_vertex_info.node_size)
+
         # write header
         bb = batcher.bounding_box()
         group.mogp.bounding_box_corner1 = bb.min

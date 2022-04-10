@@ -253,13 +253,8 @@ bool BSPTree::_collide_box_tri(const BoundingBox& box, const std::array<math_uti
 template<typename T>
 std::pair<Vector3D, Vector3D> BSPTree::_get_min_max(T const& vert_array)
 {
-  Vector3D min = {std::numeric_limits<float>::max(),
-                  std::numeric_limits<float>::max(),
-                  std::numeric_limits<float>::max()};
-
-  Vector3D max = {std::numeric_limits<float>::lowest(),
-                  std::numeric_limits<float>::lowest(),
-                  std::numeric_limits<float>::lowest()};
+  Vector3D min = vert_array[0];
+  Vector3D max = vert_array[0];
 
 
   for (auto& v : vert_array)
@@ -268,10 +263,12 @@ std::pair<Vector3D, Vector3D> BSPTree::_get_min_max(T const& vert_array)
       min.x = v.x;
     else if (v.x > max.x)
       max.x = v.x;
+
     if (v.y < min.y)
       min.y = v.y;
     else if (v.y > max.y)
       max.y = v.y;
+
     if (v.z < min.z)
       min.z = v.z;
     else if (v.z > max.z)
@@ -309,23 +306,23 @@ Vector3D BSPTree::_project_point(Vector3D const& pt, Vector3D const & v)
   float l;
 
   // project on X
-  if (v.y == 0)
+  if (math_utils::compare_ff(v.y, 0.f, STD_UV_CONNECT_LIMIT))
     l = 0;
   else
   {
-    l = - pt.y / v.y;
-    proj.z = pt.x + l * v.x;
+    l = -pt.y / v.y;
   }
+  proj.z = pt.x + l * v.x;
 
   //project on Y
-  if (v.z == 0)
+  if (math_utils::compare_ff(v.z, 0.f, STD_UV_CONNECT_LIMIT))
     l = 0;
   else
   {
-    l = - pt.z / v.z;
-    proj.y = pt.x + l * v.x;
+    l = -pt.z / v.z;
   }
 
+  proj.y = pt.x + l * v.x;
   // project on Z
   proj.x = pt.y + l * v.y;
 
