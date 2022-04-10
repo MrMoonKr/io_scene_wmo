@@ -99,7 +99,7 @@ fontmap = {
 }
 def setup_font(fontid):
     FontManager.aspect(1, fontid)
-    FontManager.enable_kerning_default(fontid)
+    # FontManager.enable_kerning_default(fontid)
 
 @profiler.function
 def get_font(fontfamily, fontstyle=None, fontweight=None):

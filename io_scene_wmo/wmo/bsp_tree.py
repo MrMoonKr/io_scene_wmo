@@ -1,5 +1,6 @@
 import sys
 from mathutils import Vector
+from typing import List
 
 from ..pywowlib.file_formats.wmo_format_group import BSPNode, BSPPlaneType
 from .collision import *
@@ -7,7 +8,7 @@ from .collision import *
 
 class BSPTree:
     def __init__(self):
-        self.Nodes = []
+        self.Nodes: List[BSPNode] = []
         self.Faces = []
         pass
 
@@ -35,6 +36,7 @@ class BSPTree:
 
         # split dist absolute coordinate on split axis
         # ret_splitDist = splitDist - ((box[0][axis] + box[1][axis]) / 2)
+
         return split_dist, new_box1, new_box2
 
     # return index of add

@@ -6,8 +6,8 @@ import mathutils
 from typing import Union
 from bgl import *
 
-from ...wbs_kernel.wbs_kernel import CWMODrawingBatch
-from ...wbs_kernel.wbs_kernel import OpenGLUtils
+from ...wbs_kernel.render import CWMODrawingBatch
+from ...wbs_kernel.render import OpenGLUtils
 from .shaders import WMOShaderPermutations, EGxBLend
 from .drawing_material import WMODrawingMaterial
 from ..drawing_elements import ElementTypes

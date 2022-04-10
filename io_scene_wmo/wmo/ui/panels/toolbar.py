@@ -37,7 +37,7 @@ def update_wow_visibility(self, context):
                 obj.hide_set('3' not in values)
             elif obj.wow_wmo_liquid.enabled:
                 obj.hide_set('4' not in values)
-        elif obj.type == "LAMP" and obj.data.wow_wmo_light.enabled:
+        elif obj.type == "LIGHT" and obj.wow_wmo_light.enabled:
             obj.hide_set('5' not in values)
 
         obj['wow_hide'] = obj.hide_get()
@@ -128,6 +128,8 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
         col1_row1.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
         col1_row2 = col1_col.row(align=True)
         col1_row3 = col1_col.row(align=True)
+        col1_row3.operator("scene.wow_add_light", text='Light', icon='LIGHT')
+        col1_row4 = col1_col.row(align=True)
         col.separator()
 
         if game_data_loaded:
@@ -138,6 +140,7 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
                                icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
             col1_row3.operator("scene.wow_add_scale_reference", text='Scale',
                                icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+            col1_row4.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
 
         else:
             col1_col.operator("scene.wow_add_scale_reference", text='Scale',
@@ -158,11 +161,11 @@ class WMO_PT_tools_object_mode_actions(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout.split()
         col = layout.column(align=True)
+        col.separator()
+        box_col = col.column(align=True)
+        box_col.operator("scene.wow_wmo_generate_minimaps", text='Generate minimaps', icon='SHADING_RENDERED')
 
         if bpy.context.selected_objects:
-
-            col.separator()
-            box_col = col.column(align=True)
             box_col.operator("scene.wow_wmo_generate_materials", text='Generate materials', icon='MATERIAL')
             box_col.operator("scene.wow_fill_textures", text='Fill texture paths', icon='SEQ_SPLITVIEW')
             box_col.operator("scene.wow_quick_collision", text='Quick collision', icon='MOD_TRIANGULATE')
@@ -211,6 +214,7 @@ class WMO_MT_mesh_wow_components_add(bpy.types.Menu):
         col.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
         col.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
         col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+        col.operator("scene.wow_add_light", text='Light', icon='LIGHT')
 
         if hasattr(bpy, "wow_game_data") and bpy.wow_game_data.files:
             col.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',

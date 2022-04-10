@@ -4,20 +4,26 @@ import bmesh
 import sys
 import inspect
 
-from math import pi, ceil, floor
+from math import pi, ceil, floor, isclose
+from logging import exception
+from typing import Tuple
 
+from ..pywowlib.file_formats.wmo_format_root import MOHDFlags
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, TriangleMaterial, Batch
 from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
+from ..pywowlib import WoWVersionManager, WoWVersions
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
 
 
 class BlenderWMOSceneGroup:
     def __init__(self, wmo_scene, wmo_group, obj=None):
-        self.wmo_group : WMOGroupFile = wmo_group
-        self.wmo_scene = wmo_scene
-        self.bl_object : bpy.types.Object = obj
+        self.wmo_group: WMOGroupFile = wmo_group
+        self.wmo_scene: 'BlenderWMOSceneGroup' = wmo_scene
+        self.bl_object: bpy.types.Object = obj
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
+        self.has_blending: bool = False
 
     @staticmethod
     def get_avg(list_):
@@ -113,9 +119,10 @@ class BlenderWMOSceneGroup:
 
                     for l_loop in loop.vert.link_loops:
                         if l_loop.face is link_face:
-                            if l_loop[uv].uv == loop[uv].uv:
+                            if isclose(l_loop[uv].uv[0], loop[uv].uv[0]) and isclose(l_loop[uv].uv[1], loop[uv].uv[1]):
                                 linked_uvs += 1
-                            if uv2 and l_loop[uv2].uv == loop[uv2].uv:
+                            if uv2 and isclose(l_loop[uv2].uv[0], loop[uv2].uv[0]) and isclose(l_loop[uv2].uv[1],
+                                                                                               loop[uv2].uv[1]):
                                 linked_uvs += 1
 
                 if (not uv2 and linked_uvs < 2) or (uv2 and linked_uvs < 4):
@@ -145,7 +152,7 @@ class BlenderWMOSceneGroup:
             elif basic_liquid_type == 2:
                 real_liquid_type = 19
             elif basic_liquid_type == 15:
-                real_liquid_type = 15
+                real_liquid_type = 17
             elif basic_liquid_type == 3:
                 real_liquid_type = 20
         else:
@@ -153,7 +160,28 @@ class BlenderWMOSceneGroup:
 
         return real_liquid_type
 
-    # return array of vertice and array of faces in a tuple
+    def get_legacy_water_type(self, liquid_type):
+        # Copied 1:1 from blizzard's decompiled code...
+        liquid_type += 1
+        if (liquid_type - 1) <= 0x13:
+            newwater = (liquid_type - 1) & 3
+            if newwater == 1:
+                liquid_type = 14
+                return liquid_type
+
+            if newwater >= 1:
+                if newwater == 2:
+                    liquid_type = 19
+                elif newwater == 3:
+                    liquid_type = 20
+
+                return liquid_type
+
+            liquid_type = 13
+
+        return liquid_type
+
+    # return array of vertices and array of faces in a tuple
     def load_liquids(self, group_name, pos):
         """ Load liquid plane of the WMO group. Should only be called if MLIQ is present. """
 
@@ -190,9 +218,38 @@ class BlenderWMOSceneGroup:
         mesh.from_pydata(vertices, [], faces)
         mesh.update(calc_edges=True)
         mesh.validate()
+        
+        render_state_list = []
+        
+        # load legacy liquid type (vanilla/bc models) and render state from MLIQ tiles flags
+        legacy_liquid_type = 0
+        for poly in mesh.polygons:
+            bit = 1
+            tile_flags = 0
+            while bit <= 0x8:
+                tile_flag = group.mliq.tile_flags[poly.index]
+                if tile_flag & bit:
+                    tile_flags += bit
+                bit <<= 1
+            if tile_flags != 15:  # 15 = don't render/no liquid, ignore those tiles
+                # and get the flags from the first non 15 tile.
+                legacy_liquid_type = tile_flags
+                # break
+                render_state = True
+            else:
+                render_state = False
+
+            render_state_list.append(render_state)
+
+        # getting Liquid Type ID
+        if self.wmo_scene.wmo.mohd.flags & 0x4:
+            real_liquid_type = group.mogp.liquid_type
+        else:
+            real_liquid_type = self.get_legacy_water_type(legacy_liquid_type)
+            # real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
 
         # create uv map if liquid is lava or slime
-        if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
+        if real_liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
             uv_map = {}
 
             for vertex in mesh.vertices:
@@ -204,16 +261,23 @@ class BlenderWMOSceneGroup:
 
             for poly in mesh.polygons:
                 for loop_index in poly.loop_indices:
-                    uv_layer1.data[loop_index].uv = (uv_map.get(mesh.loops[loop_index].vertex_index)[0],
-                                                     - uv_map.get(mesh.loops[loop_index].vertex_index)[1])
+                    uv_layer1.data[loop_index].uv = (uv_map.get(mesh.loops[loop_index].vertex_index)[0] / 255,
+                                                     - uv_map.get(mesh.loops[loop_index].vertex_index)[1] / 255)
 
         # setting flags in a hacky way using vertex colors
         bit = 1
         counter = 0
         while bit <= 0x80:
+            # if bit == 0x8: # hackfix to make layer 4 the vertex layer used by the WMO shader
+            #     vc_layer = mesh.vertex_colors.new(name="Col")
+            # else:
+            #     vc_layer = mesh.vertex_colors.new(name="flag_" + str(counter))
             vc_layer = mesh.vertex_colors.new(name="flag_" + str(counter))
             counter += 1
 
+            if bit <= 0x8:
+                bit <<= 1
+                continue # ignore legacy liquid type flags
             for poly in mesh.polygons:
                 tile_flag = group.mliq.tile_flags[poly.index]
                 for loop in poly.loop_indices:
@@ -222,6 +286,72 @@ class BlenderWMOSceneGroup:
                     else:
                         vc_layer.data[loop].color = (255, 255, 255, 255)
             bit <<= 1
+
+        # legacy liquid flags, if "no render", set all 4, else set none.
+        # Cleanup blizzlike data to make flag 4 the "no render flag" used by the liquid flag editor.
+        for i, poly in enumerate(mesh.polygons):
+            render_state = render_state_list[i]
+
+            bit = 1
+            counter = 0
+            while bit <= 0x8:
+                vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
+                for loop in poly.loop_indices:
+                    if not render_state:
+                        vc_layer.data[loop].color = (0, 0, 255, 255)
+                    else:
+                        vc_layer.data[loop].color = (255, 255, 255, 255)
+                bit <<= 1
+                counter += 1
+
+        # assign WMO liquid material
+        liquid_material = self.wmo_scene.bl_materials[group.mliq.material_id]   
+        mesh.materials.append(liquid_material)
+
+        # assign ghost material to unrendered tiles
+        mat_ghost = bpy.data.materials.get("WowMaterial_ghost_Liquid")
+        if mat_ghost is None:
+            mat_ghost = bpy.data.materials.new("WowMaterial_ghost_Liquid")
+            mat_ghost.blend_method = 'BLEND'
+            mat_ghost.use_nodes = True
+            mat_ghost.node_tree.nodes.remove(mat_ghost.node_tree.nodes.get('Principled BSDF'))
+            material_output = mat_ghost.node_tree.nodes.get('Material Output')
+            transparent = mat_ghost.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+            mat_ghost.node_tree.links.new(material_output.inputs[0], transparent.outputs[0])
+            mat_ghost.node_tree.nodes["Transparent BSDF"].inputs[0].default_value = (1, 1, 1, 1)
+        mesh.materials.append(mat_ghost)
+
+        # create a material for blender rendering
+        liquid_render_mat = bpy.data.materials.new("WowMaterial_" + name)
+        liquid_render_mat.blend_method = 'BLEND'
+        liquid_render_mat.use_nodes = True
+        liquid_render_mat.node_tree.nodes.remove(liquid_render_mat.node_tree.nodes.get('Principled BSDF'))
+        material_output = liquid_render_mat.node_tree.nodes.get('Material Output')
+        # transparent = liquid_render_mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+        transparent = liquid_render_mat.node_tree.nodes.new('ShaderNodeBsdfDiffuse') # diffuse looks better ?
+        liquid_render_mat.node_tree.links.new(material_output.inputs[0], transparent.outputs[0])
+
+        if real_liquid_type in {3, 7, 11, 15, 19, 121, 141}:# lava
+            material_color = (1, 0.1, 0.0, 1.0) # orange
+        elif real_liquid_type in {4, 8, 12, 20, 21}: # slime
+            material_color = (0.06274, 0.77647, 0.0, 1.0) # green
+        else:
+            material_color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
+
+        # liquid_render_mat.node_tree.nodes["Transparent BSDF"].inputs[0].default_value = material_color
+        liquid_render_mat.node_tree.nodes["Diffuse BSDF"].inputs[0].default_value = material_color
+        mesh.materials.append(liquid_render_mat)
+
+        for poly in mesh.polygons:
+            tile_flag = group.mliq.tile_flags[poly.index]
+            if tile_flag & 0x1 and tile_flag & 0x2 and tile_flag & 0x4 and tile_flag & 0x8:
+                poly.material_index = 1 # assign ghost_material to non rendered tiles
+            else:
+                # if group.mogp.liquid_type in {3, 4, 7, 8, 11, 12, 15, 19, 20, 21, 121, 141}:
+                #     poly.material_index = 0
+                # else:
+                #     poly.material_index = 2
+                poly.material_index = 2
 
         # set mesh location
         obj.location = pos
@@ -247,11 +377,6 @@ class BlenderWMOSceneGroup:
 
         obj.wow_wmo_liquid.enabled = True
 
-        # getting Liquid Type ID
-        if self.wmo_scene.wmo.mohd.flags & 0x4:
-            real_liquid_type = group.mogp.liquid_type
-        else:
-            real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
 
         obj.wow_wmo_liquid.color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
 
@@ -332,13 +457,12 @@ class BlenderWMOSceneGroup:
 
         # set vertex color
         vertex_color_layer = None
-        lightmap = None
         if group.mogp.flags & MOGPFlags.HasVertexColor:
             flag_set = nobj.wow_wmo_group.flags
             flag_set.add('0')
             nobj.wow_wmo_group.flags = flag_set
             vertex_color_layer = mesh.vertex_colors.new(name="Col")
-            lightmap = mesh.vertex_colors.new(name="Lightmap")
+            mesh.vertex_colors.new(name="Lightmap")
 
             pass_index |= BlenderWMOObjectRenderFlags.HasVertexColor
             pass_index |= BlenderWMOObjectRenderFlags.HasLightmap
@@ -439,10 +563,12 @@ class BlenderWMOSceneGroup:
                                                                 1.0)
 
             if batch_map_a:
-                mesh.vertex_colors['BatchmapTrans'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_a_range else (0, 0, 0, 0)
+                mesh.vertex_colors['BatchmapTrans'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_a_range \
+                    else (0, 0, 0, 0)
 
             if batch_map_b:
-                mesh.vertex_colors['BatchmapInt'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_b_range else (0, 0, 0, 0)
+                mesh.vertex_colors['BatchmapInt'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_b_range \
+                    else (0, 0, 0, 0)
         '''
         # set faces material
         for i in range(len(mesh.polygons)):
@@ -595,7 +721,7 @@ class BlenderWMOSceneGroup:
         else:
             # getting Liquid Type ID
 
-            if self.wmo_scene.wmo.mohd.flags & 0x4:
+            if self.wmo_scene.wmo.mohd.flags & MOHDFlags.UseLiquidTypeDBCId: 
                 real_liquid_type = group.mogp.liquid_type
             else:
                 real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
@@ -638,7 +764,8 @@ class BlenderWMOSceneGroup:
                     if angle is None or angle >= pi * 0.5:
                         continue
 
-                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center, direction)
+                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center,
+                                                                 direction)
 
                     if not ray_cast_result[0] \
                             or ray_cast_result[4].name == portal_obj.name \
@@ -740,26 +867,32 @@ class BlenderWMOSceneGroup:
         group.mliq.y_verts = group.mliq.y_tiles + 1
         group.mliq.position = mesh.vertices[start_vertex].co.to_tuple()
 
-        group.mogp.flags |= 0x1000  # do we really need that?
+        group.mogp.flags |= MOGPFlags.HasWater # do we really need that?
 
         types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
         types_2 = {4, 8, 12, 20, 21} # slime
 
-        texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
-
-        if group.mogp.liquid_type in types_1:
-            texture1 = "DUNGEONS\\TEXTURES\\METAL\\BM_BRSPIRE_CATWALK01.BLP"
-
-        elif group.mogp.liquid_type in types_2:
-            texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
-
-        diff_color = (int(ob.wow_wmo_liquid.color[0] * 255),
+        diff_color = (int(ob.wow_wmo_liquid.color[2] * 255),
                       int(ob.wow_wmo_liquid.color[1] * 255),
-                      int(ob.wow_wmo_liquid.color[2] * 255),
+                      int(ob.wow_wmo_liquid.color[0] * 255),
                       int(ob.wow_wmo_liquid.color[3] * 255)
                      )
 
-        group.mliq.material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
+        try:
+            if not mesh.materials[0].wow_wmo_material.enabled:
+                raise exception()
+            group.mliq.material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+                    mesh.materials[0].name)
+        except: # if no mat or if the mat isn't a wmo mat, create a new one
+            texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
+
+            if group.mogp.liquid_type in types_1:
+                texture1 = "DUNGEONS\\TEXTURES\\METAL\\BM_BRSPIRE_CATWALK01.BLP"
+
+            elif group.mogp.liquid_type in types_2:
+                texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
+
+            group.mliq.material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
 
         if group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2:
 
@@ -777,8 +910,8 @@ class BlenderWMOSceneGroup:
                     vertex.is_water = False
                     group.mliq.is_water = False
 
-                    vertex.u = int(uv_map.get(mesh.vertices[i].index)[0])
-                    vertex.v = int(uv_map.get(mesh.vertices[i].index)[1])
+                    vertex.u = int(uv_map.get(mesh.vertices[i].index)[0] * 255)
+                    vertex.v = int(uv_map.get(mesh.vertices[i].index)[1] * 255)
 
                     vertex.height = (ob.matrix_world @ mesh.vertices[i].co)[2]
                     group.mliq.vertex_map.append(vertex)
@@ -799,43 +932,59 @@ class BlenderWMOSceneGroup:
 
             counter = 0
             bit = 1
+            not_rendered = False
             while bit <= 0x80:
                 vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
+                
+                if bit == 0x1:
+                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
+                        not_rendered = True
 
-                if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
-                    tile_flag |= bit
+                if bit <= 0x8: # legacy/no render tile flags : set not rendered from layer 0
+                    if not_rendered:
+                        tile_flag |= bit
+                    # TODO : For vanilla/BC, set liquid type flags here
+                else:
+                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
+                        tile_flag |= bit
+
                 bit <<= 1
 
                 counter += 1
 
             group.mliq.tile_flags.append(tile_flag)
 
-    def save(self):
-        """ Save WoW WMO group data for future export """
+    def create_batching_parameters(self) -> Tuple[bpy.types.Mesh, WMOGeometryBatcherMeshParams]:
+        """ Prepare the WoW WMO group proxy mesh for export.
+            Mesh is returned in order to keep its lifetime beyond the function scope.
+        """
 
         obj = self.bl_object
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+
+        obj_eval = obj.evaluated_get(depsgraph)
 
         group = self.wmo_group
         scene = bpy.context.scene
 
         bpy.context.view_layer.objects.active = obj
-        mesh = obj.data
+        mesh = obj_eval.data
 
         if mesh.has_custom_normals:
             mesh.calc_normals_split()
 
         # create bmesh
         bm = bmesh.new()
-        bm.from_object(obj, bpy.context.evaluated_depsgraph_get())
-        
+        bm.from_mesh(mesh)
+
         # handle separate collision
         if obj.wow_wmo_group.collision_mesh:
-            col_mesh = obj.wow_wmo_group.collision_mesh.data.copy()
+            col_mesh_eval = obj.wow_wmo_group.collision_mesh.evaluated_get(depsgraph).data
 
-            for poly in col_mesh.polygons:
-                poly.material_index = 0xFF
+            for poly in col_mesh_eval.polygons:
+                poly.material_index = 32767
 
-            bm.from_mesh(col_mesh)
+            bm.from_mesh(col_mesh_eval)
             bm.verts.ensure_lookup_table()
             bm.faces.ensure_lookup_table()
 
@@ -850,218 +999,102 @@ class BlenderWMOSceneGroup:
         edges.ensure_lookup_table()
         faces.ensure_lookup_table()
 
-        # untag faces
-        for face in faces:
-            face.tag = False
-
-        deform = bm.verts.layers.deform.active
-        uv = bm.loops.layers.uv.get('UVMap')
-
-        if not uv:
+        if not bm.loops.layers.uv.get('UVMap'):
             raise Exception('\nThe group \"{}\" must have a UV map layer.'.format(obj.name))
 
-        uv2 = bm.loops.layers.uv.get('UVMap.001')
-
-        if uv2:
+        self.has_blending = bm.loops.layers.uv.get('UVMap.001') and bm.loops.layers.color.get('Blendmap')
+        if self.has_blending:
             group.add_blendmap_chunks()
 
-        obj_collision_vg = None
-        vg_collision_index = 0
-
-        if obj.wow_wmo_vertex_info.vertex_group:
-            obj_collision_vg = obj.vertex_groups.get(obj.wow_wmo_vertex_info.vertex_group)
-            vg_collision_index = obj_collision_vg.index
-
-        obj_blend_map = bm.loops.layers.color.get('Blendmap')
-        obj_batch_map_trans = bm.loops.layers.color.get('BatchmapTrans')
-        obj_batch_map_int = bm.loops.layers.color.get('BatchmapInt')
-        obj_light_map = bm.loops.layers.color.get('Lightmap')
-        vertex_colors = bm.loops.layers.color.get('Col')
+        mesh_final = bpy.data.meshes.new("Temp")
+        bm.to_mesh(mesh_final)
+        mesh_final.calc_normals()
+        bm.free()
 
         use_vertex_color = '0' in obj.wow_wmo_group.flags \
                            or (obj.wow_wmo_group.place_type == '8192' and '1' not in obj.wow_wmo_group.flags)
 
-        if obj_blend_map:
-            self.wmo_scene.wmo.mohd.flags |= 0x2
+        vg_collision_index = -1
 
-        faces_set = set(faces)
-        batches = {}
+        if obj.wow_wmo_vertex_info.vertex_group:
+            obj_collision_vg = obj.vertex_groups.get(obj.wow_wmo_vertex_info.vertex_group)
 
-        while faces_set:
-            face = next(iter(faces_set))
-            batch_type = BlenderWMOSceneGroup.get_batch_type(face, obj_batch_map_trans, obj_batch_map_int)
+            if obj_collision_vg:
+                vg_collision_index = obj_collision_vg.index
 
-            linked_faces = BlenderWMOSceneGroup.get_linked_faces(face, batch_type, uv, uv2,
-                                                                 obj_batch_map_trans, obj_batch_map_int)
+        material_mapping = []
 
-            is_batch = face.material_index < len(mesh.materials)
-
-            batches.setdefault((face.material_index if is_batch else 0xFF, batch_type), []).append(linked_faces)
-            faces_set -= set(linked_faces)
-
-        batches = sorted(batches.items(), key=lambda x: (x[0][1], x[0][0]))
-
-        group.mver.version = 17
-
-        next_v_index_local = 0
-        for batch_info, batch_groups in batches:
-            mat_index, batch_type = batch_info
-
-            mat_id = scene.wow_wmo_root_elements.materials.find(
-                mesh.materials[mat_index].name) if mat_index != 0xFF else mat_index
+        for material in mesh.materials:
+            mat_id = scene.wow_wmo_root_elements.materials.find(material.name)
 
             if mat_id < 0:
                 raise Exception('Error: Assigned material \"{}\" is not registered as WoW Material.'.format(
-                    mesh.materials[mat_index].name))
+                    material.name))
 
-            batch = Batch()
-            batch.start_triangle = len(group.movi.indices)
-            batch.start_vertex = len(group.movt.vertices)
-            batch.material_id = mat_id
-            batch.bounding_box = [32767, 32767, 32767, -32768, -32768, -32768]
+            material_mapping.append(mat_id)
 
-            for batch_group in batch_groups:
-                n_faces = len(batch_group)
-                n_vertices = n_faces * 3
+        return mesh_final, WMOGeometryBatcherMeshParams(mesh_final.as_pointer()
+                                                        , False
+                                                        , use_vertex_color
+                                                        , vg_collision_index
+                                                        , obj.wow_wmo_vertex_info.node_size
+                                                        , material_mapping)
 
-                batch.n_triangles += n_vertices
+    def save(self, batcher: CWMOGeometryBatcher, group_index: int):
+        """ Save WoW WMO group data for future export """
+        obj = self.bl_object
 
-                # actually save geometry
-                vertex_map = {}
-                for i, face in enumerate(batch_group):
+        self.wmo_group.movt.from_bytes(batcher.vertices(group_index))
+        self.wmo_group.monr.from_bytes(batcher.normals(group_index))
+        self.wmo_group.moba.from_bytes(batcher.batches(group_index))
+        self.wmo_group.movi.from_bytes(batcher.triangle_indices(group_index))
+        self.wmo_group.mopy.from_bytes(batcher.triangle_materials(group_index))
+        self.wmo_group.motv.from_bytes(batcher.tex_coords(group_index))
+        self.wmo_group.mocv.from_bytes(batcher.vertex_colors(group_index))
+        self.wmo_group.mobn.from_bytes(batcher.bsp_nodes(group_index))
+        self.wmo_group.mobr.from_bytes(batcher.bsp_faces(group_index))
 
-                    tri_mat = TriangleMaterial()
-                    tri_mat.material_id = batch.material_id
+        if self.has_blending:
+            self.wmo_group.motv2.from_bytes(batcher.tex_coords2(group_index))
+            self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2(group_index))
 
-                    collision_counter = 0
-                    for j, vertex in enumerate(face.verts):
-                        vert_info = vertex_map.get(vertex.index)
-
-                        dvert = vertex[deform] if deform else None
-
-                        if vert_info is None:
-
-                            # determine if vertex is collideable
-                            is_collideable = (obj_collision_vg and dvert and (vg_collision_index in dvert)) \
-                                             or tri_mat.material_id == 0xFF
-
-                            if is_collideable:
-                                collision_counter += 1
-
-                            vertex_map[vertex.index] = next_v_index_local, is_collideable
-                            v_index_local = next_v_index_local
-                            next_v_index_local += 1
-
-                            # handle basic geometry elements
-                            group.movt.vertices.append((obj.matrix_world @ vertex.co).to_tuple())
-                            group.monr.normals.append(vertex.normal.to_tuple())
-                            group.motv.tex_coords.append((face.loops[j][uv].uv[0],
-                                                         1.0 - face.loops[j][uv].uv[1]))
-
-                            # handle second UV map layer
-                            if uv2:
-                                group.motv2.tex_coords.append((face.loops[j][uv2].uv[0],
-                                                              1.0 - face.loops[j][uv2].uv[1]))
-
-                            # handle vertex color
-                            if use_vertex_color:
-                                if vertex_colors and batch.material_id != 0xFF:
-                                    vertex_color = [0x7F, 0x7F, 0x7F, 0x00]
-                                    vcol = face.loops[j][vertex_colors]
-
-                                    for k in range(3):
-                                        vertex_color[k] = round(vcol[3 - k - 1] * 255)
-
-                                    if obj_light_map:
-                                        attenuation = round(face.loops[j][obj_light_map][0] * 255) \
-                                            if obj_light_map else 0
-
-                                        if attenuation > 0:
-                                            tri_mat.flags |= 0x1  # TODO: actually check what this does
-
-                                        vertex_color[3] = attenuation
-
-                                    group.mocv.vert_colors.append(vertex_color)
-                                else:
-                                    # set correct default values for vertex
-                                    group.mocv.vert_colors.append([0x7F, 0x7F, 0x7F, 0x00])
-
-                            if obj_blend_map:
-
-                                blend_factor = round(face.loops[j][obj_blend_map][0] * 255) if obj_blend_map else 1
-                                group.mocv2.vert_colors.append((0, 0, 0, blend_factor))
-
-                            group.movi.indices.append(v_index_local)
-                            # tri_indices[j] = v_index_local
-
-                            # calculate bounding box
-                            for k in range(2):
-                                for l in range(3):
-                                    idx = k * 3 + l
-                                    batch.bounding_box[idx] = min(batch.bounding_box[idx],
-                                                                  int(floor((obj.matrix_world @ vertex.co)[l]))) \
-                                        if k == 0 else max(batch.bounding_box[idx],
-                                                           int(ceil((obj.matrix_world @ vertex.co)[l])))
-
-                        else:
-                            v_index_local, is_collideable = vert_info
-
-                            if is_collideable:
-                                collision_counter += 1
-
-                            group.movi.indices.append(v_index_local)
-
-                    tri_mat.flags = 0x8 if tri_mat.material_id == 0xFF else 0x20
-                    tri_mat.flags |= 0x40 if collision_counter == 3 else 0x4 | 0x8
-
-                    group.mopy.triangle_materials.append(tri_mat)
-
-            batch.last_vertex = len(group.movt.vertices) - 1
-
-            # do not write collision only batches as actual batches, because they are not
-            if batch.material_id != 0xFF:
-                group.moba.batches.append(batch)
-
-                if batch_type == 0:
-                    group.mogp.n_batches_a += 1
-                elif batch_type == 1:
-                    group.mogp.n_batches_b += 1
-                elif batch_type == 2:
-                    group.mogp.n_batches_c += 1
-
-        # free bmesh
-        bm.free()
+        # bsp = BSPTree()
+        # bsp.generate_bsp(self.wmo_group.movt.vertices, self.wmo_group.movi.indices, obj.wow_wmo_vertex_info.node_size)
 
         # write header
-        group.mogp.bounding_box_corner1 = [32767.0, 32767.0, 32767.0]
-        group.mogp.bounding_box_corner2 = [-32768.0, -32768.0, -32768.0]
+        bb = batcher.bounding_box(group_index)
+        self.wmo_group.mogp.bounding_box_corner1 = bb.min
+        self.wmo_group.mogp.bounding_box_corner2 = bb.max
 
+        '''
         if len(group.movt.vertices) > 65535:
             raise Exception('\nThe group \"{}\" has too many vertices : {} (max allowed = 65535)'.format(
                 obj.name, str(len(group.movt.vertices))))
+                
+        '''
 
-        for vtx in group.movt.vertices:
-            for j in range(0, 3):
-                group.mogp.bounding_box_corner1[j] = min(group.mogp.bounding_box_corner1[j], vtx[j])
-                group.mogp.bounding_box_corner2[j] = max(group.mogp.bounding_box_corner2[j], vtx[j])
+        batch_count_info = batcher.batch_count_info(group_index)
+        self.wmo_group.mogp.n_batches_a = batch_count_info.n_batches_trans
+        self.wmo_group.mogp.n_batches_b = batch_count_info.n_batches_int
+        self.wmo_group.mogp.n_batches_c = batch_count_info.n_batches_ext
 
-        group.mogp.flags |= MOGPFlags.HasCollision  # /!\ MUST HAVE 0x1 FLAG ELSE THE GAME CRASH !
+        self.wmo_group.mogp.flags |= MOGPFlags.HasCollision  # /!\ MUST HAVE 0x1 FLAG ELSE THE GAME CRASH !
         if '0' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.HasVertexColor
+            self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor
         if '4' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.HasSkybox
+            self.wmo_group.mogp.flags |= MOGPFlags.HasSkybox
         if '1' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.DoNotUseLocalLighting
+            self.wmo_group.mogp.flags |= MOGPFlags.DoNotUseLocalLighting
         if '2' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.AlwaysDraw
+            self.wmo_group.mogp.flags |= MOGPFlags.AlwaysDraw
         if '3' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.IsMountAllowed
+            self.wmo_group.mogp.flags |= MOGPFlags.IsMountAllowed
 
-        group.mogp.flags |= int(obj.wow_wmo_group.place_type)
+        self.wmo_group.mogp.flags |= int(obj.wow_wmo_group.place_type)
 
-        if obj_blend_map and uv2:
-            group.mogp.flags |= MOGPFlags.HasTwoMOCV
-            group.mogp.flags |= MOGPFlags.HasTwoMOTV
+        if self.has_blending:
+            self.wmo_group.mogp.flags |= MOGPFlags.HasTwoMOCV
+            self.wmo_group.mogp.flags |= MOGPFlags.HasTwoMOTV
 
         has_lights = False
 
@@ -1070,75 +1103,71 @@ class BlenderWMOSceneGroup:
                 obj.wow_wmo_group.fog3,
                 obj.wow_wmo_group.fog4)
 
-        lamps = obj.wow_wmo_group.relations.lights
 
         # set fog references
-        group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,
-                                  fogs[1].wow_wmo_fog.fog_id if fogs[0] else 0,
-                                  fogs[2].wow_wmo_fog.fog_id if fogs[0] else 0,
-                                  fogs[3].wow_wmo_fog.fog_id if fogs[0] else 0)
+        self.wmo_group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,
+                                  fogs[1].wow_wmo_fog.fog_id if fogs[1] else 0,
+                                  fogs[2].wow_wmo_fog.fog_id if fogs[2] else 0,
+                                  fogs[3].wow_wmo_fog.fog_id if fogs[3] else 0)
         # save lamps
+        lamps = obj.wow_wmo_group.relations.lights
         if lamps:
             has_lights = True
             for lamp in lamps:
-                group.molr.light_refs.append(lamp.id)
+                self.wmo_group.molr.light_refs.append(lamp.id)
 
-        group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)
-        group_info = self.wmo_scene.add_group_info(group.mogp.flags,
-                                                  [group.mogp.bounding_box_corner1, group.mogp.bounding_box_corner2],
+        self.wmo_group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)
+        group_info = self.wmo_scene.add_group_info(self.wmo_group.mogp.flags,
+                                                      [self.wmo_group.mogp.bounding_box_corner1
+                                                      , self.wmo_group.mogp.bounding_box_corner2],
                                                   obj.name,
                                                   obj.wow_wmo_group.description)
 
-        group.mogp.group_name_ofs = group_info[0]
-        group.mogp.desc_group_name_ofs = group_info[1]
+        self.wmo_group.mogp.group_name_ofs = group_info[0]
+        self.wmo_group.mogp.desc_group_name_ofs = group_info[1]
 
         if len(obj.wow_wmo_group.modr):
             for doodad in obj.wow_wmo_group.modr:
-                group.modr.doodad_refs.append(doodad.value)
-            group.mogp.flags |= MOGPFlags.HasDoodads
+                self.wmo_group.modr.doodad_refs.append(doodad.value)
+            self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
         elif obj.wow_wmo_group.relations.doodads:
             for doodad in obj.wow_wmo_group.relations.doodads:
-                group.modr.doodad_refs.append(doodad.id)
-            group.mogp.flags |= MOGPFlags.HasDoodads
+                self.wmo_group.modr.doodad_refs.append(doodad.id)
+            self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
         else:
-            group.modr = None
-
-        bsp_tree = BSPTree()
-        bsp_tree.generate_bsp(group.movt.vertices, group.movi.indices, obj.wow_wmo_vertex_info.node_size)
-
-        group.mobn.nodes = bsp_tree.Nodes
-        group.mobr.faces = bsp_tree.Faces
+            self.wmo_group.modr = None
 
         if '0' not in obj.wow_wmo_group.flags:
             if obj.wow_wmo_group.place_type == '8192':
                 if '1' in obj.wow_wmo_group.flags \
-                        and not len(mesh.vertex_colors):
-                    group.mocv = None
+                        and not len(obj.data.vertex_colors):
+                    self.wmo_group.mocv = None
                 else:
-                    group.mogp.flags |= MOGPFlags.HasVertexColor
+                    self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor
             else:
-                group.mocv = None
+                self.wmo_group.mocv = None
         
-        group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
+        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
 
         if obj.wow_wmo_group.liquid_mesh:
             self.save_liquid(obj.wow_wmo_group.liquid_mesh)
         else:
-            group.mliq = None
-            group.mogp.flags |= MOGPFlags.IsNotOcean  # check if this is necessary
-            # group.root.mohd.flags |= 0x4 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+            self.wmo_group.mliq = None
+            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
+            wow_version = int(bpy.context.scene.wow_scene.version)
+            if wow_version >= WoWVersions.WOTLK:
+                # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+                self.wmo_group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         if not has_lights:
-            group.molr = None
+            self.wmo_group.molr = None
         else:
-            group.mogp.flags |= MOGPFlags.HasLight
+            self.wmo_group.mogp.flags |= MOGPFlags.HasLight
 
         # write second MOTV and MOCV
-        if uv2 is None:
-            group.motv2 = None
-
-        if obj_blend_map is None:
-            group.mocv2 = None
+        if not self.has_blending:
+            self.wmo_group.motv2 = None
+            self.wmo_group.mocv2 = None
 
 
 

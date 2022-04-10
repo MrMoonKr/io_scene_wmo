@@ -27,7 +27,8 @@ class WMO_UL_root_elements_doodadset_list(WMO_UL_root_elements_template_list, bp
             sub_col = row.column()
             sub_col.scale_x = 0.3
 
-            sub_col.label(text="#{}".format(index), icon='WORLD' if item.pointer.name == 'Set_$DefaultGlobal' else 'GROUP')
+            sub_col.label(text="#{}".format(index), icon='WORLD' \
+                if item.pointer and item.pointer.name == 'Set_$DefaultGlobal' else 'GROUP')
 
             sub_col = row.column()
             sub_col.prop(item.pointer, 'name', emboss=False, text='')

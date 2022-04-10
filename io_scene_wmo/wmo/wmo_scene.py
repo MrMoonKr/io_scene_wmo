@@ -15,9 +15,11 @@ from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui import get_addon_prefs
 from ..utils.misc import find_nearest_object
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
+from ..pywowlib import WoWVersionManager, WoWVersions
 
 from ..third_party.tqdm import tqdm
 
@@ -25,17 +27,17 @@ from ..third_party.tqdm import tqdm
 class BlenderWMOScene:
     """ This class is used for assembling a Blender scene from a WNO file or saving the scene back to it."""
 
-    def __init__(self, wmo : WMOFile, prefs):
-        self.wmo : WMOFile = wmo
+    def __init__(self, wmo: WMOFile, prefs):
+        self.wmo: WMOFile = wmo
         self.settings = prefs
 
-        self.bl_materials   : Dict[int, bpy.types.Material]  = {}
-        self.bl_groups      : List[BlenderWMOSceneGroup]     = []
-        self.bl_portals     : List[bpy.types.Object]         = []
-        self.bl_fogs        : List[bpy.types.Object]         = []
-        self.bl_lights      : List[bpy.types.Object]         = []
-        self.bl_liquids     : List[bpy.types.Object]         = []
-        self.bl_doodad_sets : Dict[str, bpy.types.Object]    = {}
+        self.bl_materials: Dict[int, bpy.types.Material] = {}
+        self.bl_groups: List[BlenderWMOSceneGroup] = []
+        self.bl_portals: List[bpy.types.Object] = []
+        self.bl_fogs: List[bpy.types.Object] = []
+        self.bl_lights: List[bpy.types.Object] = []
+        self.bl_liquids: List[bpy.types.Object] = []
+        self.bl_doodad_sets: Dict[str, bpy.types.Object] = {}
 
     def load_materials(self, texture_dir=None):
         """ Load materials from WoW WMO root file """
@@ -69,7 +71,13 @@ class BlenderWMOScene:
 
             mat.wow_wmo_material.blending_mode = str(wmo_material.blend_mode)
             mat.wow_wmo_material.emissive_color = [x / 255 for x in wmo_material.emissive_color]
-            mat.wow_wmo_material.diff_color = [x / 255 for x in wmo_material.diff_color]
+            mat.wow_wmo_material.diff_color = (wmo_material.diff_color[2] / 255,
+                                               wmo_material.diff_color[1] / 255,
+                                               wmo_material.diff_color[0] / 255,
+                                               wmo_material.diff_color[3] / 255
+                                              )
+
+
             mat.wow_wmo_material.terrain_type = str(wmo_material.terrain_type)
 
             mat_flags = set()
@@ -136,9 +144,9 @@ class BlenderWMOScene:
     def load_lights(self):
         """ Load WoW WMO MOLT lights """
 
-        for i, wmo_light in tqdm(list(enumerate(self.wmo.molt.lights)), desc='Importing lights', ascii=True):
+        bl_light_types = ['POINT', 'SPOT', 'SUN', 'POINT']
 
-            bl_light_types = ['POINT', 'SPOT', 'SUN', 'POINT']
+        for i, wmo_light in tqdm(list(enumerate(self.wmo.molt.lights)), desc='Importing lights', ascii=True):
 
             try:
                 l_type = bl_light_types[wmo_light.light_type]
@@ -190,7 +198,7 @@ class BlenderWMOScene:
 
             fog_obj = create_fog_object(  name="{}_Fog_{}".format(self.wmo.display_name, str(i).zfill(2))
                                         , location=wmo_fog.position
-                                        , radius=wmo_fog.big_radius
+                                        # , radius=wmo_fog.big_radius
                                         , color=(wmo_fog.color1[2] / 255,
                                                  wmo_fog.color1[1] / 255,
                                                  wmo_fog.color1[0] / 255,
@@ -198,6 +206,7 @@ class BlenderWMOScene:
                                                 )
                                         )
 
+            fog_obj.scale = (wmo_fog.big_radius,wmo_fog.big_radius,wmo_fog.big_radius)
             # move fogs to collection
             scn = bpy.context.scene
 
@@ -275,10 +284,10 @@ class BlenderWMOScene:
                         doodad_prototypes[path_hash] = nobj
                     else:
                         nobj = proto_obj.copy()
-                        nobj.data = nobj.data.copy()
+                        # nobj.data = nobj.data.copy()
 
-                        for j, mat in enumerate(nobj.data.materials):
-                            nobj.data.materials[j] = mat.copy()
+                        # for j, mat in enumerate(nobj.data.materials):
+                        #     nobj.data.materials[j] = mat.copy()
 
                     nobj.parent = anchor
                     bpy.context.collection.objects.link(nobj)
@@ -360,14 +369,16 @@ class BlenderWMOScene:
             self.bl_portals.append(obj)
 
             # assign portal material
-            portal_mat = bpy.data.materials.new("WowMaterial_ghost_Portal")
-            portal_mat.blend_method = 'BLEND'
-            portal_mat.use_nodes = True
-            portal_mat.node_tree.nodes.remove(portal_mat.node_tree.nodes.get('Principled BSDF'))
-            material_output = portal_mat.node_tree.nodes.get('Material Output')
-            transparent = portal_mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
-            portal_mat.node_tree.links.new(material_output.inputs[0], transparent.outputs[0])
-            portal_mat.node_tree.nodes["Transparent BSDF"].inputs[0].default_value = (1, 0, 0, 1)
+            portal_mat = bpy.data.materials.get("WowMaterial_ghost_Portal")
+            if portal_mat is None:
+                portal_mat = bpy.data.materials.new("WowMaterial_ghost_Portal")
+                portal_mat.blend_method = 'BLEND'
+                portal_mat.use_nodes = True
+                portal_mat.node_tree.nodes.remove(portal_mat.node_tree.nodes.get('Principled BSDF'))
+                material_output = portal_mat.node_tree.nodes.get('Material Output')
+                transparent = portal_mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+                portal_mat.node_tree.links.new(material_output.inputs[0], transparent.outputs[0])
+                portal_mat.node_tree.nodes["Transparent BSDF"].inputs[0].default_value = (1, 0, 0, 1)
 
             obj.data.materials.append(portal_mat)
 
@@ -396,8 +407,8 @@ class BlenderWMOScene:
             flags.add("2")
         if self.wmo.mohd.flags & 0x8:
             flags.add("1")
-        if self.wmo.mohd.flags & 0x4:
-            flags.add("3")
+        # if self.wmo.mohd.flags & 0x4:
+        #     flags.add("3")
 
         properties.flags = flags
         properties.skybox_path = self.wmo.mosb.skybox
@@ -527,9 +538,9 @@ class BlenderWMOScene:
                                       int(mat.wow_wmo_material.emissive_color[2] * 255),
                                       int(mat.wow_wmo_material.emissive_color[3] * 255)
                                     )
-                                  , ( int(mat.wow_wmo_material.diff_color[0] * 255),
+                                  , ( int(mat.wow_wmo_material.diff_color[2] * 255),
                                       int(mat.wow_wmo_material.diff_color[1] * 255),
-                                      int(mat.wow_wmo_material.diff_color[2] * 255),
+                                      int(mat.wow_wmo_material.diff_color[0] * 255),
                                       int(mat.wow_wmo_material.diff_color[3] * 255)
                                     )
                                  )
@@ -539,8 +550,8 @@ class BlenderWMOScene:
         group_info = GroupInfo()
 
         group_info.flags = flags  # 8
-        group_info.bounding_box_corner1 = bounding_box[0].copy()
-        group_info.bounding_box_corner2 = bounding_box[1].copy()
+        group_info.bounding_box_corner1 = [_ for _ in bounding_box[0]]
+        group_info.bounding_box_corner2 = [_ for _ in bounding_box[1]]
         group_info.name_ofs = self.wmo.mogn.add_string(name)  # 0xFFFFFFFF
 
         if desc:
@@ -625,7 +636,7 @@ class BlenderWMOScene:
             -(vec_a.x * vec_b.x + vec_a.y * vec_b.y + vec_a.z * vec_b.z)) + pi
 
     @staticmethod
-    def traverse(  cur_vtx: BMVert
+    def traverse(cur_vtx: BMVert
                  , nodes_to_hit: List
                  , nodes_hit: List
                  , origin: BMVert) -> List:
@@ -755,11 +766,25 @@ class BlenderWMOScene:
             bl_group.wmo_group.mogp.portal_count = len(self.wmo.mopr.relations) - bl_group.wmo_group.mogp.portal_start
 
     def save_groups(self):
+        temp_meshes = []
+        batch_params = []
 
-        for bl_group in tqdm(self.bl_groups, desc='Saving groups', ascii=True):
+        for bl_group in tqdm(self.bl_groups, desc='Preparing groups', ascii=True):
+            if bl_group.wmo_group.export:
+                mesh, params = bl_group.create_batching_parameters()
+                temp_meshes.append(mesh)
+                batch_params.append(params)
+
+        for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
+            batcher = CWMOGeometryBatcher(batch_params)
+
+        for mesh in tqdm(temp_meshes, desc='Cleaning up temporary meshes', ascii=True):
+            bpy.data.meshes.remove(mesh)
+
+        for i, bl_group in enumerate(tqdm(self.bl_groups, desc='Saving groups', ascii=True)):
 
             if bl_group.wmo_group.export:
-                bl_group.save()
+                bl_group.save(batcher, i)
 
     def save_fogs(self):
 
@@ -838,7 +863,10 @@ class BlenderWMOScene:
             self.wmo.mohd.flags |= 0x02
         if "1" in flags:
             self.wmo.mohd.flags |= 0x08
-        if "3" in flags:
+        # if "3" in flags:
+        #     self.wmo.mohd.flags |= 0x4
+        version = int(bpy.context.scene.wow_scene.version)
+        if version >= WoWVersions.WOTLK:
             self.wmo.mohd.flags |= 0x4
 
 

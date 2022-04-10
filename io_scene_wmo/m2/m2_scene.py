@@ -257,6 +257,11 @@ class BlenderM2Scene:
 
                     if not tex:
                         tex = bpy.data.images.new('Failed Loading', 256, 256)
+                    
+                    # titi test textures ui
+                    slot = bpy.context.scene.wow_m2_root_elements.textures.add()
+                    slot.pointer = tex
+                    ####
 
                     loaded_textures[self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i]] = tex
 
@@ -404,9 +409,13 @@ class BlenderM2Scene:
             # TODO: other settings
 
             if not tex_unit.skin_section_index in self.materials:
-	            self.materials[tex_unit.skin_section_index] = []
+                self.materials[tex_unit.skin_section_index] = []
 
             self.materials[tex_unit.skin_section_index].append((blender_mat, tex_unit))
+            
+            # root ui stuff, titi 
+            slot = bpy.context.scene.wow_m2_root_elements.materials.add()
+            slot.pointer = blender_mat
 
     def load_armature(self):
         if not len(self.m2.root.bones):
@@ -803,6 +812,9 @@ class BlenderM2Scene:
                             grp.add([v], w, 'REPLACE')
 
             self.geosets.append(obj)
+            
+            slot = bpy.context.scene.wow_m2_root_elements.geosets.add()
+            slot.pointer = obj
 
     def load_texture_transforms(self):
 
@@ -968,6 +980,10 @@ class BlenderM2Scene:
             seq_name_table = M2SequenceNames()
             n_global_sequences = len(self.global_sequences)
 
+            # titi test
+            slot = bpy.context.scene.wow_m2_root_elements.attachments.add()
+            slot.pointer = obj
+
             # load global sequence
             if attachment.animate_attached.global_sequence >= 0:
                 anim = bpy.context.scene.wow_m2_animations[attachment.animate_attached.global_sequence]
@@ -1032,6 +1048,7 @@ class BlenderM2Scene:
                                     'data.wow_m2_light.{}'.format(prop_name), prop_track)
 
         for i, light in enumerate(self.m2.root.lights):
+            #bpy.ops.object.lamp_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
             bpy.ops.object.light_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.data.wow_m2_light.type = str(light.type)
@@ -1057,6 +1074,10 @@ class BlenderM2Scene:
 
             channels = [('ambient_color', 3), ('ambient_intensity', 1), ('diffuse_color', 3),
                         ('diffuse_intensity', 1), ('attenuation_start', 1), ('attenuation_end', 1), ('visibility', 1)]
+            
+            # titi test
+            slot = bpy.context.scene.wow_m2_root_elements.lights.add()
+            slot.pointer = obj
 
             # load global sequences
             for j, seq_index in enumerate(self.global_sequences):
@@ -1136,6 +1157,10 @@ class BlenderM2Scene:
             obj.animation_data.action_blend_type = 'ADD'
             seq_name_table = M2SequenceNames()
             n_global_sequences = len(self.global_sequences)
+            
+            #titi test
+            slot = bpy.context.scene.wow_m2_root_elements.events.add()
+            slot.pointer = obj
 
             # load global sequences
             if event.enabled.global_sequence >= 0:

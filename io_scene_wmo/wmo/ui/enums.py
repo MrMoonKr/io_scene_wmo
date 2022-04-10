@@ -14,7 +14,7 @@ shader_enum = [
 
 ]
 
-terrain_type_enum = [
+terrain_type_enum = [ # can be loaded from DBC. TODO: legion terrain types
     ('0', "Dirt", ""), ('1', "Metallic", ""), ('2', "Stone", ""),
     ('3', "Snow", ""), ('4', "Wood", ""), ('5', "Grass", ""),
     ('6', "Leaves", ""), ('7', "Sand", ""), ('8', "Soggy", ""),
@@ -72,7 +72,7 @@ root_flags_enum = [
     ("0", "No Auto Attenuation", "Do not attenuate light on vertices based on distance from portal", 'NODE_TEXTURE', 0x1),
     ("1", "Do Not Use Lightmap", "", 'LIGHT_SUN', 0x2),
     ("2", "Unified rendering", "Use ambient lighting inside indoor groups", 'OUTLINER_OB_LIGHT', 0x4),
-    ("3", "Use real Liquid Type", "Use real liquid type ID from DBCs instead of local one.", 'MOD_OCEAN', 0x8)
+    # ("3", "Use real Liquid Type", "Use real liquid type ID from DBCs instead of local one.\nDisabling this might result in filling the WMO with water.", 'MOD_OCEAN', 0x8)
 ]
 
 light_type_enum = [

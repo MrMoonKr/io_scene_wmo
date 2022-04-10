@@ -2,7 +2,10 @@ import bpy
 import bmesh
 
 from ...bl_render import load_wmo_shader_dependencies, update_wmo_mat_node_tree
-from ....utils.misc import resolve_texture_path
+from ...utils.wmv import wmv_get_last_texture
+from ....utils.misc import resolve_texture_path, load_game_data
+from ...utils.materials import load_texture
+from ....ui import get_addon_prefs
 from ...ui.handlers import DepsgraphLock
 
 
@@ -164,3 +167,45 @@ class WMO_OT_fill_textures(bpy.types.Operator):
         self.report({'INFO'}, "Done filling texture paths")
 
         return {'FINISHED'}
+
+
+class WMO_OT_import_texture(bpy.types.Operator):
+    bl_idname = "scene.wow_wmo_texture_import"
+    bl_label = "Import WoW Texture"
+    bl_description = "Import last texture from WoW Model Viewer as a WMO material.\n(Browse WMV in 'Images' mode, modeling textures are usualy in 'Dungeons' directory)"
+    bl_options = {'UNDO', 'REGISTER'}
+
+    def execute(self, context):
+
+        addon_prefs = get_addon_prefs()
+        game_data = load_game_data()
+
+        if not game_data:
+            self.report({'ERROR'}, "Importing texture failed. Game data was not loaded.")
+            return {'CANCELLED'}
+
+        path = wmv_get_last_texture().capitalize()
+
+        if not path:
+            self.report({'ERROR'}, "WMV log does not contain any texture paths.")
+            return {'CANCELLED'}
+
+        game_data.extract_textures_as_png(addon_prefs.cache_dir_path, (path,))
+        texture = load_texture({}, path, addon_prefs.cache_dir_path)
+
+        mat = bpy.data.materials.new(name=path.split('\\')[-1][:-4] + '.PNG')
+        mat.wow_wmo_material.self_pointer = mat
+        mat.wow_wmo_material.diff_texture_1 = texture
+        mat.wow_wmo_material.diff_color = (0.584314,0.584314,0.584314,1)
+        mat.wow_wmo_material.emissive_color = (0,0,0,1)
+
+
+        load_wmo_shader_dependencies()
+        update_wmo_mat_node_tree(mat)
+
+        slot = context.scene.wow_wmo_root_elements.materials.add()
+        slot.pointer = mat
+        mat.wow_wmo_material.enabled = True
+
+        return {'FINISHED'}
+

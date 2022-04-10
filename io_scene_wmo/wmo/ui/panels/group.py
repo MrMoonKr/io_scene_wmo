@@ -145,6 +145,9 @@ def update_flags(self, context):
 
     if '0' in self.flags:
         obj.pass_index |= 0x20  # BlenderWMOObjectRenderFlags.HasVertexColor
+        mesh = obj.data
+        if 'Col' not in mesh.vertex_colors:
+            vertex_color_layer = mesh.vertex_colors.new(name="Col")
     else:
         obj.pass_index &= ~0x20
 
