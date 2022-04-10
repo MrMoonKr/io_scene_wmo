@@ -1,4 +1,3 @@
-from logging import exception
 import bpy
 import mathutils
 import bmesh
@@ -6,6 +5,8 @@ import sys
 import inspect
 
 from math import pi, ceil, floor, isclose
+from logging import exception
+from typing import Tuple
 
 from ..pywowlib.file_formats.wmo_format_root import MOHDFlags
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, TriangleMaterial, Batch
@@ -13,15 +14,16 @@ from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
 from ..pywowlib import WoWVersionManager, WoWVersions
-from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
 
 
 class BlenderWMOSceneGroup:
     def __init__(self, wmo_scene, wmo_group, obj=None):
-        self.wmo_group : WMOGroupFile = wmo_group
-        self.wmo_scene = wmo_scene
-        self.bl_object : bpy.types.Object = obj
+        self.wmo_group: WMOGroupFile = wmo_group
+        self.wmo_scene: 'BlenderWMOSceneGroup' = wmo_scene
+        self.bl_object: bpy.types.Object = obj
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
+        self.has_blending: bool = False
 
     @staticmethod
     def get_avg(list_):
@@ -952,8 +954,10 @@ class BlenderWMOSceneGroup:
 
             group.mliq.tile_flags.append(tile_flag)
 
-    def save(self):
-        """ Save WoW WMO group data for future export """
+    def create_batching_parameters(self) -> Tuple[bpy.types.Mesh, WMOGeometryBatcherMeshParams]:
+        """ Prepare the WoW WMO group proxy mesh for export.
+            Mesh is returned in order to keep its lifetime beyond the function scope.
+        """
 
         obj = self.bl_object
         depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -998,8 +1002,8 @@ class BlenderWMOSceneGroup:
         if not bm.loops.layers.uv.get('UVMap'):
             raise Exception('\nThe group \"{}\" must have a UV map layer.'.format(obj.name))
 
-        has_blending = bm.loops.layers.uv.get('UVMap.001') and bm.loops.layers.color.get('Blendmap')
-        if has_blending:
+        self.has_blending = bm.loops.layers.uv.get('UVMap.001') and bm.loops.layers.color.get('Blendmap')
+        if self.has_blending:
             group.add_blendmap_chunks()
 
         mesh_final = bpy.data.meshes.new("Temp")
@@ -1029,34 +1033,38 @@ class BlenderWMOSceneGroup:
 
             material_mapping.append(mat_id)
 
-        batcher = CWMOGeometryBatcher(mesh_final.as_pointer()
-                                      , False
-                                      , use_vertex_color
-                                      , vg_collision_index
-                                      , obj.wow_wmo_vertex_info.node_size
-                                      , material_mapping)
+        return mesh_final, WMOGeometryBatcherMeshParams(mesh_final.as_pointer()
+                                                        , False
+                                                        , use_vertex_color
+                                                        , vg_collision_index
+                                                        , obj.wow_wmo_vertex_info.node_size
+                                                        , material_mapping)
 
-        self.wmo_group.movt.from_bytes(batcher.vertices())
-        self.wmo_group.monr.from_bytes(batcher.normals())
-        self.wmo_group.moba.from_bytes(batcher.batches())
-        self.wmo_group.movi.from_bytes(batcher.triangle_indices())
-        self.wmo_group.mopy.from_bytes(batcher.triangle_materials())
-        self.wmo_group.motv.from_bytes(batcher.tex_coords())
-        self.wmo_group.mocv.from_bytes(batcher.vertex_colors())
-        self.wmo_group.mobn.from_bytes(batcher.bsp_nodes())
-        self.wmo_group.mobr.from_bytes(batcher.bsp_faces())
+    def save(self, batcher: CWMOGeometryBatcher, group_index: int):
+        """ Save WoW WMO group data for future export """
+        obj = self.bl_object
 
-        if has_blending:
-            self.wmo_group.motv2.from_bytes(batcher.tex_coords2())
-            self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2())
+        self.wmo_group.movt.from_bytes(batcher.vertices(group_index))
+        self.wmo_group.monr.from_bytes(batcher.normals(group_index))
+        self.wmo_group.moba.from_bytes(batcher.batches(group_index))
+        self.wmo_group.movi.from_bytes(batcher.triangle_indices(group_index))
+        self.wmo_group.mopy.from_bytes(batcher.triangle_materials(group_index))
+        self.wmo_group.motv.from_bytes(batcher.tex_coords(group_index))
+        self.wmo_group.mocv.from_bytes(batcher.vertex_colors(group_index))
+        self.wmo_group.mobn.from_bytes(batcher.bsp_nodes(group_index))
+        self.wmo_group.mobr.from_bytes(batcher.bsp_faces(group_index))
+
+        if self.has_blending:
+            self.wmo_group.motv2.from_bytes(batcher.tex_coords2(group_index))
+            self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2(group_index))
 
         # bsp = BSPTree()
         # bsp.generate_bsp(self.wmo_group.movt.vertices, self.wmo_group.movi.indices, obj.wow_wmo_vertex_info.node_size)
 
         # write header
-        bb = batcher.bounding_box()
-        group.mogp.bounding_box_corner1 = bb.min
-        group.mogp.bounding_box_corner2 = bb.max
+        bb = batcher.bounding_box(group_index)
+        self.wmo_group.mogp.bounding_box_corner1 = bb.min
+        self.wmo_group.mogp.bounding_box_corner2 = bb.max
 
         '''
         if len(group.movt.vertices) > 65535:
@@ -1065,28 +1073,28 @@ class BlenderWMOSceneGroup:
                 
         '''
 
-        batch_count_info = batcher.batch_count_info()
-        group.mogp.n_batches_a = batch_count_info.n_batches_trans
-        group.mogp.n_batches_b = batch_count_info.n_batches_int
-        group.mogp.n_batches_c = batch_count_info.n_batches_ext
+        batch_count_info = batcher.batch_count_info(group_index)
+        self.wmo_group.mogp.n_batches_a = batch_count_info.n_batches_trans
+        self.wmo_group.mogp.n_batches_b = batch_count_info.n_batches_int
+        self.wmo_group.mogp.n_batches_c = batch_count_info.n_batches_ext
 
-        group.mogp.flags |= MOGPFlags.HasCollision  # /!\ MUST HAVE 0x1 FLAG ELSE THE GAME CRASH !
+        self.wmo_group.mogp.flags |= MOGPFlags.HasCollision  # /!\ MUST HAVE 0x1 FLAG ELSE THE GAME CRASH !
         if '0' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.HasVertexColor
+            self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor
         if '4' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.HasSkybox
+            self.wmo_group.mogp.flags |= MOGPFlags.HasSkybox
         if '1' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.DoNotUseLocalLighting
+            self.wmo_group.mogp.flags |= MOGPFlags.DoNotUseLocalLighting
         if '2' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.AlwaysDraw
+            self.wmo_group.mogp.flags |= MOGPFlags.AlwaysDraw
         if '3' in obj.wow_wmo_group.flags:
-            group.mogp.flags |= MOGPFlags.IsMountAllowed
+            self.wmo_group.mogp.flags |= MOGPFlags.IsMountAllowed
 
-        group.mogp.flags |= int(obj.wow_wmo_group.place_type)
+        self.wmo_group.mogp.flags |= int(obj.wow_wmo_group.place_type)
 
-        if has_blending:
-            group.mogp.flags |= MOGPFlags.HasTwoMOCV
-            group.mogp.flags |= MOGPFlags.HasTwoMOTV
+        if self.has_blending:
+            self.wmo_group.mogp.flags |= MOGPFlags.HasTwoMOCV
+            self.wmo_group.mogp.flags |= MOGPFlags.HasTwoMOTV
 
         has_lights = False
 
@@ -1097,7 +1105,7 @@ class BlenderWMOSceneGroup:
 
 
         # set fog references
-        group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,
+        self.wmo_group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,
                                   fogs[1].wow_wmo_fog.fog_id if fogs[1] else 0,
                                   fogs[2].wow_wmo_fog.fog_id if fogs[2] else 0,
                                   fogs[3].wow_wmo_fog.fog_id if fogs[3] else 0)
@@ -1106,59 +1114,60 @@ class BlenderWMOSceneGroup:
         if lamps:
             has_lights = True
             for lamp in lamps:
-                group.molr.light_refs.append(lamp.id)
+                self.wmo_group.molr.light_refs.append(lamp.id)
 
-        group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)
-        group_info = self.wmo_scene.add_group_info(group.mogp.flags,
-                                                  [group.mogp.bounding_box_corner1, group.mogp.bounding_box_corner2],
+        self.wmo_group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)
+        group_info = self.wmo_scene.add_group_info(self.wmo_group.mogp.flags,
+                                                      [self.wmo_group.mogp.bounding_box_corner1
+                                                      , self.wmo_group.mogp.bounding_box_corner2],
                                                   obj.name,
                                                   obj.wow_wmo_group.description)
 
-        group.mogp.group_name_ofs = group_info[0]
-        group.mogp.desc_group_name_ofs = group_info[1]
+        self.wmo_group.mogp.group_name_ofs = group_info[0]
+        self.wmo_group.mogp.desc_group_name_ofs = group_info[1]
 
         if len(obj.wow_wmo_group.modr):
             for doodad in obj.wow_wmo_group.modr:
-                group.modr.doodad_refs.append(doodad.value)
-            group.mogp.flags |= MOGPFlags.HasDoodads
+                self.wmo_group.modr.doodad_refs.append(doodad.value)
+            self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
         elif obj.wow_wmo_group.relations.doodads:
             for doodad in obj.wow_wmo_group.relations.doodads:
-                group.modr.doodad_refs.append(doodad.id)
-            group.mogp.flags |= MOGPFlags.HasDoodads
+                self.wmo_group.modr.doodad_refs.append(doodad.id)
+            self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
         else:
-            group.modr = None
+            self.wmo_group.modr = None
 
         if '0' not in obj.wow_wmo_group.flags:
             if obj.wow_wmo_group.place_type == '8192':
                 if '1' in obj.wow_wmo_group.flags \
-                        and not len(mesh.vertex_colors):
-                    group.mocv = None
+                        and not len(obj.data.vertex_colors):
+                    self.wmo_group.mocv = None
                 else:
-                    group.mogp.flags |= MOGPFlags.HasVertexColor
+                    self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor
             else:
-                group.mocv = None
+                self.wmo_group.mocv = None
         
-        group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
+        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
 
         if obj.wow_wmo_group.liquid_mesh:
             self.save_liquid(obj.wow_wmo_group.liquid_mesh)
         else:
-            group.mliq = None
-            group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
+            self.wmo_group.mliq = None
+            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
             wow_version = int(bpy.context.scene.wow_scene.version)
             if wow_version >= WoWVersions.WOTLK:
                 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
-                group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
+                self.wmo_group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         if not has_lights:
-            group.molr = None
+            self.wmo_group.molr = None
         else:
-            group.mogp.flags |= MOGPFlags.HasLight
+            self.wmo_group.mogp.flags |= MOGPFlags.HasLight
 
         # write second MOTV and MOCV
-        if not has_blending:
-            group.motv2 = None
-            group.mocv2 = None
+        if not self.has_blending:
+            self.wmo_group.motv2 = None
+            self.wmo_group.mocv2 = None
 
 
 

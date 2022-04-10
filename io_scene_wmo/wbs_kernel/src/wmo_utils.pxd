@@ -24,7 +24,7 @@ cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh
                            , bool use_vertex_color
                            , int vg_collision_index
                            , unsigned node_size
-                           , const vector[int]& material_mapping)
+                           , const vector[int]& material_mapping) nogil
 
         BufferKey batches()
         BufferKey normals()

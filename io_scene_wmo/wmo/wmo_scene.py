@@ -15,6 +15,7 @@ from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui import get_addon_prefs
 from ..utils.misc import find_nearest_object
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
@@ -765,11 +766,25 @@ class BlenderWMOScene:
             bl_group.wmo_group.mogp.portal_count = len(self.wmo.mopr.relations) - bl_group.wmo_group.mogp.portal_start
 
     def save_groups(self):
+        temp_meshes = []
+        batch_params = []
 
-        for bl_group in tqdm(self.bl_groups, desc='Saving groups', ascii=True):
+        for bl_group in tqdm(self.bl_groups, desc='Preparing groups', ascii=True):
+            if bl_group.wmo_group.export:
+                mesh, params = bl_group.create_batching_parameters()
+                temp_meshes.append(mesh)
+                batch_params.append(params)
+
+        for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
+            batcher = CWMOGeometryBatcher(batch_params)
+
+        for mesh in tqdm(temp_meshes, desc='Cleaning up temporary meshes', ascii=True):
+            bpy.data.meshes.remove(mesh)
+
+        for i, bl_group in enumerate(tqdm(self.bl_groups, desc='Saving groups', ascii=True)):
 
             if bl_group.wmo_group.export:
-                bl_group.save()
+                bl_group.save(batcher, i)
 
     def save_fogs(self):
 
