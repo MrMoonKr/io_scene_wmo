@@ -1573,6 +1573,7 @@ class BlenderM2Scene:
                 global_sequences+=1
                 continue
 
+            # if it's an alias
             if "64" in wow_action.flags:
                 actions.append((wow_action,None,None))
                 continue
