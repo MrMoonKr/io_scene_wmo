@@ -78,7 +78,7 @@ def main(debug: bool):
         "src/render/wmo_drawing_mesh.cpp",
         "src/render/wmo_drawing_batch.cpp",
         "src/render/opengl_utils.cpp",
-  ]
+    ]
 
     render_include_dirs = [
        "src/render/",
@@ -150,8 +150,6 @@ def main(debug: bool):
         f.write(cmake_stub)
 
     print_succes("\nSuccessfully built WBS kernel.")
-
-
 
 
 if __name__ == '__main__':
