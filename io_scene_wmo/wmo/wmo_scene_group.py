@@ -730,8 +730,7 @@ class BlenderWMOSceneGroup:
             nobj.wow_wmo_group.liquid_type = str(real_liquid_type)
 
     @staticmethod
-    def try_calculate_direction(group_obj: bpy.types.Object
-                                , group_mesh_eval: bpy.types.Mesh
+    def try_calculate_direction(group_mesh_eval: bpy.types.Mesh
                                 , portal_obj: bpy.types.Object
                                 , portal_bmesh: bmesh.types.BMesh
                                 , bound_relation: Optional[PortalRelation]):
@@ -782,7 +781,6 @@ class BlenderWMOSceneGroup:
     def get_portal_direction(self
                              , portal_obj: bpy.types.Object
                              , portal_bmesh: bmesh.types.BMesh
-                             , group_obj: bpy.types.Object
                              , group_mesh_eval: bpy.types.Mesh):
         """ Get the direction of MOPR portal relation given a portal object and a target group """
 
@@ -802,7 +800,7 @@ class BlenderWMOSceneGroup:
 
         portal_bmesh.verts.ensure_lookup_table()
         portal_bmesh.faces.ensure_lookup_table()
-        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
+        result = BlenderWMOSceneGroup.try_calculate_direction(group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
 
         if result:
             return result
@@ -812,7 +810,7 @@ class BlenderWMOSceneGroup:
         portal_bmesh.verts.ensure_lookup_table()
         portal_bmesh.faces.ensure_lookup_table()
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
+        result = BlenderWMOSceneGroup.try_calculate_direction(group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
 
         if result:
             return result
