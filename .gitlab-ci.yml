@@ -4,6 +4,9 @@ stages:
 
 windows:
   stage: build
+
+  only:
+  - schedules
   
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
