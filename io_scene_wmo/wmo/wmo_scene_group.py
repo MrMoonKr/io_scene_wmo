@@ -8,8 +8,8 @@ from math import pi, ceil, floor, isclose
 from logging import exception
 from typing import Tuple
 
-from ..pywowlib.file_formats.wmo_format_root import MOHDFlags
-from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, TriangleMaterial, Batch
+from ..pywowlib.file_formats.wmo_format_root import MOHDFlags, PortalRelation
+from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex
 from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
@@ -729,61 +729,63 @@ class BlenderWMOSceneGroup:
 
             nobj.wow_wmo_group.liquid_type = str(real_liquid_type)
 
-    def get_portal_direction(self, portal_obj, group_obj):
-        """ Get the direction of MOPR portal relation given a portal object and a target group """
+    @staticmethod
+    def try_calculate_direction(group_obj: bpy.types.Object
+                                , portal_obj: bpy.types.Object
+                                , portal_bmesh: bmesh.types.BMesh
+                                , bound_relation: PortalRelation):
 
-        def try_calculate_direction():
+        mesh = group_obj.data
+        normal = portal_bmesh.faces[0].normal
 
-            mesh = group_obj.data
-            portal_mesh = portal_obj.data
-            normal = portal_obj.data.polygons[0].normal
+        for poly in mesh.faces:
+            poly_normal = mathutils.Vector(poly.normal)
+            g_center = poly.calc_center_median() + poly_normal * sys.float_info.epsilon
 
-            for poly in mesh.polygons:
-                poly_normal = mathutils.Vector(poly.normal)
-                g_center = group_obj.matrix_world @ poly.center + poly_normal * sys.float_info.epsilon
+            dist = normal[0] * g_center[0] + normal[1] * g_center[1] \
+                   + normal[2] * g_center[2] - portal_bmesh.faces[0].normal[0] \
+                   * portal_bmesh.verts[portal_bmesh.faces[0].verts[0]].co[0] \
+                   - portal_bmesh.faces[0].normal[1] \
+                   * portal_bmesh.verts[portal_bmesh.faces[0].verts[0]].co[1] \
+                   - portal_bmesh.faces[0].normal[2] \
+                   * portal_bmesh.verts[portal_bmesh.faces[0].verts[0]].co[2]
 
-                dist = normal[0] * g_center[0] + normal[1] * g_center[1] \
-                       + normal[2] * g_center[2] - portal_mesh.polygons[0].normal[0] \
-                       * portal_mesh.vertices[portal_mesh.polygons[0].vertices[0]].co[0] \
-                       - portal_mesh.polygons[0].normal[1] \
-                       * portal_mesh.vertices[portal_mesh.polygons[0].vertices[0]].co[1] \
-                       - portal_mesh.polygons[0].normal[2] \
-                       * portal_mesh.vertices[portal_mesh.polygons[0].vertices[0]].co[2]
+            if dist == 0:
+                continue
 
-                if dist == 0:
+            for portal_poly in portal_bmesh.faces:
+
+                direction = portal_poly.calc_center_median() - g_center
+                length = mathutils.Vector(direction).length
+                direction.normalize()
+
+                angle = mathutils.Vector(direction).angle(poly.normal, None)
+
+                if angle is None or angle >= pi * 0.5:
                     continue
 
-                for portal_poly in portal_mesh.polygons:
+                ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center,
+                                                             direction)
 
-                    direction = portal_poly.center - g_center
-                    length = mathutils.Vector(direction).length
-                    direction.normalize()
+                if not ray_cast_result[0] \
+                        or ray_cast_result[4].name == portal_obj.name \
+                        or mathutils.Vector(
+                    (ray_cast_result[1][0] - g_center[0], ray_cast_result[1][1] - g_center[1],
+                     ray_cast_result[1][2] - g_center[2])).length > length:
+                    result = 1 if dist > 0 else -1
 
-                    angle = mathutils.Vector(direction).angle(poly.normal, None)
+                    if bound_relation.side == 0:
+                        bound_relation.side = -result
 
-                    if angle is None or angle >= pi * 0.5:
-                        continue
+                    return result
 
-                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center,
-                                                                 direction)
+        return 0
 
-                    if not ray_cast_result[0] \
-                            or ray_cast_result[4].name == portal_obj.name \
-                            or mathutils.Vector(
-                        (ray_cast_result[1][0] - g_center[0], ray_cast_result[1][1] - g_center[1],
-                         ray_cast_result[1][2] - g_center[2])).length > length:
-                        result = 1 if dist > 0 else -1
-
-                        if bound_relation_side == 0:
-                            bound_relation.side = -result
-
-                        return result
-
-            return 0
-
-        bpy.ops.object.select_all(action='DESELECT')
-
-        bpy.context.view_layer.objects.active = portal_obj
+    def get_portal_direction(self
+                             , portal_obj: bpy.types.Object
+                             , portal_bmesh: bmesh.types.BMesh
+                             , group_obj: bpy.types.Object):
+        """ Get the direction of MOPR portal relation given a portal object and a target group """
 
         # check if this portal was already processed
         bound_relation_side = None
@@ -799,32 +801,17 @@ class BlenderWMOSceneGroup:
         if portal_obj.wow_wmo_portal.algorithm != '0':
             return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
 
-        # reveal hidden geometry
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.reveal()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        portal_obj.select_set(True)
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        portal_obj.select_set(False)
-
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-
-        result = try_calculate_direction()
+        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, portal_obj, portal_bmesh, bound_relation)
 
         if result:
             return result
 
-        # triangulate the proxy portal
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.quads_convert_to_tris()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # triangulate the proxy portal bmesh
+        bmesh.ops.triangulate(portal_bmesh, faces=portal_bmesh.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
+        portal_bmesh.verts.ensure_lookup_table()
+        portal_bmesh.faces.ensure_lookup_table()
 
-        result = try_calculate_direction()
+        result = BlenderWMOSceneGroup.try_calculate_direction(group_obj, portal_obj, portal_bmesh, bound_relation)
 
         if result:
             return result
