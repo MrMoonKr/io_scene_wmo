@@ -701,8 +701,8 @@ class BlenderWMOScene:
 
         saved_portals_ids = []
 
-        self.wmo.mopt.infos = len(self.bl_portals) * [PortalInfo()]
         depsgraph = bpy.context.evaluated_depsgraph_get()
+        self.wmo.mopt.infos = len(self.bl_portals) * [PortalInfo()]
 
         for bl_group, group_mesh_eval in tqdm(zip(self.bl_groups, self.groups_eval), desc='Saving portals', ascii=True):
 
@@ -711,32 +711,35 @@ class BlenderWMOScene:
             bl_group.wmo_group.mogp.portal_start = len(self.wmo.mopr.relations)
 
             for relation in portal_relations:
-                portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
+                portal_obj = bpy.context.scene.objects[relation.id]
                 portal_index = portal_obj.wow_wmo_portal.portal_id
-                portal_mesh = portal_obj.data
 
-                bm = bmesh.new()
-                bm.from_mesh(portal_mesh)
-                bm.verts.ensure_lookup_table()
+                portal_mesh = portal_obj.evaluated_get(depsgraph).data
 
-                # apply transforms
-                for vert in bm.verts:
+                for vert in portal_mesh.vertices:
                     vert.co = portal_obj.matrix_world @ vert.co
 
-                bm.faces.ensure_lookup_table()
-
-                bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+                portal_mesh.update()
+                portal_mesh.calc_normals()
 
                 if portal_index not in saved_portals_ids:
+
                     portal_info = PortalInfo()
                     portal_info.start_vertex = len(self.wmo.mopv.portal_vertices)
                     v = []
 
+                    bm = bmesh.new()
+                    bm.from_mesh(portal_mesh)
+                    bm.verts.ensure_lookup_table()
+
                     portal_verts = self.sort_portal_vertices(bm.verts, portal_mesh.polygons[0].normal)
 
                     for vertex in portal_verts:
-                        self.wmo.mopv.portal_vertices.append(vertex.co.to_tuple())
-                        v.append(vertex.co)
+                        vertex_pos = vertex.co
+                        self.wmo.mopv.portal_vertices.append(vertex_pos.to_tuple())
+                        v.append(vertex_pos)
+
+                    bm.free()
 
                     v_A = v[0][1] * v[1][2] - v[1][1] * v[0][2] - v[0][1] * v[2][2] + v[2][1] * v[0][2] + v[1][1] * \
                           v[2][2] - \
@@ -753,7 +756,7 @@ class BlenderWMOScene:
 
                     portal_info.unknown = v_D / sqrt(v_A * v_A + v_B * v_B + v_C * v_C)
                     portal_info.n_vertices = len(self.wmo.mopv.portal_vertices) - portal_info.start_vertex
-                    portal_info.normal = tuple(bm.faces[0].normal)
+                    portal_info.normal = tuple(portal_mesh.polygons[0].normal)
 
                     self.wmo.mopt.infos[portal_index] = portal_info
                     saved_portals_ids.append(portal_index)
@@ -767,8 +770,7 @@ class BlenderWMOScene:
                 relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.name \
                     else first.wow_wmo_group.group_id
 
-                relation.side = bl_group.get_portal_direction(portal_obj, bm, group_mesh_eval)
-                bm.free()
+                relation.side = bl_group.get_portal_direction(portal_obj, portal_mesh, group_mesh_eval)
 
                 self.wmo.mopr.relations.append(relation)
 

@@ -6,7 +6,7 @@ import inspect
 
 from math import pi, ceil, floor, isclose
 from logging import exception
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 from ..pywowlib.file_formats.wmo_format_root import MOHDFlags, PortalRelation
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex
@@ -730,29 +730,38 @@ class BlenderWMOSceneGroup:
             nobj.wow_wmo_group.liquid_type = str(real_liquid_type)
 
     @staticmethod
-    def try_calculate_direction(group_mesh_eval: bpy.types.Mesh
-                                , portal_obj: bpy.types.Object
-                                , portal_bmesh: bmesh.types.BMesh
-                                , bound_relation: Optional[PortalRelation]):
+    def try_calculate_direction(portal_obj: bpy.types.Object
+                                , portal_mesh_eval: bpy.types.Mesh
+                                , group_mesh: bpy.types.Mesh
+                                , bound_relation: PortalRelation
+                                , triangulated: bool = False) -> int:
 
-        mesh = group_mesh_eval
-        normal = portal_bmesh.faces[0].normal
+        normal = portal_mesh_eval.polygons[0].normal
 
-        for poly in mesh.polygons:
+        portal_polygons = portal_mesh_eval.polygons
+        if triangulated:
+            portal_mesh_eval.calc_loop_triangles()
+            portal_polygons = portal_mesh_eval.loop_triangles
+
+        for poly in group_mesh.polygons:
             poly_normal = mathutils.Vector(poly.normal)
             g_center = poly.center + poly_normal * sys.float_info.epsilon
 
-            portal_face = portal_bmesh.faces[0]
-            any_vert = portal_face.verts[0]
-            dist = normal[0] * g_center[0] + normal[1] * g_center[1] + normal[2] * g_center[2] - portal_face.normal[0] \
-                * any_vert.co[0] - portal_face.normal[1] * any_vert.co[1] - portal_face.normal[2] * any_vert.co[2]
+            any_face = portal_polygons[0]
+            dist = normal[0] * g_center[0] + normal[1] * g_center[1] \
+                   + normal[2] * g_center[2] - any_face.normal[0] \
+                   * portal_mesh_eval.vertices[any_face.vertices[0]].co[0] \
+                   - any_face.normal[1] \
+                   * portal_mesh_eval.vertices[any_face.vertices[0]].co[1] \
+                   - any_face.normal[2] \
+                   * portal_mesh_eval.vertices[any_face.vertices[0]].co[2]
 
             if dist == 0:
                 continue
 
-            for portal_poly in portal_bmesh.faces:
+            for portal_poly in portal_polygons:
 
-                direction = portal_poly.calc_center_median() - g_center
+                direction = portal_poly.center - g_center
                 length = mathutils.Vector(direction).length
                 direction.normalize()
 
@@ -780,8 +789,8 @@ class BlenderWMOSceneGroup:
 
     def get_portal_direction(self
                              , portal_obj: bpy.types.Object
-                             , portal_bmesh: bmesh.types.BMesh
-                             , group_mesh_eval: bpy.types.Mesh):
+                             , portal_mesh_eval: bpy.types.Mesh
+                             , group_mesh_eval: bpy.types.Mesh) -> int:
         """ Get the direction of MOPR portal relation given a portal object and a target group """
 
         # check if this portal was already processed
@@ -798,19 +807,14 @@ class BlenderWMOSceneGroup:
         if portal_obj.wow_wmo_portal.algorithm != '0':
             return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
 
-        portal_bmesh.verts.ensure_lookup_table()
-        portal_bmesh.faces.ensure_lookup_table()
-        result = BlenderWMOSceneGroup.try_calculate_direction(group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval,
+                                                              group_mesh_eval, bound_relation)
 
         if result:
             return result
 
-        # triangulate the proxy portal bmesh
-        bmesh.ops.triangulate(portal_bmesh, faces=portal_bmesh.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
-        portal_bmesh.verts.ensure_lookup_table()
-        portal_bmesh.faces.ensure_lookup_table()
-
-        result = BlenderWMOSceneGroup.try_calculate_direction(group_mesh_eval, portal_obj, portal_bmesh, bound_relation)
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval,
+                                                              group_mesh_eval, bound_relation, True)
 
         if result:
             return result

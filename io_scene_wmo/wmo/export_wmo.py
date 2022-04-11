@@ -36,7 +36,8 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
     bl_scene.save_groups()
     bl_scene.save_root_header()
 
-    wmo.write()
+    for _ in tqdm(range(1), desc='Writing WMO files', ascii=True):
+        wmo.write()
 
     bpy.context.scene.wow_wmo_root_elements.is_update_critical = False
 
