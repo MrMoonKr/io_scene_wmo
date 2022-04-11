@@ -6,7 +6,7 @@ from ..pywowlib.m2_file import M2File, M2Versions
 from ..ui import get_addon_prefs
 
 
-def import_m2(version, filepath, is_local_file=False):
+def import_m2(version, filepath, use_preset_bounds=False, is_local_file=False):
 
     # get global variables
     addon_preferences = get_addon_prefs()
@@ -65,7 +65,7 @@ def import_m2(version, filepath, is_local_file=False):
     bl_m2 = BlenderM2Scene(m2_file, addon_preferences)
 
     bl_m2.load_armature()
-    bl_m2.load_animations()
+    bl_m2.load_animations(use_preset_bounds)
     bl_m2.load_colors()
     bl_m2.load_transparency()
     bl_m2.load_materials()

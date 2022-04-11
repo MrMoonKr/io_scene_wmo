@@ -203,6 +203,24 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
             row.operator("scene.wow_m2_animation_editor_go_to_index", text="", icon='ZOOM_SELECTED').anim_index = \
                 cur_anim_track.alias_next
 
+            col.label(text='Bounds:')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence
+            row.prop(cur_anim_track, 'use_preset_bounds')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence and cur_anim_track.use_preset_bounds
+            row.prop(cur_anim_track, 'preset_bounds_min_x')
+            row.prop(cur_anim_track, 'preset_bounds_min_y')
+            row.prop(cur_anim_track, 'preset_bounds_min_z')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence and cur_anim_track.use_preset_bounds
+            row.prop(cur_anim_track, 'preset_bounds_max_x')
+            row.prop(cur_anim_track, 'preset_bounds_max_y')
+            row.prop(cur_anim_track, 'preset_bounds_max_z')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence and cur_anim_track.use_preset_bounds
+            row.prop(cur_anim_track, 'preset_bounds_radius')
+
             col = split.column()
             col.enabled = not cur_anim_track.is_global_sequence
             col.label(text='Flags:')
@@ -874,6 +892,55 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
     blend_time_out:  bpy.props.IntProperty(
         name="Blend time",
         description="",
+        min=0
+    )
+
+    use_preset_bounds: bpy.props.BoolProperty(
+        name="Use Preset Bounds",
+        description="Use preset bounds data instead of calculating on export",
+        default=False
+    )
+
+    preset_bounds_min_x: bpy.props.FloatProperty(
+        name="Min X",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_min_y: bpy.props.FloatProperty(
+        name="Min Y",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_min_z: bpy.props.FloatProperty(
+        name="Min Z",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_max_x: bpy.props.FloatProperty(
+        name="Max X",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_max_y: bpy.props.FloatProperty(
+        name="Max Y",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_max_z: bpy.props.FloatProperty(
+        name="Max Z",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="",
+        default=0,
         min=0
     )
 
