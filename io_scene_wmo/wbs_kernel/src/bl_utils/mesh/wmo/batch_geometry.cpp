@@ -159,9 +159,9 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
   if (_use_vertex_color && _bl_vertex_color)
   {
     const MLoopCol* color = &_bl_vertex_color[loop_index];
-    v_info.col.r = color->r;
+    v_info.col.r = color->b;
     v_info.col.g = color->g;
-    v_info.col.b = color->b;
+    v_info.col.b = color->r;
 
     if (_bl_lightmap)
     {
