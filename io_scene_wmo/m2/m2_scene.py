@@ -1555,6 +1555,8 @@ class BlenderM2Scene:
                 origin = get_origin_position()
 
     def save_animations(self):
+        while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
+            self.m2.root.sequence_lookup.append(0xffff)
 
         # if there are no actions, make a default Stand anim.
         if not len(bpy.data.actions):
