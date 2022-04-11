@@ -4,6 +4,8 @@ import time
 from ..pywowlib import WoWVersionManager
 from ..pywowlib.wmo_file import WMOFile
 
+from ..third_party.tqdm import tqdm
+
 from .wmo_scene import BlenderWMOScene
 
 from ..ui import get_addon_prefs
