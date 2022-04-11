@@ -1600,7 +1600,7 @@ class BlenderM2Scene:
             seq_id = self.m2.add_anim(
                 int(wow_action.animation_id),
                 wow_action.chain_index, # titi, to test
-                range_action.frame_range.to_tuple(),
+                range_action.frame_range.to_tuple() if range_action is not None else (0,0),
                 wow_action.move_speed,
                 construct_bitfield(wow_action.flags),
                 wow_action.frequency,
