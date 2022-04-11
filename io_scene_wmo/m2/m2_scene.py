@@ -618,6 +618,8 @@ class BlenderM2Scene:
 
     def load_animations(self):
 
+        bpy.context.scene.m2_meta.min_animation_lookups = len(self.m2.root.sequence_lookup)
+
         # TODO: pre-wotlk
 
         def bl_convert_trans_track(value=None, bl_bone=None, bone=None):
