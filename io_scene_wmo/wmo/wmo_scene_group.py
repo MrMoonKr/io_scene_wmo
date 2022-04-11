@@ -819,11 +819,8 @@ class BlenderWMOSceneGroup:
         if result:
             return result
 
-        if bound_relation_side is None:
-            print("\nFailed to calculate direction for portal \"{}\". "
-                  "Calculation from another side will be attempted.".format(portal_obj.name))
-        else:
-            print("\nFailed to calculate direction from the opposite side for portal \"{}\" "
+        if bound_relation_side is not None:
+            print("\nFailed to calculate direction from the both sides for portal \"{}\" "
                   "You may consider setting up the direction manually.".format(portal_obj.name))
 
         return 0
