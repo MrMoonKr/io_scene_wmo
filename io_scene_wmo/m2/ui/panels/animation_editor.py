@@ -838,7 +838,6 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
     move_speed:  bpy.props.FloatProperty(
         name="Move speed",
         description="The speed the character moves with in this animation",
-        min=0.0,
         default=1.0
     )
 
