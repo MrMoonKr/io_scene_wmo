@@ -16,6 +16,7 @@ extern "C"
 }
 
 using namespace wbs_kernel::bl_utils::math_utils;
+using namespace wbs_kernel::bl_utils::color_utils;
 using namespace wbs_kernel::bl_utils::mesh::wmo;
 using namespace wbs_kernel::bl_utils::mesh;
 
@@ -175,7 +176,6 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
 
       v_info.col.a = attenuation;
     }
-
   }
 
   if (_bl_blendmap)

@@ -2,6 +2,7 @@
 #define WBS_KERNEL_BATCH_GEOMETRY_HPP
 
 #include <bl_utils/math_utils.hpp>
+#include <bl_utils/color_utils.hpp>
 
 #include <cstdint>
 #include <vector>
@@ -21,14 +22,6 @@ namespace wbs_kernel::bl_utils::mesh::wmo
   class BSPTree;
 
   inline constexpr short COLLISION_MAT_NR = 32767;
-
-  struct RGBA
-  {
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char a;
-  };
 
   enum MOBAFlags
   {
@@ -109,8 +102,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
   struct BatchVertexInfo
   {
     unsigned local_index;
-    RGBA col;
-    RGBA col2;
+    color_utils::RGBA col;
+    color_utils::RGBA col2;
     math_utils::Vector2D uv;
     math_utils::Vector2D uv2;
   };
@@ -227,10 +220,10 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     static unsigned char _get_grayscale_factor(const MLoopCol* color);
 
     [[nodiscard]]
-    static bool _compare_colors(RGBA const& v1, RGBA const& v2);
+    static bool _compare_colors(color_utils::RGBA const& v1, color_utils::RGBA const& v2);
 
     [[nodiscard]]
-    static bool comp_color_key(RGBA const& color);
+    static bool comp_color_key(color_utils::RGBA const& color);
 
     [[nodiscard]]
     static BatchType get_batch_type(const MPoly* poly
@@ -247,8 +240,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     std::vector<math_utils::Vector3D> _normals;
     std::vector<math_utils::Vector2D> _tex_coords;
     std::vector<math_utils::Vector2D> _tex_coords2;
-    std::vector<RGBA> _vertex_colors;
-    std::vector<RGBA> _vertex_colors2;
+    std::vector<color_utils::RGBA> _vertex_colors;
+    std::vector<color_utils::RGBA> _vertex_colors2;
 
     std::uint16_t _trans_batch_count;
     std::uint16_t _int_batch_count;

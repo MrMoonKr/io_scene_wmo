@@ -545,6 +545,7 @@ class BlenderWMOSceneGroup:
         for i, loop in enumerate(mesh.loops):
 
             if vertex_color_layer is not None:
+
                 mesh.vertex_colors['Col'].data[i].color = (group.mocv.vert_colors[loop.vertex_index][2] / 255,
                                                            group.mocv.vert_colors[loop.vertex_index][1] / 255,
                                                            group.mocv.vert_colors[loop.vertex_index][0] / 255,
