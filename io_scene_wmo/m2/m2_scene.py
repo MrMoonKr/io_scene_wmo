@@ -1582,6 +1582,10 @@ class BlenderM2Scene:
             else:
                 origin = get_origin_position()
 
+        # TODO: should we always do this?
+        if len(self.m2.root.key_bone_lookup) == 0:
+            self.m2.root.key_bone_lookup.append(-1)
+
     def save_animations(self,preset_bounds):
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
             self.m2.root.sequence_lookup.append(0xffff)
