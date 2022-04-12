@@ -8,8 +8,11 @@
             "src/bl_utils/mesh/wmo/batch_geometry.hpp"
         ],
         "extra_compile_args": [
-            "-std=c++17",
-            "-O3"
+            "-O3",
+            "-stdlib=libc++"
+        ],
+        "extra_link_args": [
+            "-stdlib=libc++"
         ],
         "include_dirs": [
             "src",
@@ -27,6 +30,7 @@
         "sources": [
             "src/wmo_utils.pyx",
             "src/bl_utils/math_utils.cpp",
+            "src/bl_utils/color_utils.cpp",
             "src/bl_utils/mesh/custom_data.cpp",
             "src/bl_utils/mesh/wmo/batch_geometry.cpp",
             "src/bl_utils/mesh/wmo/bsp_tree.cpp"

@@ -20,7 +20,3 @@ namespace wbs_kernel::bl_utils::color_utils
     return new_color;
   }
 }
-
-
-
-

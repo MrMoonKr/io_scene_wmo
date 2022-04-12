@@ -12,8 +12,11 @@
         ],
         "extra_compile_args": [
             "-std=c++17",
-            "-O0",
-            "-g"
+            "-O3",
+            "-stdlib=libc++"
+        ],
+        "extra_link_args": [
+            "-stdlib=libc++"
         ],
         "include_dirs": [
             "src",
