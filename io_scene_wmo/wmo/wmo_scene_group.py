@@ -733,64 +733,108 @@ class BlenderWMOSceneGroup:
     @staticmethod
     def try_calculate_direction(portal_obj: bpy.types.Object
                                 , portal_mesh_eval: bpy.types.Mesh
+                                , group_obj: bpy.types.Object
                                 , group_mesh: bpy.types.Mesh
                                 , bound_relation: PortalRelation
                                 , triangulated: bool = False) -> int:
 
-        normal = portal_mesh_eval.polygons[0].normal
-
         portal_polygons = portal_mesh_eval.polygons
+        mesh = group_obj.data
+        ray_cast_bias = 0.001  # sys.float_info.epsilon does not work here, ray cast origin returns itself.
+
         if triangulated:
             portal_mesh_eval.calc_loop_triangles()
             portal_polygons = portal_mesh_eval.loop_triangles
 
-        for poly in group_mesh.polygons:
-            poly_normal = mathutils.Vector(poly.normal)
-            g_center = poly.center + poly_normal * sys.float_info.epsilon
+        group_matrix_inv = group_obj.matrix_world.inverted()
 
-            any_face = portal_polygons[0]
-            dist = normal[0] * g_center[0] + normal[1] * g_center[1] \
-                   + normal[2] * g_center[2] - any_face.normal[0] \
-                   * portal_mesh_eval.vertices[any_face.vertices[0]].co[0] \
-                   - any_face.normal[1] \
-                   * portal_mesh_eval.vertices[any_face.vertices[0]].co[1] \
-                   - any_face.normal[2] \
-                   * portal_mesh_eval.vertices[any_face.vertices[0]].co[2]
+        for portal_poly in portal_polygons:
+            portal_normal = mathutils.Vector(portal_poly.normal)
+            portal_center = mathutils.Vector(portal_poly.center)
 
-            if dist == 0:
-                continue
+            portal_normal_gs = (group_matrix_inv @ portal_normal).normalized()
+            portal_center_gs = group_matrix_inv @ portal_center
 
-            for portal_poly in portal_polygons:
+            # cast a ray into object space to see if any face was hit
+            # using this hack we will avoid expensive calculations for many indoor-indoor relations.
 
-                direction = portal_poly.center - g_center
-                length = mathutils.Vector(direction).length
-                direction.normalize()
+            # first we cast alongside the normal vector
+            ray_cast_direction = portal_normal_gs
+            ray_cast_origin = portal_center_gs + ray_cast_direction * ray_cast_bias
+            result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
 
-                angle = mathutils.Vector(direction).angle(poly.normal, None)
+            if result and normal.dot(ray_cast_direction) < 0:
+                if bound_relation and bound_relation.side == 0:
+                    bound_relation.side = -1
 
-                if angle is None or angle >= pi * 0.5:
+                return 1
+
+            '''
+            # next we cast in the oppositve direction
+            ray_cast_direction = portal_normal_gs.copy()
+            ray_cast_direction.negate()
+            ray_cast_origin = portal_center_gs - ray_cast_direction * ray_cast_bias
+            result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
+
+            if result and normal.dot(ray_cast_direction) < 0:
+                if bound_relation and bound_relation.side == 0:
+                    bound_relation.side = 1
+
+                return -1
+                
+            '''
+
+            ray_cast_origin = (group_matrix_inv @ portal_center)
+
+            for mesh_poly in mesh.polygons:
+                is_in_portal_direction = portal_normal_gs.dot(mesh_poly.center - portal_center_gs) > 0.0
+                mesh_poly_normal = mathutils.Vector(mesh_poly.normal)
+                ray_cast_direction = mesh_poly.center - ray_cast_origin
+                ray_cast_direction.normalize()
+
+                # skip back faces
+                if mesh_poly_normal.dot(ray_cast_direction) >= 0.0:
                     continue
 
-                ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center,
-                                                             direction)
+                result, _, _, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
 
-                if not ray_cast_result[0] \
-                        or ray_cast_result[4].name == portal_obj.name \
-                        or mathutils.Vector(
-                    (ray_cast_result[1][0] - g_center[0], ray_cast_result[1][1] - g_center[1],
-                     ray_cast_result[1][2] - g_center[2])).length > length:
-                    result = 1 if dist > 0 else -1
+                if result and mesh_poly.index == index:
 
+                    # here we need to do a slower-space ray cast to determine if view is not obstructed by another
+                    # group. We expect to hit the same group in this pass. If not, view is considered obstructed.
+                    # It is okay though to hit collision, doodad or liquid of the same group. TODO: doodads
+
+                    depsgraph = bpy.context.evaluated_depsgraph_get()
+                    scene_ray_cast_origin = (portal_center + portal_normal * ray_cast_bias) \
+                        if is_in_portal_direction else (portal_center - portal_normal * ray_cast_bias)
+
+                    result, _, _, _, obj, _ = bpy.context.scene.ray_cast(depsgraph, scene_ray_cast_origin,
+                          (group_obj.matrix_world @ mesh_poly.center) - scene_ray_cast_origin)
+
+                    allowed_names = [
+                        group_obj.name
+                        , group_obj.wow_wmo_group.collision_mesh.name if group_obj.wow_wmo_group.collision_mesh else None
+                        , group_obj.wow_wmo_group.liquid_mesh.name if group_obj.wow_wmo_group.liquid_mesh else None
+                     ]
+
+                    if not result or obj.name not in allowed_names:
+                        # if obj: print(f"Ray casted from {portal_obj.name} to {group_obj.name}, but got {obj.name}")
+                        continue
+
+                    portal_dir = 1 if is_in_portal_direction else -1
+
+                    # fill in the other relation if it is a second attempt from the other side
                     if bound_relation and bound_relation.side == 0:
-                        bound_relation.side = -result
+                        bound_relation.side = -portal_dir
 
-                    return result
+                    return portal_dir
 
         return 0
 
     def get_portal_direction(self
                              , portal_obj: bpy.types.Object
                              , portal_mesh_eval: bpy.types.Mesh
+                             , group_obj: bpy.types.Object
                              , group_mesh_eval: bpy.types.Mesh) -> int:
         """ Get the direction of MOPR portal relation given a portal object and a target group """
 
@@ -808,13 +852,13 @@ class BlenderWMOSceneGroup:
         if portal_obj.wow_wmo_portal.algorithm != '0':
             return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval,
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval, group_obj,
                                                               group_mesh_eval, bound_relation)
 
         if result:
             return result
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval,
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval, group_obj,
                                                               group_mesh_eval, bound_relation, True)
 
         if result:

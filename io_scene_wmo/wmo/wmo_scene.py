@@ -770,7 +770,8 @@ class BlenderWMOScene:
                 relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.name \
                     else first.wow_wmo_group.group_id
 
-                relation.side = bl_group.get_portal_direction(portal_obj, portal_mesh, group_mesh_eval)
+                relation.side = bl_group.get_portal_direction(portal_obj, portal_mesh,
+                                                              group_obj.evaluated_get(depsgraph), group_mesh_eval)
 
                 self.wmo.mopr.relations.append(relation)
 
