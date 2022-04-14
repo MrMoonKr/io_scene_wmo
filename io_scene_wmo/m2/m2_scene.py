@@ -1631,7 +1631,7 @@ class BlenderM2Scene:
             else:
                 raise ValueError("Null action/object in animation " + wow_action.name)
 
-        def write_sequence(seq_id,wow_action,blender_action,armature):
+        def write_sequence(seq_id,wow_action,blender_action,armature,global_sequence_id):
             # Track pass 1: Collect data into more readable format
             armature_data = {} # {location|rotation|scale:{[timestamps]:<PointType>[]}}
             # TODO temp try/except to ignore weird curve names
@@ -1680,9 +1680,12 @@ class BlenderM2Scene:
                         track.values.add(M2Array(valueType))
                     return (track.timestamps[seq_id],track.values[seq_id])
 
+                # TODO: check if tracks are used by multiple global sequences (or mixing actions with global sequences)
+
                 if "rotation_quaternion" in tracks:
                     m2_bone.flags = m2_bone.flags | 512
                     m2_bone.rotation.interpolation_type = 1 # TODO: assumes linear, should be read
+                    m2_bone.rotation.global_sequence = global_sequence_id
                     (track_times,track_values) = prep_track(m2_bone.rotation,M2CompQuaternion)
                     for keyframe in tracks["rotation_quaternion"]:
                         def to_wow_quat(n):
@@ -1699,6 +1702,7 @@ class BlenderM2Scene:
                         )))
                 if "scale" in tracks:
                     m2_bone.flags = m2_bone.flags | 512
+                    m2_bone.scale.global_sequence = global_sequence_id
                     m2_bone.scale.interpolation_type = 1
                     (track_times,track_values) = prep_track(m2_bone.scale,vec3D)
                     for keyframe in tracks["scale"]:
@@ -1736,13 +1740,13 @@ class BlenderM2Scene:
             )
 
             if not is_alias:
-                highest_timestamp = write_sequence(seq_id,wow_action,blender_action,armature)
+                highest_timestamp = write_sequence(seq_id,wow_action,blender_action,armature,-1)
                 if highest_timestamp == 0:
                     self.m2.root.sequences[seq_id].duration = 0
 
         # 3. Write global sequences
         for i,(wow_action,blender_action,armature) in enumerate(global_sequences):
-            highest_timestamp = write_sequence(i,wow_action,blender_action,armature)
+            highest_timestamp = write_sequence(i,wow_action,blender_action,armature,i)
             if highest_timestamp == 0:
                 self.m2.root.global_sequences.append(0)
             else:
