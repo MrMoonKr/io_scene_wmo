@@ -68,6 +68,12 @@ portal_dir_alg_enum = [
     ("2", "Negative", "", 'REMOVE', 2)
 ]
 
+portal_detail_enum = [
+    ("0", "None", ""),
+    ("1", "First", ""),
+    ("2", "Second", "")
+]
+
 root_flags_enum = [
     ("0", "No Auto Attenuation", "Do not attenuate light on vertices based on distance from portal", 'NODE_TEXTURE', 0x1),
     ("1", "Do Not Use Lightmap", "", 'LIGHT_SUN', 0x2),

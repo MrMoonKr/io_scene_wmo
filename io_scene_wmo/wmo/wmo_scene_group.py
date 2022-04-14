@@ -656,6 +656,8 @@ class BlenderWMOSceneGroup:
         if nobj.wow_wmo_group.place_type == '8192':
             wmo_indoor_collection.objects.link(nobj)
 
+        self.bl_object = nobj
+
         # remove collision faces from mesh
         if collision_face_ids:
 

@@ -37,7 +37,7 @@ def _inspect_types_internal(method):
 
 
 class StrongTypingPolicy(IntEnum):
-    """ Sets parameters weak parameters for the StrongTyped metaclass"""
+    """ Sets weak parameters for the StrongTyped metaclass"""
     _UNDEFINED = 0
     MANUAL = 1
     AUTO = 2

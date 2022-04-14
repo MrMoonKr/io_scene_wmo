@@ -31,8 +31,10 @@ def VIEW3D_MT_show_imgui_example_overlay(self, context):
 
 
 def register():
-    bpy.types.VIEW3D_PT_gizmo_display.append(VIEW3D_MT_show_imgui_example_overlay)
+    pass
+    #bpy.types.VIEW3D_PT_gizmo_display.append(VIEW3D_MT_show_imgui_example_overlay)
 
 
 def unregister():
-    bpy.types.VIEW3D_PT_gizmo_display.remove(VIEW3D_MT_show_imgui_example_overlay)
+    pass
+    #bpy.types.VIEW3D_PT_gizmo_display.remove(VIEW3D_MT_show_imgui_example_overlay)

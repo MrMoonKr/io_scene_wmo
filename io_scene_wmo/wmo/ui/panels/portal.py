@@ -28,6 +28,9 @@ class WMO_PT_portal(bpy.types.Panel):
         col = layout.column()
 
         col.separator()
+        col.prop(context.object.wow_wmo_portal, "detail", expand=True)
+
+        col.separator()
         col.prop(context.object.wow_wmo_portal, "algorithm", expand=True)
 
         layout.enabled = context.object.wow_wmo_portal.enabled
@@ -67,6 +70,14 @@ class WowPortalPlanePropertyGroup(bpy.types.PropertyGroup):
         name="Second group",
         poll=lambda self, obj: obj.wow_wmo_group.enabled and self.first != obj and obj.name in bpy.context.scene.objects,
         update=portal_validator
+    )
+
+    detail: bpy.props.EnumProperty(
+        items=portal_detail_enum,
+        name="Detail",
+        description="Disable this group will only work as a target for the portal. "
+                    "See Stormwind cathedral for reference.",
+        default="0"
     )
 
     portal_id:  bpy.props.IntProperty(

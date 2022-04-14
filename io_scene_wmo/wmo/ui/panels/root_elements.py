@@ -8,7 +8,7 @@ from .group import WMO_PT_wmo_group
 from .light import WMO_PT_light
 from .material import WMO_PT_material, update_flags, update_shader
 from .portal import WMO_PT_portal
-from .utils import WMO_UL_root_elements_template_list, update_current_object, update_doodad_pointer, is_obj_unused
+from .utils import WMO_UL_scene_element_template_list, update_current_object, update_doodad_pointer, is_obj_unused
 from ..handlers import DepsgraphLock
 from .... import ui_icons
 
@@ -17,7 +17,7 @@ from .... import ui_icons
 ###### UI Lists ######
 ######################
 
-class WMO_UL_root_elements_doodadset_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_root_elements_doodadset_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index, flt_flag):
 
@@ -37,12 +37,12 @@ class WMO_UL_root_elements_doodadset_list(WMO_UL_root_elements_template_list, bp
             pass
 
 
-class WMO_UL_root_elements_groups_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_root_elements_groups_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
 
     icon = 'FILE_3D'
 
 
-class WMO_UL_root_elements_fogs_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_root_elements_fogs_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
 
     icon = 'MOD_FLUID'
 
@@ -67,18 +67,18 @@ class WMO_UL_root_elements_fogs_list(WMO_UL_root_elements_template_list, bpy.typ
             pass
 
 
-class WMO_UL_root_elements_portal_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_root_elements_portal_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
 
     icon = 'SELECT_SUBTRACT'
 
 
-class WMO_UL_root_elements_materials_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_root_elements_materials_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
 
     icon = 'MATERIAL_DYNAMIC'
 
 
 
-class WMO_UL_root_elements_lights_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_root_elements_lights_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
 
     icon = 'LIGHT'
 

@@ -46,6 +46,7 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int):
         wmo_scene.load_fogs()
         wmo_scene.load_groups()
         wmo_scene.load_portals()
+        wmo_scene.load_portal_relations()
         wmo_scene.load_doodads()
 
     # update visibility

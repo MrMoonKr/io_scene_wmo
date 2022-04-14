@@ -2,7 +2,7 @@ import bpy
 
 from collections import namedtuple
 
-from .utils import update_current_object, update_doodad_pointer, WMO_UL_root_elements_template_list
+from .utils import update_current_object, update_doodad_pointer, WMO_UL_scene_element_template_list
 from .doodad import WMO_PT_doodad
 
 
@@ -39,7 +39,7 @@ class WMO_OT_doodad_set_components_change(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WMO_UL_doodad_set_doodad_list(WMO_UL_root_elements_template_list, bpy.types.UIList):
+class WMO_UL_doodad_set_doodad_list(WMO_UL_scene_element_template_list, bpy.types.UIList):
     icon = 'FILE_VOLUME'
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index, flt_flag):

@@ -352,19 +352,6 @@ class BlenderWMOScene:
             obj = bpy.data.objects.new(portal_name, mesh)
 
             obj.wow_wmo_portal.enabled = True
-            first_relationship = True
-
-            for relation in self.wmo.mopr.relations:
-                if relation.portal_index == index:
-                    group_name = self.wmo.mogn.get_string(
-                        self.bl_groups[relation.group_index].wmo_group.mogp.group_name_ofs)
-
-                    if first_relationship:
-                        obj.wow_wmo_portal.first = bpy.context.scene.objects[group_name]
-                        first_relationship = False
-                    else:
-                        obj.wow_wmo_portal.second = bpy.context.scene.objects[group_name]
-                        break
 
             mesh.from_pydata(verts, [], faces)
 
@@ -393,6 +380,46 @@ class BlenderWMOScene:
                 scn.collection.children.link(portal_collection)
 
             portal_collection.objects.link(obj)
+
+    def load_portal_relations(self):
+        """
+            Load portal relations from MOPR data.
+            Note that portals do not have to have a pair of relations. They may be linked to just one group.
+            In that the portal works in a one-sided way. Example is floating cathedral exterior in Stormwind.
+        """
+
+        portal_relations = {}
+
+        for index, group in tqdm(list(enumerate(self.bl_groups)), desc='Importing portal relations', ascii=True):
+            portal_start = group.wmo_group.mogp.portal_start
+            portal_count = group.wmo_group.mogp.portal_count
+
+            if not portal_count:
+                continue
+
+            for i in range(portal_count):
+                relation = self.wmo.mopr.relations[portal_start + i]
+
+                # group from
+                this_portal_rels = portal_relations.setdefault(relation.portal_index, (set(), set()))
+                this_portal_rels[0].add(group.bl_object)
+                this_portal_rels[1].add(group.bl_object)
+
+                other_group = self.bl_groups[relation.group_index]
+                this_portal_rels[0].add(other_group.bl_object)
+
+        for portal_index, linked_groups in portal_relations.items():
+            assert(len(linked_groups) == 2 and f"Portal links {len(linked_groups)} groups. Expected 2.")
+            portal = self.bl_portals[portal_index]
+
+            l_linked_groups = list(linked_groups[0])
+            portal.wow_wmo_portal.first = l_linked_groups[0]
+            portal.wow_wmo_portal.second = l_linked_groups[1]
+
+            if portal.wow_wmo_portal.first not in linked_groups[1]:
+                portal.wow_wmo_portal.detail = "1"
+            elif portal.wow_wmo_portal.second not in linked_groups[1]:
+                portal.wow_wmo_portal.detail = "2"
 
     def load_properties(self):
         """ Load global WoW WMO properties """
@@ -464,14 +491,13 @@ class BlenderWMOScene:
             self.bl_portals.append(slot.pointer)
             slot.pointer.wow_wmo_portal.portal_id = i
 
-            if not slot.pointer.wow_wmo_portal.first or not slot.pointer.wow_wmo_portal.second:
-                raise ReferenceError('\nError: Portal \"{}\" points to a non-existing group.'.format(slot.pointer.name))
+            if slot.pointer.wow_wmo_portal.first:
+                rel = slot.pointer.wow_wmo_portal.first.wow_wmo_group.relations.portals.add()
+                rel.id = slot.pointer.name  # TODO: store pointer instead?
 
-            rel = slot.pointer.wow_wmo_portal.first.wow_wmo_group.relations.portals.add()
-            rel.id = slot.pointer.name  # TODO: store pointer instead?
-
-            rel = slot.pointer.wow_wmo_portal.second.wow_wmo_group.relations.portals.add()
-            rel.id = slot.pointer.name  # TODO: store pointer instead?
+            if slot.pointer.wow_wmo_portal.second:
+                rel = slot.pointer.wow_wmo_portal.second.wow_wmo_group.relations.portals.add()
+                rel.id = slot.pointer.name  # TODO: store pointer instead?
 
         # process fogs
         for i, slot in enumerate(root_elements.fogs):
@@ -761,8 +787,17 @@ class BlenderWMOScene:
                     self.wmo.mopt.infos[portal_index] = portal_info
                     saved_portals_ids.append(portal_index)
 
-                first = self.bl_portals[portal_index].wow_wmo_portal.first
-                second = self.bl_portals[portal_index].wow_wmo_portal.second
+                first = portal_obj.wow_wmo_portal.first
+                second = portal_obj.wow_wmo_portal.second
+
+                # skip detail groups (see e.g. Stormwind cathedral)
+                if portal_obj.wow_wmo_portal.detail != '0':
+                    if first.name == group_obj.name:
+                        if portal_obj.wow_wmo_portal.detail == '1':
+                            continue
+                    else:
+                        if portal_obj.wow_wmo_portal.detail == '2':
+                            continue
 
                 # calculating portal relation
                 relation = PortalRelation()
