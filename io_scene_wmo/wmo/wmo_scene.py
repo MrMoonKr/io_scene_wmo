@@ -819,15 +819,9 @@ class BlenderWMOScene:
                 self.groups_eval.append(mesh)
                 self.group_batch_params.append(params)
 
-    def clean_up_temp_meshes(self):
-        for mesh in tqdm(self.groups_eval, desc='Cleaning up temporary meshes', ascii=True):
-            bpy.data.meshes.remove(mesh)
-
     def save_groups(self):
         for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
             batcher = CWMOGeometryBatcher(self.group_batch_params)
-
-        self.clean_up_temp_meshes()
 
         for i, bl_group in enumerate(tqdm(self.bl_groups, desc='Saving groups', ascii=True)):
 

@@ -1001,57 +1001,35 @@ class BlenderWMOSceneGroup:
         group = self.wmo_group
         scene = bpy.context.scene
 
-        bpy.context.view_layer.objects.active = obj
         mesh = obj_eval.data
 
-        # apply transforms
-        for vert in mesh.vertices:
-            vert.co = obj_eval.matrix_world @ vert.co
+        # extremely important for accessing correct data in C++
+        mesh.calc_loop_triangles()
+        mesh.calc_normals()
 
         if mesh.has_custom_normals:
             mesh.calc_normals_split()
 
-        # create bmesh
-        bm = bmesh.new()
-        bm.from_mesh(mesh)
-
         # handle separate collision
+        col_obj_eval = None
+        col_mesh_eval = None
         if obj.wow_wmo_group.collision_mesh:
             col_obj_eval = obj.wow_wmo_group.collision_mesh.evaluated_get(depsgraph)
             col_mesh_eval = col_obj_eval.data
 
-            for vert in col_mesh_eval.vertices:
-                vert.co = col_obj_eval.matrix_world @ vert.co
+            # extremely important for accessing correct data in C++
+            col_mesh_eval.calc_loop_triangles()
+            col_mesh_eval.calc_normals()
 
-            for poly in col_mesh_eval.polygons:
-                poly.material_index = 32767
+            if col_mesh_eval.has_custom_normals:
+                mesh.calc_normals_split()
 
-            bm.from_mesh(col_mesh_eval)
-            bm.verts.ensure_lookup_table()
-            bm.faces.ensure_lookup_table()
+        if 'UVMap' not in mesh.uv_layers:
+            raise Exception('\nThe group \"{}\" must have a UV map layer named UVMap.'.format(obj.name))
 
-        # triangulate bmesh
-        bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
-
-        vertices = bm.verts
-        edges = bm.edges
-        faces = bm.faces
-
-        vertices.ensure_lookup_table()
-        edges.ensure_lookup_table()
-        faces.ensure_lookup_table()
-
-        if not bm.loops.layers.uv.get('UVMap'):
-            raise Exception('\nThe group \"{}\" must have a UV map layer.'.format(obj.name))
-
-        self.has_blending = bm.loops.layers.uv.get('UVMap.001') and bm.loops.layers.color.get('Blendmap')
+        self.has_blending = 'UVMap.001' in mesh.uv_layers and 'Blendmap' in mesh.vertex_colors
         if self.has_blending:
             group.add_blendmap_chunks()
-
-        mesh_final = bpy.data.meshes.new("Temp")
-        bm.to_mesh(mesh_final)
-        mesh_final.calc_normals()
-        bm.free()
 
         use_vertex_color = '0' in obj.wow_wmo_group.flags \
                            or (obj.wow_wmo_group.place_type == '8192' and '1' not in obj.wow_wmo_group.flags)
@@ -1075,12 +1053,15 @@ class BlenderWMOSceneGroup:
 
             material_mapping.append(mat_id)
 
-        return mesh_final, WMOGeometryBatcherMeshParams(mesh_final.as_pointer()
-                                                        , False
-                                                        , use_vertex_color
-                                                        , vg_collision_index
-                                                        , obj.wow_wmo_vertex_info.node_size
-                                                        , material_mapping)
+        return mesh, WMOGeometryBatcherMeshParams(mesh.as_pointer()
+                                                , obj_eval.matrix_world
+                                                , col_mesh_eval.as_pointer() if col_mesh_eval else 0
+                                                , col_obj_eval.matrix_world if col_obj_eval else None
+                                                , False
+                                                , use_vertex_color
+                                                , vg_collision_index
+                                                , obj.wow_wmo_vertex_info.node_size
+                                                , material_mapping)
 
     def save(self, batcher: CWMOGeometryBatcher, group_index: int):
         """ Save WoW WMO group data for future export """

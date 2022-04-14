@@ -21,8 +21,6 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 {
   class BSPTree;
 
-  inline constexpr short COLLISION_MAT_NR = 32767;
-
   enum MOBAFlags
   {
     FLAG_UNK = 0x1,
@@ -112,6 +110,9 @@ namespace wbs_kernel::bl_utils::mesh::wmo
   {
   public:
     WMOGeometryBatcher(std::uintptr_t mesh_ptr
+                       , const float* mesh_matrix_world
+                       , std::uintptr_t collision_mesh_ptr
+                       , const float* collision_mesh_matrix_world
                        , bool use_large_material_id
                        , bool use_vertex_color
                        , int vg_collision_index
@@ -182,9 +183,9 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     void _create_new_collision_vert(const MVert* vertex
                                    , const MLoop* loop);
 
-    void _create_new_collision_triangle(const MPoly* poly);
+    void _create_new_collision_triangle(const MLoopTri* tri);
 
-    void _create_new_render_triangle(const MPoly* poly, MOBABatch* cur_batch);
+    void _create_new_render_triangle(const MLoopTri* tri, MOBABatch* cur_batch);
 
     // Initalize
     void _unpack_vertex(BatchVertexInfo& v_info
@@ -211,7 +212,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     [[nodiscard]]
     bool _needs_new_batch(MOBABatch* cur_batch
-        , const MPoly* cur_poly
+        , const MLoopTri* cur_tri
         , BatchType cur_batch_type
         , BatchType cur_poly_batch_type
         , std::uint16_t cur_batch_mat_id);
@@ -226,12 +227,17 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     static bool comp_color_key(color_utils::RGBA const& color);
 
     [[nodiscard]]
-    static BatchType get_batch_type(const MPoly* poly
+    static BatchType get_batch_type(const MLoopTri* poly
         , const MLoopCol* batch_map_trans
         , const MLoopCol* batch_map_int);
 
 
     Mesh* _mesh;
+    Mesh* _collision_mesh;
+
+    glm::mat4 _mesh_mtx_world;
+    glm::mat4 _collision_mtx_world;
+
     std::vector<MOBABatch> _batches;
 
     std::vector<math_utils::Vector3D> _vertices;
@@ -265,6 +271,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     const MLoop* _bl_loops;
     const MVert* _bl_verts;
     const MPoly* _bl_polygons;
+    const MLoopTri* _bl_looptris;
     const float(*_bl_vertex_normals)[3];
 
     MLoopCol* _bl_batch_map_trans;
@@ -275,6 +282,12 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     MLoopUV* _bl_uv;
     MLoopUV* _bl_uv2;
     MDeformVert* _bl_vg_data;
+
+    // collision mesh data
+    const MLoop* _bl_col_loops;
+    const MVert* _bl_col_verts;
+    const MLoopTri* _bl_col_looptris;
+    const float(*_bl_col_vertex_normals)[3];
 
     BSPTree* _bsp_tree;
 

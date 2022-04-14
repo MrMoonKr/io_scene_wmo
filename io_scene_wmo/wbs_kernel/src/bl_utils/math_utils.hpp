@@ -3,6 +3,9 @@
 
 #include <cmath>
 #include <cassert>
+#include <extern/glm/mat4x4.hpp>
+#include <extern/glm/vec3.hpp>
+#include <extern/glm/vec4.hpp>
 
 extern "C"
 {
