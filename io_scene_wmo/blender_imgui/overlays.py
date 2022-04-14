@@ -49,8 +49,12 @@ class ImguiExampleOverlay(BlenderImguiOverlay):
 
 # -------------------------------------------------------------------
 
+
 def register():
-    register_overlay(ImguiExampleOverlay)
-    
+    pass
+    #register_overlay(ImguiExampleOverlay)
+
+
 def unregister():
-    unregister_overlay(ImguiExampleOverlay)
+    pass
+    #unregister_overlay(ImguiExampleOverlay)
