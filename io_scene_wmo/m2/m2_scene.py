@@ -1712,6 +1712,20 @@ class BlenderM2Scene:
                             keyframe["values"]["y"],
                             keyframe["values"]["z"],
                         ))
+
+                # TODO: this probably doesn't work if bone is not at 0,0,0
+                if "location" in tracks:
+                    m2_bone.flags = m2_bone.flags | 512
+                    m2_bone.translation.global_sequence = global_sequence_id
+                    m2_bone.translation.interpolation_type = 1
+                    (track_times,track_values) = prep_track(m2_bone.translation,vec3D)
+                    for keyframe in tracks["location"]:
+                        track_times.add(int((keyframe["timestamp"])/0.02666666))
+                        track_values.add((
+                            keyframe["values"]["x"],
+                            keyframe["values"]["y"],
+                            keyframe["values"]["z"],
+                        ))
             return highest_timestamp
 
         # 2. Write action sequences
