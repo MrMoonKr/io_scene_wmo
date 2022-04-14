@@ -94,10 +94,11 @@ cdef class CWMOGeometryBatcher:
 
         for x, py_param in enumerate(param_entries):
             group_matrix_world = <float *>malloc(16 * sizeof(float))
+            py_mesh_matrix_transposed = py_param.mesh_matrix_world.transposed()
 
             for j in range(4):
                 for k in range(4):
-                    group_matrix_world[j] = py_param.mesh_matrix_world[j][k]
+                    group_matrix_world[j] = py_param.py_mesh_matrix_transposed[j][k]
 
             self._c_params[x].mesh_matrix_world = group_matrix_world
 
@@ -105,10 +106,11 @@ cdef class CWMOGeometryBatcher:
                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
 
                 collision_matrix_world = <float *>malloc(16 * sizeof(float))
+                py_collision_matrix_transposed = py_param.collision_mesh_matrix_world.transposed()
 
                 for j in range(4):
                     for k in range(4):
-                        group_matrix_world[j] = py_param.collision_mesh_matrix_world[j][k]
+                        group_matrix_world[j] = py_param.py_collision_matrix_transposed[j][k]
 
                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
             else:
