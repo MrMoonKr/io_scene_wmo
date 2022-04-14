@@ -259,7 +259,7 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
   v_info.local_index = _vertices.size();
 
   glm::vec4 vertex_co_4 = glm::vec4(vertex->co[0], vertex->co[1], vertex->co[2], 0.f);
-  glm::vec3 vertex_co = glm::vec3(_collision_mtx_world * vertex_co_4);
+  glm::vec3 vertex_co = glm::vec3(_mesh_mtx_world * vertex_co_4);
 
   _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
   _normals.emplace_back(Vector3D{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],

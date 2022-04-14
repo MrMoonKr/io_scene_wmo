@@ -98,7 +98,7 @@ cdef class CWMOGeometryBatcher:
 
             for j in range(4):
                 for k in range(4):
-                    group_matrix_world[j] = py_param.py_mesh_matrix_transposed[j][k]
+                    group_matrix_world[j * 4 + k] = py_mesh_matrix_transposed[j][k]
 
             self._c_params[x].mesh_matrix_world = group_matrix_world
 
@@ -110,7 +110,7 @@ cdef class CWMOGeometryBatcher:
 
                 for j in range(4):
                     for k in range(4):
-                        group_matrix_world[j] = py_param.py_collision_matrix_transposed[j][k]
+                        collision_matrix_world[j * 4 + k] = py_collision_matrix_transposed[j][k]
 
                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
             else:
