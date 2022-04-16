@@ -42,6 +42,7 @@ class WMOGeometryBatcherMeshParams:
     collision_mesh_matrix_world: mathutils.Matrix
     use_large_material_id: bool
     use_vertex_color: bool
+    use_custom_normals: bool
     vg_collision_index: int
     node_size: int
     material_mapping: List[int]
@@ -53,6 +54,7 @@ class WMOGeometryBatcherMeshParams:
                 , collision_mesh_matrix_world: Optional[mathutils.Matrix]
                 , use_large_material_id: bool
                 , use_vertex_color: bool
+                , use_custom_normals: bool
                 , vg_collision_index: int
                 , node_size: int
                 , material_mapping: List[int]):
@@ -62,6 +64,7 @@ class WMOGeometryBatcherMeshParams:
         self.collision_mesh_matrix_world = collision_mesh_matrix_world
         self.use_large_material_id = use_large_material_id
         self.use_vertex_color = use_vertex_color
+        self.use_custom_normals = use_custom_normals
         self.vg_collision_index = vg_collision_index
         self.node_size = node_size
         self.material_mapping = material_mapping
@@ -73,6 +76,7 @@ cdef struct CWMOGeometryBatcherMeshParams:
     const float* collision_mesh_matrix_world
     bool use_large_material_id
     bool use_vertex_color
+    bool use_custom_normals
     int vg_collision_index
     int node_size
     vector[int] material_mapping
@@ -94,11 +98,11 @@ cdef class CWMOGeometryBatcher:
 
         for x, py_param in enumerate(param_entries):
             group_matrix_world = <float *>malloc(16 * sizeof(float))
-            py_mesh_matrix_transposed = py_param.mesh_matrix_world.transposed()
+            py_mesh_matrix_transposed = py_param.mesh_matrix_world
 
             for j in range(4):
                 for k in range(4):
-                    group_matrix_world[j * 4 + k] = py_mesh_matrix_transposed[j][k]
+                    group_matrix_world[k * 4 + j] = py_mesh_matrix_transposed[j][k]
 
             self._c_params[x].mesh_matrix_world = group_matrix_world
 
@@ -106,11 +110,11 @@ cdef class CWMOGeometryBatcher:
                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
 
                 collision_matrix_world = <float *>malloc(16 * sizeof(float))
-                py_collision_matrix_transposed = py_param.collision_mesh_matrix_world.transposed()
+                py_collision_matrix_transposed = py_param.collision_mesh_matrix_world
 
                 for j in range(4):
                     for k in range(4):
-                        collision_matrix_world[j * 4 + k] = py_collision_matrix_transposed[j][k]
+                        collision_matrix_world[k * 4 + j] = py_collision_matrix_transposed[j][k]
 
                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
             else:
@@ -120,6 +124,7 @@ cdef class CWMOGeometryBatcher:
             self._c_params[x].mesh_pointer = py_param.mesh_pointer
             self._c_params[x].use_large_material_id = py_param.use_large_material_id
             self._c_params[x].use_vertex_color = py_param.use_vertex_color
+            self._c_params[x].use_custom_normals = py_param.use_custom_normals
             self._c_params[x].vg_collision_index = py_param.vg_collision_index
             self._c_params[x].node_size = py_param.node_size
             self._c_params[x].material_mapping = py_param.material_mapping
@@ -133,6 +138,7 @@ cdef class CWMOGeometryBatcher:
                                                          , param.collision_mesh_matrix_world
                                                          , param.use_large_material_id
                                                          , param.use_vertex_color
+                                                         , param.use_custom_normals
                                                          , param.vg_collision_index
                                                          , param.node_size
                                                          , param.material_mapping)

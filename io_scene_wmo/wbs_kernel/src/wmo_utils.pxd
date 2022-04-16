@@ -25,6 +25,7 @@ cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh
                            , const float* collision_mesh_matrix_world
                            , bool use_large_material_id
                            , bool use_vertex_color
+                           , bool use_custom_normals
                            , int vg_collision_index
                            , unsigned node_size
                            , const vector[int]& material_mapping) nogil

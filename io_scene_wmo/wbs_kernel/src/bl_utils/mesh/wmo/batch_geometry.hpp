@@ -104,6 +104,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     color_utils::RGBA col2;
     math_utils::Vector2D uv;
     math_utils::Vector2D uv2;
+    math_utils::Vector3D loop_normal;
+
   };
 
   class WMOGeometryBatcher
@@ -115,6 +117,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
                        , const float* collision_mesh_matrix_world
                        , bool use_large_material_id
                        , bool use_vertex_color
+                       , bool use_custom_normals
                        , int vg_collision_index
                        , unsigned node_size
                        , std::vector<int> const& material_mapping
@@ -204,9 +207,9 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     [[nodiscard]]
     bool _is_vertex_collidable(unsigned vert_index);
 
-    void _calculate_bounding_for_vertex(const MVert* vertex);
+    void _calculate_bounding_for_vertex(glm::vec3 const& vertex);
 
-    void _calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, const MVert* vertex) const;
+    void _calculate_batch_bounding_for_vertex(MOBABatch* cur_batch,  glm::vec3 const& vertex) const;
 
     void _set_last_error(WMOGeometryBatcherError error) { _last_error = error; };
 
@@ -266,6 +269,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     bool _use_vertex_color;
     bool _use_large_material_id;
+    bool _use_custom_normals;
     bool _has_collision_vg;
 
     const MLoop* _bl_loops;
@@ -273,6 +277,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     const MPoly* _bl_polygons;
     const MLoopTri* _bl_looptris;
     const float(*_bl_vertex_normals)[3];
+    const float(*_bl_loop_normals)[3];
 
     MLoopCol* _bl_batch_map_trans;
     MLoopCol* _bl_batch_map_int;

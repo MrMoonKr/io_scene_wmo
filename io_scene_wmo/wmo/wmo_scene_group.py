@@ -20,7 +20,7 @@ from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshPa
 class BlenderWMOSceneGroup:
     def __init__(self, wmo_scene, wmo_group, obj=None):
         self.wmo_group: WMOGroupFile = wmo_group
-        self.wmo_scene: 'BlenderWMOSceneGroup' = wmo_scene
+        self.wmo_scene: 'BlenderWMOScene' = wmo_scene
         self.bl_object: bpy.types.Object = obj
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
         self.has_blending: bool = False
@@ -734,33 +734,42 @@ class BlenderWMOSceneGroup:
 
     @staticmethod
     def try_calculate_direction(portal_obj: bpy.types.Object
-                                , portal_mesh_eval: bpy.types.Mesh
                                 , group_obj: bpy.types.Object
-                                , group_mesh: bpy.types.Mesh
                                 , bound_relation: PortalRelation
                                 , triangulated: bool = False) -> int:
 
-        portal_polygons = portal_mesh_eval.polygons
+        portal_mesh = portal_obj.data
+        portal_polygons = portal_mesh.polygons
         mesh = group_obj.data
         ray_cast_bias = 0.001  # sys.float_info.epsilon does not work here, ray cast origin returns itself.
 
         if triangulated:
-            portal_mesh_eval.calc_loop_triangles()
-            portal_polygons = portal_mesh_eval.loop_triangles
+            portal_mesh.calc_loop_triangles()
+            portal_polygons = portal_mesh.loop_triangles
 
         group_matrix_inv = group_obj.matrix_world.inverted()
 
         for portal_poly in portal_polygons:
-            portal_normal = mathutils.Vector(portal_poly.normal)
-            portal_center = mathutils.Vector(portal_poly.center)
 
-            portal_normal_gs = (group_matrix_inv @ portal_normal).normalized()
+            portal_normal = portal_poly.normal.to_4d()
+            portal_normal.w = 0
+            portal_normal = (portal_obj.matrix_world @ portal_normal).to_3d().normalized()
+
+            portal_center = portal_obj.matrix_world @ mathutils.Vector(portal_poly.center)
+
+            portal_normal_gs = portal_normal.to_4d()
+            portal_normal_gs.w = 0
+            portal_normal_gs = (group_matrix_inv @ portal_normal_gs).to_3d().normalized()
             portal_center_gs = group_matrix_inv @ portal_center
 
             # cast a ray into object space to see if any face was hit
             # using this hack we will avoid expensive calculations for many indoor-indoor relations.
+            # note: this whole approach does not cover the situations of convoluted cases where the geometry of the
+            # group intersects the portal plane from both sides (e.g. Ironforge big hallway portals.
+            # For now the users will have to resolve the direction of such portals manually through GUI. TODO: fix?
 
             # first we cast alongside the normal vector
+
             ray_cast_direction = portal_normal_gs
             ray_cast_origin = portal_center_gs + ray_cast_direction * ray_cast_bias
             result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
@@ -771,7 +780,6 @@ class BlenderWMOSceneGroup:
 
                 return 1
 
-            '''
             # next we cast in the oppositve direction
             ray_cast_direction = portal_normal_gs.copy()
             ray_cast_direction.negate()
@@ -783,13 +791,11 @@ class BlenderWMOSceneGroup:
                     bound_relation.side = 1
 
                 return -1
-                
-            '''
 
-            ray_cast_origin = (group_matrix_inv @ portal_center)
+            ray_cast_origin = portal_center_gs
 
             for mesh_poly in mesh.polygons:
-                is_in_portal_direction = portal_normal_gs.dot(mesh_poly.center - portal_center_gs) > 0.0
+                is_in_portal_direction = portal_normal.dot((group_obj.matrix_world @ mesh_poly.center) - portal_center) > 0.0
                 mesh_poly_normal = mathutils.Vector(mesh_poly.normal)
                 ray_cast_direction = mesh_poly.center - ray_cast_origin
                 ray_cast_direction.normalize()
@@ -835,9 +841,7 @@ class BlenderWMOSceneGroup:
 
     def get_portal_direction(self
                              , portal_obj: bpy.types.Object
-                             , portal_mesh_eval: bpy.types.Mesh
-                             , group_obj: bpy.types.Object
-                             , group_mesh_eval: bpy.types.Mesh) -> int:
+                             , group_obj: bpy.types.Object) -> int:
         """ Get the direction of MOPR portal relation given a portal object and a target group """
 
         # check if this portal was already processed
@@ -854,14 +858,14 @@ class BlenderWMOSceneGroup:
         if portal_obj.wow_wmo_portal.algorithm != '0':
             return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval, group_obj,
-                                                              group_mesh_eval, bound_relation)
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, group_obj, bound_relation)
 
         if result:
             return result
 
-        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, portal_mesh_eval, group_obj,
-                                                              group_mesh_eval, bound_relation, True)
+        # if the previous attempt failed, we try to calculate the direction on a triangulated portal
+        # for that we use the loop tris to avoid overhead
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, group_obj, bound_relation, True)
 
         if result:
             return result
@@ -1054,14 +1058,15 @@ class BlenderWMOSceneGroup:
             material_mapping.append(mat_id)
 
         return mesh, WMOGeometryBatcherMeshParams(mesh.as_pointer()
-                                                , obj_eval.matrix_world
-                                                , col_mesh_eval.as_pointer() if col_mesh_eval else 0
-                                                , col_obj_eval.matrix_world if col_obj_eval else None
-                                                , False
-                                                , use_vertex_color
-                                                , vg_collision_index
-                                                , obj.wow_wmo_vertex_info.node_size
-                                                , material_mapping)
+                                                  , obj_eval.matrix_world
+                                                  , col_mesh_eval.as_pointer() if col_mesh_eval else 0
+                                                  , col_obj_eval.matrix_world if col_obj_eval else None
+                                                  , False  # TODO: use large material ID
+                                                  , use_vertex_color
+                                                  , mesh.has_custom_normals
+                                                  , vg_collision_index
+                                                  , obj.wow_wmo_vertex_info.node_size
+                                                  , material_mapping)
 
     def save(self, batcher: CWMOGeometryBatcher, group_index: int):
         """ Save WoW WMO group data for future export """
@@ -1125,7 +1130,6 @@ class BlenderWMOSceneGroup:
                 obj.wow_wmo_group.fog2,
                 obj.wow_wmo_group.fog3,
                 obj.wow_wmo_group.fog4)
-
 
         # set fog references
         self.wmo_group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,

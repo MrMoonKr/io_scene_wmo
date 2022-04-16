@@ -58,6 +58,16 @@ void* wbs_kernel::bl_utils::mesh::WBS_CustomData_get_layer(const CustomData* dat
   return data->layers[layer_index].data;
 }
 
+int wbs_kernel::bl_utils::mesh::WBS_CustomData_get_layer_index(const CustomData* data, int type)
+{
+  return data->typemap[type];
+}
+
+bool wbs_kernel::bl_utils::mesh::WBS_CustomData_has_layer(const CustomData* data, int type)
+{
+  return (wbs_kernel::bl_utils::mesh::WBS_CustomData_get_layer_index(data, type) != -1);
+}
+
 MDeformWeight* wbs_kernel::bl_utils::mesh::WBS_BKE_defvert_find_index(const MDeformVert* dvert, const int defgroup)
 {
   if (dvert && defgroup >= 0)
