@@ -112,9 +112,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
   {
   public:
     WMOGeometryBatcher(std::uintptr_t mesh_ptr
-                       , const float* mesh_matrix_world
                        , std::uintptr_t collision_mesh_ptr
-                       , const float* collision_mesh_matrix_world
                        , bool use_large_material_id
                        , bool use_vertex_color
                        , bool use_custom_normals
@@ -207,9 +205,9 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     [[nodiscard]]
     bool _is_vertex_collidable(unsigned vert_index);
 
-    void _calculate_bounding_for_vertex(glm::vec3 const& vertex);
+    void _calculate_bounding_for_vertex(const MVert* vertex);
 
-    void _calculate_batch_bounding_for_vertex(MOBABatch* cur_batch,  glm::vec3 const& vertex) const;
+    void _calculate_batch_bounding_for_vertex(MOBABatch* cur_batch,  const MVert* vertex) const;
 
     void _set_last_error(WMOGeometryBatcherError error) { _last_error = error; };
 
@@ -237,9 +235,6 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     Mesh* _mesh;
     Mesh* _collision_mesh;
-
-    glm::mat4 _mesh_mtx_world;
-    glm::mat4 _collision_mtx_world;
 
     std::vector<MOBABatch> _batches;
 

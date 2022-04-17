@@ -696,7 +696,7 @@ class BlenderWMOScene:
         return []
 
     @staticmethod
-    def sort_portal_vertices(vertices: List[BMVert], world_matrix: Matrix, normal: Vector) -> List[BMVert]:
+    def sort_portal_vertices(vertices: List[BMVert], normal: Vector) -> List[BMVert]:
 
         pos_n = Vector((0, 0, 0))
         origin = None
@@ -704,14 +704,14 @@ class BlenderWMOScene:
         for vtx in vertices:
             if len(vtx.link_edges) == 2 and origin is None:
                 origin = vtx
-            pos_n += (world_matrix @ vtx.co)
+            pos_n += vtx.co
 
         pos_n /= len(vertices)
         vtx_a = origin.link_edges[0].other_vert(origin)
         vtx_b = origin.link_edges[1].other_vert(origin)
-        vector_o = (world_matrix @ origin.co) - pos_n
-        next_vtx = vtx_b if BlenderWMOScene.get_angle((world_matrix @ vtx_a.co) - pos_n, vector_o, normal) \
-                            < BlenderWMOScene.get_angle((world_matrix @ vtx_b.co) - pos_n, vector_o, normal) else vtx_a
+        vector_o = origin.co - pos_n
+        next_vtx = vtx_b if BlenderWMOScene.get_angle(vtx_a.co - pos_n, vector_o, normal) \
+                            < BlenderWMOScene.get_angle( vtx_b.co - pos_n, vector_o, normal) else vtx_a
 
         # traversing mesh
         nodes_to_hit = list(vertices).copy()
@@ -733,6 +733,13 @@ class BlenderWMOScene:
         for bl_group, group_mesh_eval in tqdm(zip(self.bl_groups, self.groups_eval), desc='Saving portals', ascii=True):
 
             group_obj = bl_group.bl_object
+
+            # get eval obj and apply transformation
+            group_obj_eval = bl_group.bl_object.evaluated_get(depsgraph)
+            group_obj_eval.data.transform(group_obj_eval.matrix_world)
+            group_obj_eval.matrix_world.identity()
+            group_obj_eval.data.calc_normals()
+
             portal_relations = group_obj.wow_wmo_group.relations.portals
             bl_group.wmo_group.mogp.portal_start = len(self.wmo.mopr.relations)
 
@@ -740,6 +747,9 @@ class BlenderWMOScene:
                 portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
                 portal_index = portal_obj.wow_wmo_portal.portal_id
                 portal_mesh = portal_obj.data
+                portal_mesh.transform(portal_obj.matrix_world)
+                portal_obj.matrix_world.identity()
+                portal_mesh.calc_normals()
 
                 if portal_index not in saved_portals_ids:
 
@@ -751,14 +761,11 @@ class BlenderWMOScene:
                     bm.from_mesh(portal_mesh)
                     bm.verts.ensure_lookup_table()
 
-                    portal_normal = portal_mesh.polygons[0].normal.to_4d()
-                    portal_normal.w = 0
-                    portal_normal = (portal_obj.matrix_world @ portal_normal).to_3d().normalized()
-
-                    portal_verts = self.sort_portal_vertices(bm.verts, portal_obj.matrix_world, portal_normal)
+                    portal_normal = portal_mesh.polygons[0].normal
+                    portal_verts = self.sort_portal_vertices(bm.verts, portal_normal)
 
                     for vertex in portal_verts:
-                        vertex_pos = portal_obj.matrix_world @ vertex.co
+                        vertex_pos = vertex.co
                         self.wmo.mopv.portal_vertices.append(vertex_pos.to_tuple())
                         v.append(vertex_pos)
 
@@ -802,7 +809,7 @@ class BlenderWMOScene:
                 relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.name \
                     else first.wow_wmo_group.group_id
 
-                relation.side = bl_group.get_portal_direction(portal_obj, group_obj.evaluated_get(depsgraph))
+                relation.side = bl_group.get_portal_direction(portal_obj, group_obj_eval)
 
                 self.wmo.mopr.relations.append(relation)
 

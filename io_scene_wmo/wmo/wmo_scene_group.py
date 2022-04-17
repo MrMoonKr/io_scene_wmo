@@ -747,20 +747,11 @@ class BlenderWMOSceneGroup:
             portal_mesh.calc_loop_triangles()
             portal_polygons = portal_mesh.loop_triangles
 
-        group_matrix_inv = group_obj.matrix_world.inverted()
-
         for portal_poly in portal_polygons:
 
-            portal_normal = portal_poly.normal.to_4d()
-            portal_normal.w = 0
-            portal_normal = (portal_obj.matrix_world @ portal_normal).to_3d().normalized()
+            portal_normal = mathutils.Vector(portal_poly.normal)
+            portal_center = mathutils.Vector(portal_poly.center)
 
-            portal_center = portal_obj.matrix_world @ mathutils.Vector(portal_poly.center)
-
-            portal_normal_gs = portal_normal.to_4d()
-            portal_normal_gs.w = 0
-            portal_normal_gs = (group_matrix_inv @ portal_normal_gs).to_3d().normalized()
-            portal_center_gs = group_matrix_inv @ portal_center
 
             # cast a ray into object space to see if any face was hit
             # using this hack we will avoid expensive calculations for many indoor-indoor relations.
@@ -769,9 +760,8 @@ class BlenderWMOSceneGroup:
             # For now the users will have to resolve the direction of such portals manually through GUI. TODO: fix?
 
             # first we cast alongside the normal vector
-
-            ray_cast_direction = portal_normal_gs
-            ray_cast_origin = portal_center_gs + ray_cast_direction * ray_cast_bias
+            ray_cast_direction = portal_normal
+            ray_cast_origin = portal_center + ray_cast_direction * ray_cast_bias
             result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
 
             if result and normal.dot(ray_cast_direction) < 0:
@@ -781,9 +771,9 @@ class BlenderWMOSceneGroup:
                 return 1
 
             # next we cast in the oppositve direction
-            ray_cast_direction = portal_normal_gs.copy()
+            ray_cast_direction = portal_normal.copy()
             ray_cast_direction.negate()
-            ray_cast_origin = portal_center_gs - ray_cast_direction * ray_cast_bias
+            ray_cast_origin = portal_center - ray_cast_direction * ray_cast_bias
             result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
 
             if result and normal.dot(ray_cast_direction) < 0:
@@ -792,10 +782,10 @@ class BlenderWMOSceneGroup:
 
                 return -1
 
-            ray_cast_origin = portal_center_gs
+            ray_cast_origin = portal_center
 
             for mesh_poly in mesh.polygons:
-                is_in_portal_direction = portal_normal.dot((group_obj.matrix_world @ mesh_poly.center) - portal_center) > 0.0
+                is_in_portal_direction = portal_normal.dot(mesh_poly.center - portal_center) > 0.0
                 mesh_poly_normal = mathutils.Vector(mesh_poly.normal)
                 ray_cast_direction = mesh_poly.center - ray_cast_origin
                 ray_cast_direction.normalize()
@@ -817,7 +807,7 @@ class BlenderWMOSceneGroup:
                         if is_in_portal_direction else (portal_center - portal_normal * ray_cast_bias)
 
                     result, _, _, _, obj, _ = bpy.context.scene.ray_cast(depsgraph, scene_ray_cast_origin,
-                          (group_obj.matrix_world @ mesh_poly.center) - scene_ray_cast_origin)
+                          mesh_poly.center - scene_ray_cast_origin)
 
                     allowed_names = [
                         group_obj.name
@@ -1006,6 +996,7 @@ class BlenderWMOSceneGroup:
         scene = bpy.context.scene
 
         mesh = obj_eval.data
+        mesh.transform(obj_eval.matrix_world)
 
         # extremely important for accessing correct data in C++
         mesh.calc_loop_triangles()
@@ -1058,9 +1049,7 @@ class BlenderWMOSceneGroup:
             material_mapping.append(mat_id)
 
         return mesh, WMOGeometryBatcherMeshParams(mesh.as_pointer()
-                                                  , obj_eval.matrix_world
                                                   , col_mesh_eval.as_pointer() if col_mesh_eval else 0
-                                                  , col_obj_eval.matrix_world if col_obj_eval else None
                                                   , False  # TODO: use large material ID
                                                   , use_vertex_color
                                                   , mesh.has_custom_normals

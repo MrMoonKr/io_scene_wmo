@@ -23,9 +23,7 @@ using namespace wbs_kernel::bl_utils::mesh;
 
 
 WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
-  , const float* mesh_matrix_world
   , std::uintptr_t collision_mesh_ptr
-  , const float* collision_mesh_matrix_world
   , bool use_large_material_id
   , bool use_vertex_color
   , bool use_custom_normals
@@ -35,7 +33,6 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 
 )
 : _mesh(reinterpret_cast<Mesh*>(mesh_ptr))
-, _mesh_mtx_world(glm::make_mat4(mesh_matrix_world))
 , _bsp_tree(nullptr)
 , _trans_batch_count(0)
 , _int_batch_count(0)
@@ -80,9 +77,6 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     _bl_col_verts = _collision_mesh->mvert;
     _bl_col_vertex_normals = reinterpret_cast<const float(*)[3]>(_collision_mesh->runtime.vert_normals);
     _bl_col_looptris = _collision_mesh->runtime.looptris.array;
-
-    assert(collision_mesh_matrix_world && "Collision is present but its world matrix is nullptr.");
-    _collision_mtx_world = glm::make_mat4(collision_mesh_matrix_world);
   }
 
   if (_has_collision_vg)
@@ -241,15 +235,10 @@ void WMOGeometryBatcher::_create_new_collision_vert(const MVert* vertex
 {
   unsigned v_local_index = _vertices.size();
 
-  glm::vec4 vertex_co_4 = glm::vec4(vertex->co[0], vertex->co[1], vertex->co[2], 1.f);
-  glm::vec3 vertex_co = glm::vec3(_collision_mtx_world * vertex_co_4);
+  _vertices.emplace_back(Vector3D{vertex->co[0], vertex->co[1], vertex->co[2]});
 
-  _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
-
-  glm::vec4 normal_4 = glm::vec4{_bl_col_vertex_normals[loop->v][0], _bl_col_vertex_normals[loop->v][1],
-                                 _bl_col_vertex_normals[loop->v][2], 0.f};
-  glm::vec3 normal = glm::normalize(glm::vec3(_collision_mtx_world * normal_4));
-  _normals.emplace_back(Vector3D{normal.x, normal.y, normal.z});
+  _normals.emplace_back(Vector3D{_bl_col_vertex_normals[loop->v][0], _bl_col_vertex_normals[loop->v][1],
+                                 _bl_col_vertex_normals[loop->v][2]});
 
   _tex_coords.emplace_back(Vector2D{0.f, 0.f});
 
@@ -271,7 +260,7 @@ void WMOGeometryBatcher::_create_new_collision_vert(const MVert* vertex
   _triangle_indices.emplace_back(v_local_index);
   _collision_vertex_map[loop->v] = v_local_index;
 
-  _calculate_bounding_for_vertex(vertex_co);
+  _calculate_bounding_for_vertex(vertex);
 }
 
 void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
@@ -281,24 +270,19 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
 {
   v_info.local_index = _vertices.size();
 
-  glm::vec4 vertex_co_4 = glm::vec4(vertex->co[0], vertex->co[1], vertex->co[2], 1.f);
-  glm::vec3 vertex_co = glm::vec3(_mesh_mtx_world * vertex_co_4);
+  _vertices.emplace_back(Vector3D{vertex->co[0], vertex->co[1], vertex->co[2]});
 
-  _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
-
-  glm::vec4 normal_4;
+  glm::vec3 normal;
   if (_use_custom_normals)
   {
-    normal_4 = glm::vec4{v_info.loop_normal.x, v_info.loop_normal.y, v_info.loop_normal.z, 0.f};
-    _normals.emplace_back(v_info.loop_normal);
+    normal = glm::vec3{v_info.loop_normal.x, v_info.loop_normal.y, v_info.loop_normal.z};
   }
   else
   {
-    normal_4 = glm::vec4{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
-                         _bl_vertex_normals[loop->v][2], 0.f};
+    normal = glm::vec3{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
+                         _bl_vertex_normals[loop->v][2]};
   }
 
-  glm::vec3 normal = glm::normalize(glm::vec3(_mesh_mtx_world * normal_4));
   _normals.emplace_back(Vector3D{normal.x, normal.y, normal.z});
 
 
@@ -319,8 +303,8 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
 
   _cur_batch_vertex_map[loop->v].emplace_back(v_info);
 
-  _calculate_bounding_for_vertex(vertex_co);
-  _calculate_batch_bounding_for_vertex(cur_batch, vertex_co);
+  _calculate_bounding_for_vertex(vertex);
+  _calculate_batch_bounding_for_vertex(cur_batch, vertex);
 }
 
 
@@ -540,30 +524,30 @@ void WMOGeometryBatcher::_create_new_render_triangle(const MLoopTri* tri, MOBABa
   }
 }
 
-void WMOGeometryBatcher::_calculate_bounding_for_vertex(glm::vec3 const& vertex)
+void WMOGeometryBatcher::_calculate_bounding_for_vertex(const MVert*vertex)
 {
-  _bounding_box_min.x = std::min(_bounding_box_min.x, vertex[0]);
-  _bounding_box_min.y = std::min(_bounding_box_min.y, vertex[1]);
-  _bounding_box_min.z = std::min(_bounding_box_min.z, vertex[2]);
+  _bounding_box_min.x = std::min(_bounding_box_min.x, vertex->co[0]);
+  _bounding_box_min.y = std::min(_bounding_box_min.y, vertex->co[1]);
+  _bounding_box_min.z = std::min(_bounding_box_min.z, vertex->co[2]);
 
-  _bounding_box_max.x = std::max(_bounding_box_max.x, vertex[0]);
-  _bounding_box_max.y = std::max(_bounding_box_max.y, vertex[1]);
-  _bounding_box_max.z = std::max(_bounding_box_max.z, vertex[2]);
+  _bounding_box_max.x = std::max(_bounding_box_max.x, vertex->co[0]);
+  _bounding_box_max.y = std::max(_bounding_box_max.y, vertex->co[1]);
+  _bounding_box_max.z = std::max(_bounding_box_max.z, vertex->co[2]);
 }
 
-void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, glm::vec3 const& vertex) const
+void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, const MVert* vertex) const
 {
   // batch bounding box is not needed for newer clients supporting large material ids
   if (_use_large_material_id)
     return;
 
-  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(std::round(vertex[0])));
-  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(std::round(vertex[1])));
-  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(std::round(vertex[2])));
+  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(std::round(vertex->co[0])));
+  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(std::round(vertex->co[1])));
+  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(std::round(vertex->co[2])));
 
-  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(std::round(vertex[0])));
-  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(std::round(vertex[1])));
-  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(std::round(vertex[2])));
+  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(std::round(vertex->co[0])));
+  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(std::round(vertex->co[1])));
+  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(std::round(vertex->co[2])));
 }
 
 
