@@ -290,7 +290,6 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
   if (_use_custom_normals)
   {
     normal_4 = glm::vec4{v_info.loop_normal.x, v_info.loop_normal.y, v_info.loop_normal.z, 0.f};
-    _normals.emplace_back(v_info.loop_normal);
   }
   else
   {

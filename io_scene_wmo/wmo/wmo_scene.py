@@ -696,7 +696,7 @@ class BlenderWMOScene:
         return []
 
     @staticmethod
-    def sort_portal_vertices(vertices: List[BMVert], world_matrix: Matrix, normal: Vector) -> List[BMVert]:
+    def sort_portal_vertices(vertices: List[BMVert], normal: Vector) -> List[BMVert]:
 
         pos_n = Vector((0, 0, 0))
         origin = None
@@ -704,14 +704,14 @@ class BlenderWMOScene:
         for vtx in vertices:
             if len(vtx.link_edges) == 2 and origin is None:
                 origin = vtx
-            pos_n += (world_matrix @ vtx.co)
+            pos_n += (vtx.co)
 
         pos_n /= len(vertices)
         vtx_a = origin.link_edges[0].other_vert(origin)
         vtx_b = origin.link_edges[1].other_vert(origin)
-        vector_o = (world_matrix @ origin.co) - pos_n
-        next_vtx = vtx_b if BlenderWMOScene.get_angle((world_matrix @ vtx_a.co) - pos_n, vector_o, normal) \
-                            < BlenderWMOScene.get_angle((world_matrix @ vtx_b.co) - pos_n, vector_o, normal) else vtx_a
+        vector_o = (origin.co) - pos_n
+        next_vtx = vtx_b if BlenderWMOScene.get_angle((vtx_a.co) - pos_n, vector_o, normal) \
+                            < BlenderWMOScene.get_angle((vtx_b.co) - pos_n, vector_o, normal) else vtx_a
 
         # traversing mesh
         nodes_to_hit = list(vertices).copy()
@@ -738,7 +738,7 @@ class BlenderWMOScene:
 
             for relation in portal_relations:
                 portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
-                portal_index = portal_obj.wow_wmo_portal.portal_id
+                portal_index = portal_obj.original.wow_wmo_portal.portal_id
                 portal_mesh = portal_obj.data
 
                 if portal_index not in saved_portals_ids:
@@ -751,11 +751,9 @@ class BlenderWMOScene:
                     bm.from_mesh(portal_mesh)
                     bm.verts.ensure_lookup_table()
 
-                    portal_normal = portal_mesh.polygons[0].normal.to_4d()
-                    portal_normal.w = 0
-                    portal_normal = (portal_obj.matrix_world @ portal_normal).to_3d().normalized()
+                    portal_normal = portal_mesh.polygons[0].normal
 
-                    portal_verts = self.sort_portal_vertices(bm.verts, portal_obj.matrix_world, portal_normal)
+                    portal_verts = self.sort_portal_vertices(bm.verts, portal_normal)
 
                     for vertex in portal_verts:
                         vertex_pos = portal_obj.matrix_world @ vertex.co
@@ -784,22 +782,22 @@ class BlenderWMOScene:
                     self.wmo.mopt.infos[portal_index] = portal_info
                     saved_portals_ids.append(portal_index)
 
-                first = portal_obj.wow_wmo_portal.first
-                second = portal_obj.wow_wmo_portal.second
+                first = portal_obj.original.wow_wmo_portal.first
+                second = portal_obj.original.wow_wmo_portal.second
 
                 # skip detail groups (see e.g. Stormwind cathedral)
-                if portal_obj.wow_wmo_portal.detail != '0':
-                    if first.name == group_obj.name:
-                        if portal_obj.wow_wmo_portal.detail == '1':
+                if portal_obj.original.wow_wmo_portal.detail != '0':
+                    if first.name == group_obj.original.name:
+                        if portal_obj.original.wow_wmo_portal.detail == '1':
                             continue
                     else:
-                        if portal_obj.wow_wmo_portal.detail == '2':
+                        if portal_obj.original.wow_wmo_portal.detail == '2':
                             continue
 
                 # calculating portal relation
                 relation = PortalRelation()
                 relation.portal_index = portal_index
-                relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.name \
+                relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.original.name \
                     else first.wow_wmo_group.group_id
 
                 relation.side = bl_group.get_portal_direction(portal_obj, group_obj.evaluated_get(depsgraph))

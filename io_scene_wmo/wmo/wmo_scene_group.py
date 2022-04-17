@@ -751,16 +751,11 @@ class BlenderWMOSceneGroup:
 
         for portal_poly in portal_polygons:
 
-            portal_normal = portal_poly.normal.to_4d()
-            portal_normal.w = 0
-            portal_normal = (portal_obj.matrix_world @ portal_normal).to_3d().normalized()
-
+            portal_normal = portal_poly.normal
             portal_center = portal_obj.matrix_world @ mathutils.Vector(portal_poly.center)
 
-            portal_normal_gs = portal_normal.to_4d()
-            portal_normal_gs.w = 0
-            portal_normal_gs = (group_matrix_inv @ portal_normal_gs).to_3d().normalized()
-            portal_center_gs = group_matrix_inv @ portal_center
+            portal_normal_gs = portal_normal
+            portal_center_gs = portal_center
 
             # cast a ray into object space to see if any face was hit
             # using this hack we will avoid expensive calculations for many indoor-indoor relations.
@@ -820,9 +815,9 @@ class BlenderWMOSceneGroup:
                           (group_obj.matrix_world @ mesh_poly.center) - scene_ray_cast_origin)
 
                     allowed_names = [
-                        group_obj.name
-                        , group_obj.wow_wmo_group.collision_mesh.name if group_obj.wow_wmo_group.collision_mesh else None
-                        , group_obj.wow_wmo_group.liquid_mesh.name if group_obj.wow_wmo_group.liquid_mesh else None
+                        group_obj.original.name
+                        , group_obj.original.wow_wmo_group.collision_mesh.name if group_obj.original.wow_wmo_group.collision_mesh else None
+                        , group_obj.original.wow_wmo_group.liquid_mesh.name if group_obj.original.wow_wmo_group.liquid_mesh else None
                      ]
 
                     if not result or obj.name not in allowed_names:
@@ -848,15 +843,15 @@ class BlenderWMOSceneGroup:
         bound_relation_side = None
         bound_relation = None
         for relation in self.wmo_scene.wmo.mopr.relations:
-            if relation.portal_index == portal_obj.wow_wmo_portal.portal_id:
+            if relation.portal_index == portal_obj.original.wow_wmo_portal.portal_id:
                 bound_relation_side = relation.side
                 bound_relation = relation
 
         if bound_relation_side:
             return -bound_relation_side
 
-        if portal_obj.wow_wmo_portal.algorithm != '0':
-            return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
+        if portal_obj.original.wow_wmo_portal.algorithm != '0':
+            return 1 if portal_obj.original.wow_wmo_portal.algorithm == '1' else -1
 
         result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, group_obj, bound_relation)
 
