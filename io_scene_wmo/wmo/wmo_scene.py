@@ -751,9 +751,10 @@ class BlenderWMOScene:
                     bm.from_mesh(portal_mesh)
                     bm.verts.ensure_lookup_table()
 
-                    portal_normal = portal_mesh.polygons[0].normal
+                    portal_matrix_normal = portal_obj.matrix_world.to_3x3().transposed().inverted()
+                    portal_normal = (portal_matrix_normal @ portal_mesh.polygons[0].normal).normalized()
 
-                    portal_verts = self.sort_portal_vertices(bm.verts, portal_normal)
+                    portal_verts = self.sort_portal_vertices(bm.verts, portal_mesh.polygons[0].normal)
 
                     for vertex in portal_verts:
                         vertex_pos = portal_obj.matrix_world @ vertex.co

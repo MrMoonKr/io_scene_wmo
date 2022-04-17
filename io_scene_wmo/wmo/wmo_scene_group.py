@@ -748,14 +748,16 @@ class BlenderWMOSceneGroup:
             portal_polygons = portal_mesh.loop_triangles
 
         group_matrix_inv = group_obj.matrix_world.inverted()
+        portal_matrix_normal = portal_obj.matrix_world.to_3x3().transposed().inverted()
+        group_matrix_normal_inv = portal_obj.matrix_world.to_3x3().transposed()
 
         for portal_poly in portal_polygons:
 
-            portal_normal = portal_poly.normal
+            portal_normal = (portal_matrix_normal @ portal_poly.normal).normalized()
             portal_center = portal_obj.matrix_world @ mathutils.Vector(portal_poly.center)
 
-            portal_normal_gs = portal_normal
-            portal_center_gs = portal_center
+            portal_normal_gs = (group_matrix_normal_inv @ portal_normal).normalized()
+            portal_center_gs = group_matrix_inv @ portal_center
 
             # cast a ray into object space to see if any face was hit
             # using this hack we will avoid expensive calculations for many indoor-indoor relations.

@@ -246,9 +246,12 @@ void WMOGeometryBatcher::_create_new_collision_vert(const MVert* vertex
 
   _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
 
-  glm::vec4 normal_4 = glm::vec4{_bl_col_vertex_normals[loop->v][0], _bl_col_vertex_normals[loop->v][1],
-                                 _bl_col_vertex_normals[loop->v][2], 0.f};
-  glm::vec3 normal = glm::normalize(glm::vec3(_collision_mtx_world * normal_4));
+  glm::mat3 normal_mtx = glm::inverse(glm::transpose( glm::mat3(_collision_mtx_world)));
+
+  glm::vec3 normal = glm::vec3{_bl_col_vertex_normals[loop->v][0], _bl_col_vertex_normals[loop->v][1],
+                                 _bl_col_vertex_normals[loop->v][2]};
+  normal = glm::normalize(glm::vec3(normal_mtx * normal));
+
   _normals.emplace_back(Vector3D{normal.x, normal.y, normal.z});
 
   _tex_coords.emplace_back(Vector2D{0.f, 0.f});
@@ -286,18 +289,20 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
 
   _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
 
-  glm::vec4 normal_4;
+  glm::mat3 normal_mtx = glm::inverse(glm::transpose( glm::mat3(_mesh_mtx_world)));
+
+  glm::vec3 normal;
   if (_use_custom_normals)
   {
-    normal_4 = glm::vec4{v_info.loop_normal.x, v_info.loop_normal.y, v_info.loop_normal.z, 0.f};
+    normal = glm::vec4{v_info.loop_normal.x, v_info.loop_normal.y, v_info.loop_normal.z, 0.f};
   }
   else
   {
-    normal_4 = glm::vec4{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
+    normal = glm::vec4{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
                          _bl_vertex_normals[loop->v][2], 0.f};
   }
 
-  glm::vec3 normal = glm::normalize(glm::vec3(_mesh_mtx_world * normal_4));
+  normal = glm::normalize(normal_mtx * normal);
   _normals.emplace_back(Vector3D{normal.x, normal.y, normal.z});
 
 
