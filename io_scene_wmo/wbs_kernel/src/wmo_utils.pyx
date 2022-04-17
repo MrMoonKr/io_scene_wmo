@@ -37,7 +37,9 @@ class CWMOGeometryBatcherError(Enum):
 
 class WMOGeometryBatcherMeshParams:
     mesh_pointer: int
+    mesh_matrix_world: mathutils.Matrix
     collision_mesh_pointer: int
+    collision_mesh_matrix_world: mathutils.Matrix
     use_large_material_id: bool
     use_vertex_color: bool
     use_custom_normals: bool
@@ -47,7 +49,9 @@ class WMOGeometryBatcherMeshParams:
 
     def __init__(self
                 , mesh_pointer: int
+                , mesh_matrix_world: mathutils.Matrix
                 , collision_mesh_pointer: int
+                , collision_mesh_matrix_world: Optional[mathutils.Matrix]
                 , use_large_material_id: bool
                 , use_vertex_color: bool
                 , use_custom_normals: bool
@@ -55,7 +59,9 @@ class WMOGeometryBatcherMeshParams:
                 , node_size: int
                 , material_mapping: List[int]):
         self.mesh_pointer = mesh_pointer
+        self.mesh_matrix_world = mesh_matrix_world
         self.collision_mesh_pointer = collision_mesh_pointer
+        self.collision_mesh_matrix_world = collision_mesh_matrix_world
         self.use_large_material_id = use_large_material_id
         self.use_vertex_color = use_vertex_color
         self.use_custom_normals = use_custom_normals
@@ -65,7 +71,9 @@ class WMOGeometryBatcherMeshParams:
 
 cdef struct CWMOGeometryBatcherMeshParams:
     uintptr_t mesh_pointer
+    const float* mesh_matrix_world
     uintptr_t collision_mesh_pointer
+    const float* collision_mesh_matrix_world
     bool use_large_material_id
     bool use_vertex_color
     bool use_custom_normals
@@ -79,17 +87,39 @@ cdef class CWMOGeometryBatcher:
 
     def __cinit__(self, param_entries: List[WMOGeometryBatcherMeshParams]):
         cdef int n_groups = len(param_entries)
-        cdef int i,
+        cdef int i, j, k
+        cdef float* group_matrix_world
+        cdef float* collision_matrix_world
 
         self._c_params.resize(n_groups)
         self._c_batchers.resize(n_groups)
 
+        cdef vector[float*] matrices_temp
+
         for x, py_param in enumerate(param_entries):
+            group_matrix_world = <float *>malloc(16 * sizeof(float))
+            py_mesh_matrix_transposed = py_param.mesh_matrix_world
+
+            for j in range(4):
+                for k in range(4):
+                    group_matrix_world[k * 4 + j] = py_mesh_matrix_transposed[j][k]
+
+            self._c_params[x].mesh_matrix_world = group_matrix_world
 
             if py_param.collision_mesh_pointer:
                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
+
+                collision_matrix_world = <float *>malloc(16 * sizeof(float))
+                py_collision_matrix_transposed = py_param.collision_mesh_matrix_world
+
+                for j in range(4):
+                    for k in range(4):
+                        collision_matrix_world[k * 4 + j] = py_collision_matrix_transposed[j][k]
+
+                self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
             else:
                 self._c_params[x].collision_mesh_pointer = 0
+                self._c_params[x].collision_mesh_matrix_world = NULL
 
             self._c_params[x].mesh_pointer = py_param.mesh_pointer
             self._c_params[x].use_large_material_id = py_param.use_large_material_id
@@ -103,13 +133,22 @@ cdef class CWMOGeometryBatcher:
         for i in prange(n_groups, nogil=True):
             param = &self._c_params[i]
             self._c_batchers[i] = new WMOGeometryBatcher(param.mesh_pointer
+                                                         , param.mesh_matrix_world
                                                          , param.collision_mesh_pointer
+                                                         , param.collision_mesh_matrix_world
                                                          , param.use_large_material_id
                                                          , param.use_vertex_color
                                                          , param.use_custom_normals
                                                          , param.vg_collision_index
                                                          , param.node_size
                                                          , param.material_mapping)
+
+        cdef vector[float*].iterator it = matrices_temp.begin()
+        cdef WMOGeometryBatcher * ptr
+
+        while it != matrices_temp.end():
+            free(deref(it))
+            inc(it)
 
 
     def batches(self, group_index: int) -> Optional[bytes]:
