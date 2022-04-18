@@ -26,29 +26,6 @@ class BlenderWMOSceneGroup:
         self.has_blending: bool = False
 
     @staticmethod
-    def get_avg(list_):
-        """ Get single average normal vector from a split normal """
-        normal = [0.0, 0.0, 0.0]
-
-        for n in list_:
-            for i in range(0, 3):
-                normal[i] += n[i]
-
-        for i in range(0, 3):
-            normal[i] /= len(list_)
-
-        return normal
-
-    @staticmethod
-    def comp_colors(color1, color2):
-        """ Compare two colors """
-
-        for i in range(3):
-            if color1[i] != color2[i]:
-                return False
-        return True
-
-    @staticmethod
     def get_material_viewport_image(material):
         """ Get viewport image assigned to a material """
 
@@ -707,7 +684,8 @@ class BlenderWMOSceneGroup:
             ray_cast_origin = portal_center_gs
 
             for mesh_poly in mesh.polygons:
-                is_in_portal_direction = portal_normal.dot((group_obj.matrix_world @ mesh_poly.center) - portal_center) > 0.0
+                is_in_portal_direction = portal_normal.dot((group_obj.matrix_world
+                                                            @ mesh_poly.center) - portal_center) > 0.0
                 mesh_poly_normal = mathutils.Vector(mesh_poly.normal)
                 ray_cast_direction = mesh_poly.center - ray_cast_origin
                 ray_cast_direction.normalize()
@@ -733,8 +711,10 @@ class BlenderWMOSceneGroup:
 
                     allowed_names = [
                         group_obj.original.name
-                        , group_obj.original.wow_wmo_group.collision_mesh.name if group_obj.original.wow_wmo_group.collision_mesh else None
-                        , group_obj.original.wow_wmo_group.liquid_mesh.name if group_obj.original.wow_wmo_group.liquid_mesh else None
+                        , group_obj.original.wow_wmo_group.collision_mesh.name
+                        if group_obj.original.wow_wmo_group.collision_mesh else None
+                        , group_obj.original.wow_wmo_group.liquid_mesh.name
+                        if group_obj.original.wow_wmo_group.liquid_mesh else None
                      ]
 
                     if not result or obj.name not in allowed_names:
@@ -831,124 +811,6 @@ class BlenderWMOSceneGroup:
         params.is_water = not (group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2)
 
         return params
-
-
-    def save_liquid_old(self, ob: bpy.types.Object):
-
-        depsgraph = bpy.context.evaluated_depsgraph_get()
-        group = self.wmo_group
-
-        mesh = ob.data
-
-        # apply mesh transformations
-        active = bpy.context.view_layer.objects.active
-        bpy.context.view_layer.objects.active = ob
-        ob.select_set(True)
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        ob.select_set(False)
-        bpy.context.view_layer.objects.active = active
-
-        start_vertex = 0
-        sum = 0
-        for vertex in mesh.vertices:
-            cur_sum = vertex.co[0] + vertex.co[1]
-
-            if cur_sum < sum:
-                start_vertex = vertex.index
-                sum = cur_sum
-
-        group.mliq.x_tiles = round(ob.dimensions[0] / 4.1666625)
-        group.mliq.y_tiles = round(ob.dimensions[1] / 4.1666625)
-        group.mliq.x_verts = group.mliq.x_tiles + 1
-        group.mliq.y_verts = group.mliq.y_tiles + 1
-        group.mliq.position = mesh.vertices[start_vertex].co.to_tuple()
-
-        group.mogp.flags |= MOGPFlags.HasWater # do we really need that?
-
-        types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
-        types_2 = {4, 8, 12, 20, 21} # slime
-
-        diff_color = (int(ob.wow_wmo_liquid.color[2] * 255),
-                      int(ob.wow_wmo_liquid.color[1] * 255),
-                      int(ob.wow_wmo_liquid.color[0] * 255),
-                      int(ob.wow_wmo_liquid.color[3] * 255)
-                     )
-
-        try:
-            if not mesh.materials[0].wow_wmo_material.enabled:
-                raise exception()
-            group.mliq.material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
-                    mesh.materials[0].name)
-        except: # if no mat or if the mat isn't a wmo mat, create a new one
-            texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
-
-            if group.mogp.liquid_type in types_1:
-                texture1 = "DUNGEONS\\TEXTURES\\METAL\\BM_BRSPIRE_CATWALK01.BLP"
-
-            elif group.mogp.liquid_type in types_2:
-                texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
-
-            group.mliq.material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
-
-        if group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2:
-
-            if mesh.uv_layers.active:
-
-                uv_map = {}
-
-                for poly in mesh.polygons:
-                    for loop_index in poly.loop_indices:
-                        if mesh.loops[loop_index].vertex_index not in uv_map:
-                            uv_map[mesh.loops[loop_index].vertex_index] = mesh.uv_layers.active.data[loop_index].uv
-
-                for i in range(group.mliq.x_verts * group.mliq.y_verts):
-                    vertex = LiquidVertex()
-                    vertex.is_water = False
-                    group.mliq.is_water = False
-
-                    vertex.u = int(uv_map.get(mesh.vertices[i].index)[0] * 255)
-                    vertex.v = int(uv_map.get(mesh.vertices[i].index)[1] * 255)
-
-                    vertex.height = (ob.matrix_world @ mesh.vertices[i].co)[2]
-                    group.mliq.vertex_map.append(vertex)
-            else:
-                raise Exception("\nError saving WMO. Slime and magma (lava) liquids require a UV map to be created.")
-
-        else:
-
-            for j in range(group.mliq.x_verts * group.mliq.y_verts):
-                vertex = LiquidVertex()
-
-                vertex.height = mesh.vertices[j].co[2]
-                group.mliq.vertex_map.append(vertex)
-
-        for poly in mesh.polygons:
-            tile_flag = 0
-            blue = [0.0, 0.0, 1.0]
-
-            counter = 0
-            bit = 1
-            not_rendered = False
-            while bit <= 0x80:
-                vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
-
-                if bit == 0x1:
-                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
-                        not_rendered = True
-
-                if bit <= 0x8: # legacy/no render tile flags : set not rendered from layer 0
-                    if not_rendered:
-                        tile_flag |= bit
-                    # TODO : For vanilla/BC, set liquid type flags here
-                else:
-                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
-                        tile_flag |= bit
-
-                bit <<= 1
-
-                counter += 1
-
-            group.mliq.tile_flags.append(tile_flag)
 
     def create_batching_parameters(self) -> Tuple[bpy.types.Mesh, WMOGeometryBatcherMeshParams]:
         """ Prepare the WoW WMO group proxy mesh for export.
