@@ -20,6 +20,7 @@ struct MDeformVert;
 namespace wbs_kernel::bl_utils::mesh::wmo
 {
   class BSPTree;
+  class LiquidExporter;
 
   enum MOBAFlags
   {
@@ -108,6 +109,16 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
   };
 
+  struct LiquidParams
+  {
+    std::uintptr_t liquid_mesh;
+    const float* liquid_mesh_matrix_world;
+    unsigned x_tiles;
+    unsigned y_tiles;
+    unsigned mat_id;
+    bool is_water;
+  };
+
   class WMOGeometryBatcher
   {
   public:
@@ -121,6 +132,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
                        , int vg_collision_index
                        , unsigned node_size
                        , std::vector<int> const& material_mapping
+                       , const LiquidParams* liquid_params
     );
 
     ~WMOGeometryBatcher();
@@ -157,6 +169,15 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     [[nodiscard]]
     BufferKey bsp_faces();
+
+    [[nodiscard]]
+    BufferKey liquid_vertices();
+
+    [[nodiscard]]
+    BufferKey liquid_tiles();
+
+    [[nodiscard]]
+    BufferKey liquid_header();
 
     [[nodiscard]]
     std::uint16_t trans_batch_count() const { return _trans_batch_count; };
@@ -224,12 +245,6 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     static unsigned char _get_grayscale_factor(const MLoopCol* color);
 
     [[nodiscard]]
-    static bool _compare_colors(color_utils::RGBA const& v1, color_utils::RGBA const& v2);
-
-    [[nodiscard]]
-    static bool comp_color_key(color_utils::RGBA const& color);
-
-    [[nodiscard]]
     static BatchType get_batch_type(const MLoopTri* poly
         , const MLoopCol* batch_map_trans
         , const MLoopCol* batch_map_int);
@@ -295,6 +310,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     const float(*_bl_col_vertex_normals)[3];
 
     BSPTree* _bsp_tree;
+    LiquidExporter* _liquid_exporter;
 
 
   };

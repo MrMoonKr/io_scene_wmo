@@ -1,6 +1,7 @@
 #include "batch_geometry.hpp"
 #include <bl_utils/mesh/custom_data.hpp>
 #include <bl_utils/mesh/wmo/bsp_tree.hpp>
+#include <bl_utils/mesh/wmo/wmo_liquid_exporter.hpp>
 #include <extern/glm/gtc/type_ptr.hpp>
 
 #include <cassert>
@@ -32,11 +33,13 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   , int vg_collision_index
   , unsigned node_size
   , std::vector<int> const& material_mapping
+  , const LiquidParams* liquid_params
 
 )
 : _mesh(reinterpret_cast<Mesh*>(mesh_ptr))
 , _mesh_mtx_world(glm::make_mat4(mesh_matrix_world))
 , _bsp_tree(nullptr)
+, _liquid_exporter(nullptr)
 , _trans_batch_count(0)
 , _int_batch_count(0)
 , _ext_batch_count(0)
@@ -155,6 +158,17 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   // calculate BSP tree
   BoundingBox bb_box{_bounding_box_min, _bounding_box_max};
   _bsp_tree = new BSPTree{_vertices, _triangle_indices, bb_box, node_size};
+
+  // handle liquid
+  if (liquid_params)
+  {
+    _liquid_exporter = new LiquidExporter(liquid_params->liquid_mesh
+        , liquid_params->liquid_mesh_matrix_world
+        , liquid_params->x_tiles
+        , liquid_params->y_tiles
+        , liquid_params->mat_id
+        , liquid_params->is_water);
+  }
 }
 
 void WMOGeometryBatcher::_create_new_collision_triangle(const MLoopTri* tri)
@@ -344,8 +358,8 @@ bool WMOGeometryBatcher::_needs_new_vert(unsigned vert_index, BatchVertexInfo& c
   {
     if (!compare_v2v2(v_info.uv, cur_v_info.uv, STD_UV_CONNECT_LIMIT)
       || !compare_v2v2(v_info.uv2, cur_v_info.uv2, STD_UV_CONNECT_LIMIT)
-      || !_compare_colors(v_info.col, cur_v_info.col)
-      || !_compare_colors(v_info.col2, cur_v_info.col2))
+      || !compare_colors(v_info.col, cur_v_info.col)
+      || !compare_colors(v_info.col2, cur_v_info.col2))
     {
       continue;
     }
@@ -362,11 +376,6 @@ bool WMOGeometryBatcher::_needs_new_vert(unsigned vert_index, BatchVertexInfo& c
   return true;
 }
 
-bool WMOGeometryBatcher::_compare_colors(RGBA const& v1, RGBA const& v2)
-{
-  return v1.r == v2.r && v1.g == v2.g && v1.b == v2.b && v1.a == v2.a;
-}
-
 bool WMOGeometryBatcher::_needs_new_batch(MOBABatch* cur_batch
     , const MLoopTri* cur_tri
     , BatchType cur_batch_type
@@ -375,11 +384,6 @@ bool WMOGeometryBatcher::_needs_new_batch(MOBABatch* cur_batch
 {
   return !cur_batch || cur_batch_type != cur_poly_batch_type
     || _material_ids[_bl_polygons[cur_tri->poly].mat_nr] != cur_batch_mat_id;
-}
-
-bool WMOGeometryBatcher::comp_color_key(RGBA const& color)
-{
-  return color.r || color.b || color.g || color.a;
 }
 
 unsigned char WMOGeometryBatcher::_get_grayscale_factor(const MLoopCol* color)
@@ -405,7 +409,7 @@ BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly
       const MLoopCol* loop_col = &batch_map_trans[poly->tri[i]];
       RGBA color = {loop_col->r, loop_col->g, loop_col->b, loop_col->a};
 
-      if (WMOGeometryBatcher::comp_color_key(color))
+      if (comp_color_key(color))
       {
         trans_count++;
       }
@@ -417,7 +421,7 @@ BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly
       const MLoopCol* loop_col = &batch_map_int[poly->tri[i]];
       RGBA color = {loop_col->r, loop_col->g, loop_col->b, loop_col->a};
 
-      if (WMOGeometryBatcher::comp_color_key(color))
+      if (comp_color_key(color))
       {
         int_count++;
       }
@@ -632,5 +636,27 @@ BufferKey WMOGeometryBatcher::bsp_faces()
 WMOGeometryBatcher::~WMOGeometryBatcher()
 {
   delete _bsp_tree;
+  delete _liquid_exporter;
+}
+
+BufferKey WMOGeometryBatcher::liquid_vertices()
+{
+  assert(_liquid_exporter && "Attempted accessing liquid data, but not liquid params were provided.");
+  return {reinterpret_cast<char*>(_liquid_exporter->vertices().data()),
+          _liquid_exporter->vertices().size() * sizeof(SMOLVert)};
+}
+
+BufferKey WMOGeometryBatcher::liquid_tiles()
+{
+  assert(_liquid_exporter && "Attempted accessing liquid data, but not liquid params were provided.");
+  return {reinterpret_cast<char*>(_liquid_exporter->tiles().data()),
+          _liquid_exporter->tiles().size() * sizeof(SMOLTile)};
+
+}
+
+BufferKey WMOGeometryBatcher::liquid_header()
+{
+  assert(_liquid_exporter && "Attempted accessing liquid data, but not liquid params were provided.");
+  return {reinterpret_cast<char*>(&_liquid_exporter->header()), sizeof(MLIQHeader)};
 }
 

@@ -35,6 +35,14 @@ class CWMOGeometryBatcherError(Enum):
     LOOSE_MATERIAL_ID = 1
 
 
+class LiquidExportParams:
+    liquid_mesh_pointer: int
+    liquid_mesh_matrix_world: mathutils.Matrix
+    x_tiles: int
+    y_tiles: int
+    mat_id: int
+    is_water: bool
+
 class WMOGeometryBatcherMeshParams:
     mesh_pointer: int
     mesh_matrix_world: mathutils.Matrix
@@ -46,6 +54,7 @@ class WMOGeometryBatcherMeshParams:
     vg_collision_index: int
     node_size: int
     material_mapping: List[int]
+    liquid_params: Optional[LiquidExportParams]
 
     def __init__(self
                 , mesh_pointer: int
@@ -57,7 +66,8 @@ class WMOGeometryBatcherMeshParams:
                 , use_custom_normals: bool
                 , vg_collision_index: int
                 , node_size: int
-                , material_mapping: List[int]):
+                , material_mapping: List[int]
+                , liquid_params: LiquidExportParams):
         self.mesh_pointer = mesh_pointer
         self.mesh_matrix_world = mesh_matrix_world
         self.collision_mesh_pointer = collision_mesh_pointer
@@ -68,6 +78,7 @@ class WMOGeometryBatcherMeshParams:
         self.vg_collision_index = vg_collision_index
         self.node_size = node_size
         self.material_mapping = material_mapping
+        self.liquid_params = liquid_params
 
 cdef struct CWMOGeometryBatcherMeshParams:
     uintptr_t mesh_pointer
@@ -81,6 +92,9 @@ cdef struct CWMOGeometryBatcherMeshParams:
     int node_size
     vector[int] material_mapping
 
+    bool has_liquid
+    LiquidParams liquid_params
+
 cdef class CWMOGeometryBatcher:
     cdef vector[WMOGeometryBatcher*] _c_batchers
     cdef vector[CWMOGeometryBatcherMeshParams] _c_params
@@ -90,6 +104,7 @@ cdef class CWMOGeometryBatcher:
         cdef int i, j, k
         cdef float* group_matrix_world
         cdef float* collision_matrix_world
+        cdef float* liquid_matrix_world
 
         self._c_params.resize(n_groups)
         self._c_batchers.resize(n_groups)
@@ -97,24 +112,24 @@ cdef class CWMOGeometryBatcher:
         cdef vector[float*] matrices_temp
 
         for x, py_param in enumerate(param_entries):
-            group_matrix_world = <float *>malloc(16 * sizeof(float))
-            py_mesh_matrix_transposed = py_param.mesh_matrix_world
+            group_matrix_world = <float*>malloc(16 * sizeof(float))
+            matrices_temp.push_back(group_matrix_world)
 
             for j in range(4):
                 for k in range(4):
-                    group_matrix_world[k * 4 + j] = py_mesh_matrix_transposed[j][k]
+                    group_matrix_world[k * 4 + j] = py_param.mesh_matrix_world[j][k]
 
             self._c_params[x].mesh_matrix_world = group_matrix_world
 
             if py_param.collision_mesh_pointer:
                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
 
-                collision_matrix_world = <float *>malloc(16 * sizeof(float))
-                py_collision_matrix_transposed = py_param.collision_mesh_matrix_world
+                collision_matrix_world = <float*>malloc(16 * sizeof(float))
+                matrices_temp.push_back(collision_matrix_world)
 
                 for j in range(4):
                     for k in range(4):
-                        collision_matrix_world[k * 4 + j] = py_collision_matrix_transposed[j][k]
+                        collision_matrix_world[k * 4 + j] = py_param.collision_mesh_matrix_world[j][k]
 
                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
             else:
@@ -129,6 +144,25 @@ cdef class CWMOGeometryBatcher:
             self._c_params[x].node_size = py_param.node_size
             self._c_params[x].material_mapping = py_param.material_mapping
 
+            if py_param.liquid_params:
+                self._c_params[x].has_liquid = True
+                self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer
+                self._c_params[x].liquid_params.x_tiles = py_param.liquid_params.x_tiles
+                self._c_params[x].liquid_params.y_tiles = py_param.liquid_params.y_tiles
+                self._c_params[x].liquid_params.mat_id = py_param.liquid_params.mat_id
+                self._c_params[x].liquid_params.is_water = py_param.liquid_params.is_water
+
+                liquid_matrix_world = <float*>malloc(16 * sizeof(float))
+                matrices_temp.push_back(liquid_matrix_world)
+
+                for j in range(4):
+                    for k in range(4):
+                        liquid_matrix_world[k * 4 + j] = py_param.liquid_params.liquid_mesh_matrix_world[j][k]
+
+                self._c_params[x].liquid_params.liquid_mesh_matrix_world = liquid_matrix_world
+            else:
+                self._c_params[x].has_liquid = False
+
         cdef CWMOGeometryBatcherMeshParams* param
         for i in prange(n_groups, nogil=True):
             param = &self._c_params[i]
@@ -141,11 +175,13 @@ cdef class CWMOGeometryBatcher:
                                                          , param.use_custom_normals
                                                          , param.vg_collision_index
                                                          , param.node_size
-                                                         , param.material_mapping)
+                                                         , param.material_mapping
+                                                         , (&param.liquid_params) if param.has_liquid else NULL)
 
         cdef vector[float*].iterator it = matrices_temp.begin()
         cdef WMOGeometryBatcher * ptr
 
+        # free temporary matrices
         while it != matrices_temp.end():
             free(deref(it))
             inc(it)
@@ -238,6 +274,18 @@ cdef class CWMOGeometryBatcher:
             return None
 
         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
+
+    def liquid(self, group_index: int) -> bytes:
+        cdef BufferKey c_key_header = self._c_batchers[group_index].liquid_header()
+        header = PyMemoryView_FromMemory(c_key_header.data, c_key_header.size, PyBUF_READ).tobytes()
+
+        cdef BufferKey c_key_vertices = self._c_batchers[group_index].liquid_vertices()
+        vertices = PyMemoryView_FromMemory(c_key_vertices.data, c_key_vertices.size, PyBUF_READ).tobytes()
+
+        cdef BufferKey c_key_tiles = self._c_batchers[group_index].liquid_tiles()
+        tiles = PyMemoryView_FromMemory(c_key_tiles.data, c_key_tiles.size, PyBUF_READ).tobytes()
+
+        return header + vertices + tiles
 
     def batch_count_info(self, group_index: int) -> CBatchCountInfo:
         return CBatchCountInfo(self._c_batchers[group_index].trans_batch_count()

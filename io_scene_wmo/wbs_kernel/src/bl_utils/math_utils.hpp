@@ -14,6 +14,12 @@ extern "C"
 
 namespace wbs_kernel::bl_utils::math_utils
 {
+  struct Vector2Di
+  {
+    std::int32_t x;
+    std::int32_t y;
+  };
+
   struct Vector3D
   {
     float x;

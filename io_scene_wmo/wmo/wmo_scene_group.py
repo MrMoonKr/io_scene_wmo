@@ -14,7 +14,7 @@ from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
 from ..pywowlib import WoWVersionManager, WoWVersions
-from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams, LiquidExportParams
 
 
 class BlenderWMOSceneGroup:
@@ -49,96 +49,11 @@ class BlenderWMOSceneGroup:
         return True
 
     @staticmethod
-    def comp_colors_key(color1):
-        for i in range(len(color1)):
-            if color1[i] > 0:
-                return True
-        return False
-
-    @staticmethod
-    def get_batch_type(b_face, batch_map_trans, batch_map_int):
-        """ Find which MOBA batch type a passed bmesh face belongs two """
-
-        if not batch_map_trans and not batch_map_int:
-            return 2
-
-        trans_count = 0
-        int_count = 0
-
-        n_verts = len(b_face.loops)
-
-        for loop in b_face.loops:
-            if batch_map_trans and BlenderWMOSceneGroup.comp_colors_key(loop[batch_map_trans]):
-                trans_count += 1
-
-            if batch_map_int and BlenderWMOSceneGroup.comp_colors_key(loop[batch_map_int]):
-                int_count += 1
-
-        if trans_count == n_verts:
-            return 0
-        elif int_count == n_verts:
-            return 1
-        else:
-            return 2
-
-    @staticmethod
     def get_material_viewport_image(material):
         """ Get viewport image assigned to a material """
 
         if material.wow_wmo_material.diff_texture_1:
             return material.wow_wmo_material.diff_texture_1
-
-    @staticmethod
-    def get_linked_faces(b_face, face_batch_type, uv, uv2, batch_map_trans, batch_map_int, stack=len(inspect.stack())):
-        # check if face was already processed
-        if b_face.tag:
-            return []
-
-        f_linked = [b_face]
-        mat_idx = b_face.material_index
-        b_face.tag = True
-
-        # Select edges that link two faces
-        for link_edge in b_face.edges:
-            # check if edge is shared with another face
-            if not len(link_edge.link_faces) == 2:
-                continue
-
-            # prevent recursion stack overflow
-            if stack >= sys.getrecursionlimit() - 1:
-                break
-
-            for link_face in link_edge.link_faces:
-                # check if face was already processed and if it shares the same material
-                if link_face.tag or link_face.material_index != mat_idx:
-                    continue
-
-                # check if face is located within same UV island.
-                linked_uvs = 0
-                for loop in b_face.loops:
-
-                    for l_loop in loop.vert.link_loops:
-                        if l_loop.face is link_face:
-                            if isclose(l_loop[uv].uv[0], loop[uv].uv[0]) and isclose(l_loop[uv].uv[1], loop[uv].uv[1]):
-                                linked_uvs += 1
-                            if uv2 and isclose(l_loop[uv2].uv[0], loop[uv2].uv[0]) and isclose(l_loop[uv2].uv[1],
-                                                                                               loop[uv2].uv[1]):
-                                linked_uvs += 1
-
-                if (not uv2 and linked_uvs < 2) or (uv2 and linked_uvs < 4):
-                    continue
-
-                # check if face is located within the same batch
-                batch_type = BlenderWMOSceneGroup.get_batch_type(link_face, batch_map_trans, batch_map_int)
-
-                if batch_type != face_batch_type:
-                    continue
-
-                # call this function recursively on this face if all checks are passed
-                f_linked.extend(BlenderWMOSceneGroup.get_linked_faces(link_face, batch_type, uv, uv2, batch_map_trans,
-                                                                      batch_map_int, stack=stack + 1))
-
-        return f_linked
 
     def from_wmo_liquid_type(self, basic_liquid_type):
         """ Convert simplified WMO liquid type IDs to real LiquidType.dbc IDs """
@@ -873,8 +788,54 @@ class BlenderWMOSceneGroup:
 
         return 0
 
-    def save_liquid(self, ob: bpy.types.Object):
+    def save_liquid(self, obj: bpy.types.Object) -> LiquidExportParams:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        group = self.wmo_group
+        obj_eval = obj.evaluated_get(depsgraph)
+        mesh = obj_eval.data
 
+        params = LiquidExportParams()
+        params.liquid_mesh_pointer = mesh.as_pointer()
+        params.liquid_mesh_matrix_world = obj_eval.matrix_world
+        params.x_tiles = round(obj_eval.dimensions[0] / 4.1666625)
+        params.y_tiles = round(obj_eval.dimensions[1] / 4.1666625)
+
+        group.mogp.flags |= MOGPFlags.HasWater
+
+        types_1 = {3, 7, 11, 15, 19, 121, 141}  # lava
+        types_2 = {4, 8, 12, 20, 21}  # slime
+
+        diff_color = (int(obj.wow_wmo_liquid.color[2] * 255),
+                      int(obj.wow_wmo_liquid.color[1] * 255),
+                      int(obj.wow_wmo_liquid.color[0] * 255),
+                      int(obj.wow_wmo_liquid.color[3] * 255)
+                      )
+
+        if mesh.materials[0].wow_wmo_material.enabled:
+            material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+                mesh.materials[0].name)
+        else:
+            # if no mat or if the mat isn't a wmo mat, create a new one
+
+            texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
+
+            if group.mogp.liquid_type in types_1:
+                texture1 = "DUNGEONS\\TEXTURES\\METAL\\BM_BRSPIRE_CATWALK01.BLP"
+
+            elif group.mogp.liquid_type in types_2:
+                texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
+
+            material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
+
+        params.mat_id = material_id
+        params.is_water = not (group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2)
+
+        return params
+
+
+    def save_liquid_old(self, ob: bpy.types.Object):
+
+        depsgraph = bpy.context.evaluated_depsgraph_get()
         group = self.wmo_group
 
         mesh = ob.data
@@ -970,7 +931,7 @@ class BlenderWMOSceneGroup:
             not_rendered = False
             while bit <= 0x80:
                 vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
-                
+
                 if bit == 0x1:
                     if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
                         not_rendered = True
@@ -1054,6 +1015,8 @@ class BlenderWMOSceneGroup:
 
             material_mapping.append(mat_id)
 
+        liquid_params = self.save_liquid(obj.wow_wmo_group.liquid_mesh) if obj.wow_wmo_group.liquid_mesh else None
+
         return mesh, WMOGeometryBatcherMeshParams(mesh.as_pointer()
                                                   , obj_eval.matrix_world
                                                   , col_mesh_eval.as_pointer() if col_mesh_eval else 0
@@ -1063,7 +1026,8 @@ class BlenderWMOSceneGroup:
                                                   , mesh.has_custom_normals
                                                   , vg_collision_index
                                                   , obj.wow_wmo_vertex_info.node_size
-                                                  , material_mapping)
+                                                  , material_mapping
+                                                  , liquid_params)
 
     def save(self, batcher: CWMOGeometryBatcher, group_index: int):
         """ Save WoW WMO group data for future export """
@@ -1082,6 +1046,18 @@ class BlenderWMOSceneGroup:
         if self.has_blending:
             self.wmo_group.motv2.from_bytes(batcher.tex_coords2(group_index))
             self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2(group_index))
+
+        # save liquid
+        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
+        if obj.wow_wmo_group.liquid_mesh:
+            self.wmo_group.mliq.from_bytes(batcher.liquid(group_index))
+        else:
+            self.wmo_group.mliq = None
+            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
+            wow_version = int(bpy.context.scene.wow_scene.version)
+            if wow_version >= WoWVersions.WOTLK:
+                # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+                self.wmo_group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         # bsp = BSPTree()
         # bsp.generate_bsp(self.wmo_group.movt.vertices, self.wmo_group.movi.indices, obj.wow_wmo_vertex_info.node_size)
@@ -1170,18 +1146,6 @@ class BlenderWMOSceneGroup:
                     self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor
             else:
                 self.wmo_group.mocv = None
-        
-        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
-
-        if obj.wow_wmo_group.liquid_mesh:
-            self.save_liquid(obj.wow_wmo_group.liquid_mesh)
-        else:
-            self.wmo_group.mliq = None
-            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
-            wow_version = int(bpy.context.scene.wow_scene.version)
-            if wow_version >= WoWVersions.WOTLK:
-                # this flag causes wmo groups to fill with liquid if liquid type is not 0.
-                self.wmo_group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         if not has_lights:
             self.wmo_group.molr = None

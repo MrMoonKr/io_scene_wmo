@@ -51,6 +51,13 @@ namespace wbs_kernel::bl_utils::color_utils
     }
   };
 
+  [[nodiscard]]
+  bool compare_colors(color_utils::RGBA const& v1, color_utils::RGBA const& v2);
+
+  [[nodiscard]]
+  bool comp_color_key(color_utils::RGBA const& color);
+
+  [[nodiscard]]
   RGBA SRGB_to_linear(RGBA const& color);
 }
 

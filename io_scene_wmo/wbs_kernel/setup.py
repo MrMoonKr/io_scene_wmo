@@ -64,7 +64,8 @@ def main(debug: bool):
         "src/bl_utils/color_utils.cpp",
         "src/bl_utils/mesh/custom_data.cpp",
         "src/bl_utils/mesh/wmo/batch_geometry.cpp",
-        "src/bl_utils/mesh/wmo/bsp_tree.cpp"
+        "src/bl_utils/mesh/wmo/bsp_tree.cpp",
+        "src/bl_utils/mesh/wmo/wmo_liquid_exporter.cpp"
     ]
 
     wmo_utils_include_dirs = [

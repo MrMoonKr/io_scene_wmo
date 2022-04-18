@@ -19,4 +19,14 @@ namespace wbs_kernel::bl_utils::color_utils
 
     return new_color;
   }
+
+  bool compare_colors(RGBA const& v1, RGBA const& v2)
+  {
+    return v1.r == v2.r && v1.g == v2.g && v1.b == v2.b && v1.a == v2.a;
+  }
+
+  bool comp_color_key(RGBA const& color)
+  {
+    return color.r || color.b || color.g || color.a;
+  }
 }

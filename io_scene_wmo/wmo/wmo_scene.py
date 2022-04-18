@@ -458,7 +458,7 @@ class BlenderWMOScene:
         root_elements = bpy.context.scene.wow_wmo_root_elements
 
         # process materials
-        for i, slot in enumerate(root_elements.materials):
+        for i, slot in tqdm(enumerate(root_elements.materials), desc='Building material references', ascii=True):
             if not slot.pointer:
                 raise ReferenceError('\nError: Material slot does not point to a valid material.')
 
@@ -466,7 +466,7 @@ class BlenderWMOScene:
 
         # process groups
         group_objects = []
-        for i, slot in enumerate(root_elements.groups):
+        for i, slot in tqdm(enumerate(root_elements.groups), desc='Building group references', ascii=True):
 
             if not slot.pointer:
                 raise ReferenceError('\nError: Group slot \"#{}\" is empty or pointing to an invalid object.')
@@ -487,7 +487,7 @@ class BlenderWMOScene:
             group.export = not (export_method == 'PARTIAL' and not slot.export)
 
         # process portals
-        for i, slot in enumerate(root_elements.portals):
+        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building portal references', ascii=True):
             self.bl_portals.append(slot.pointer)
             slot.pointer.wow_wmo_portal.portal_id = i
 
@@ -500,12 +500,12 @@ class BlenderWMOScene:
                 rel.id = slot.pointer.name  # TODO: store pointer instead?
 
         # process fogs
-        for i, slot in enumerate(root_elements.fogs):
+        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building fog references', ascii=True):
             self.bl_fogs.append(slot.pointer)
             slot.pointer.wow_wmo_fog.fog_id = i
 
         # process lights
-        for i, slot in enumerate(root_elements.lights):
+        for i, slot in tqdm(enumerate(root_elements.lights), desc='Building light references', ascii=True):
             group = find_nearest_object(slot.pointer, group_objects)
             rel = group.wow_wmo_group.relations.lights.add()
             rel.id = i
@@ -514,14 +514,13 @@ class BlenderWMOScene:
 
         # process doodads
         doodad_counter = 0
-        for i, slot in enumerate(root_elements.doodad_sets):
+        for i, slot in tqdm(enumerate(root_elements.doodad_sets), desc='Building doodad references', ascii=True):
 
             doodads = []
             for doodad in slot.doodads:
                 if not doodad.pointer:
-                    print("Skipping bugged doodad reference")
-                    # raise Exception("Error : Doodad reference is linked with a non existing object, check and fix your doodad references.")
-                    continue
+                    raise Exception("Error : Doodad reference is linked with a non existing object, "
+                                    "check and fix your doodad references.")
                     
                 group = find_nearest_object(doodad.pointer, group_objects)
                 rel = group.wow_wmo_group.relations.doodads.add()
@@ -535,10 +534,10 @@ class BlenderWMOScene:
     def save_materials(self):
         """ Add material if not already added, then return index in root file """
 
-        for i, mat_slot in tqdm( enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
-                                         , desc='Saving materials'
-                                         , ascii=True
-                                         ):
+        for i, mat_slot in tqdm(enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
+                                , desc='Saving materials'
+                                , ascii=True
+                                ):
 
             mat = mat_slot.pointer
 
