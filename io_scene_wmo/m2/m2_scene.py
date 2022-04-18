@@ -1329,11 +1329,17 @@ class BlenderM2Scene:
         else:
             print("\nImporting cameras.")
 
+        camera_names = {
+            0: "PortraitCam",
+            1: "CharInfoCam",
+            -1: "MiscCam"
+        }
+
         for camera in self.m2.root.cameras:
 
             # create camera object
-            cam = bpy.data.cameras.new('Camera')
-            obj = bpy.data.objects.new('Camera', cam)
+            cam = bpy.data.cameras.new(camera_names[camera.type])
+            obj = bpy.data.objects.new(camera_names[camera.type], cam)
             bpy.context.collection.objects.link(obj)
 
             obj.location = camera.position_base
