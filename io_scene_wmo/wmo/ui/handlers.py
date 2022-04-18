@@ -148,232 +148,267 @@ wmo_render_flag_map = {
     'Blendmap': BlenderWMOObjectRenderFlags.HasBlendmap
 }
 
+
+def sync_active_root_items_collection_items(act_obj: bpy.types.Object):
+    root_comps = bpy.context.scene.wow_wmo_root_elements
+
+    if act_obj.wow_wmo_group.enabled:
+        slot_idx = root_comps.groups.find(act_obj.name)
+        root_comps.cur_group = slot_idx
+
+    elif act_obj.wow_wmo_fog.enabled:
+        slot_idx = root_comps.fogs.find(act_obj.name)
+        root_comps.cur_fog = slot_idx
+
+    elif act_obj.wow_wmo_light.enabled:
+        slot_idx = root_comps.lights.find(act_obj.name)
+        root_comps.cur_light = slot_idx
+
+    elif act_obj.wow_wmo_portal.enabled:
+        slot_idx = root_comps.portals.find(act_obj.name)
+        root_comps.cur_portal = slot_idx
+
+    elif act_obj.wow_wmo_doodad.enabled:
+        d_set = root_comps.doodad_sets[root_comps.cur_doodad_set]
+
+        if d_set.pointer:
+            slot_idx = d_set.doodads.find(act_obj.name)
+
+            if slot_idx >= 0:
+                d_set.cur_doodad = slot_idx
+
+
+def sync_root_items_collections():
+    n_objs = len(bpy.context.scene.objects)
+
+    if n_objs == bpy.app.driver_namespace["n_scene_objects"]:
+        return
+
+    if n_objs < bpy.app.driver_namespace["n_scene_objects"]:
+        bpy.app.driver_namespace["n_scene_objects"] = n_objs
+
+        _remove_col_items(bpy.context.scene, 'groups')
+        _remove_col_items(bpy.context.scene, 'portals')
+        _remove_col_items(bpy.context.scene, 'fogs')
+        _remove_col_items(bpy.context.scene, 'lights')
+        _remove_col_items(bpy.context.scene, 'doodad_sets')
+        _remove_col_items_doodads(bpy.context.scene)
+
+    else:
+        bpy.app.driver_namespace["n_scene_objects"] = n_objs
+        _add_col_items(bpy.context.scene)
+
+
+def handle_scene_update():
+    if bpy.context.view_layer.objects.active and bpy.context.view_layer.objects.active.select_get():
+        act_obj = bpy.context.view_layer.objects.active
+        if act_obj:
+            sync_active_root_items_collection_items(act_obj)
+
+    sync_root_items_collections()
+
+
+def handle_material_update(update):
+    mat = bpy.data.materials[update.id.name, update.id.library]
+
+    if mat.wow_wmo_material.enabled \
+            and bpy.context.scene.wow_wmo_root_elements.materials.find(mat.name) < 0:
+        mat.wow_wmo_material.enabled = False
+        slot = bpy.context.scene.wow_wmo_root_elements.materials.add()
+        slot.pointer = mat
+
+
+def handle_mesh_update(update) -> bool:
+    delete = False
+
+    if update.id.wow_wmo_doodad.enabled:
+        delete = handle_doodad_update(update)
+
+    elif update.id.wow_wmo_liquid.enabled:
+        handle_liquid_update(update)
+
+    elif update.id.wow_wmo_fog.enabled:
+        handle_fog_update(update)
+
+    elif update.id.wow_wmo_group.enabled:
+        handle_group_update(update)
+
+    return delete
+
+
+def handle_group_update(update):
+    obj = bpy.data.objects[update.id.name, update.id.library]
+    mesh = obj.data
+
+    for col_name, flag in wmo_render_flag_map.items():
+        col = mesh.vertex_colors.get(col_name)
+
+        if col:
+            obj.pass_index |= flag
+        else:
+            obj.pass_index &= ~flag
+
+    if obj.mode == 'EDIT':
+        bm = bmesh.from_edit_mesh(mesh)
+
+        if bm.faces.active:
+
+            root_elements = bpy.context.scene.wow_wmo_root_elements
+            mat_index_active = bm.faces.active.material_index
+
+            if mesh.materials:
+                mat_index = root_elements.materials.find(mesh.materials[mat_index_active].name)
+
+                if mat_index >= 0 and root_elements.cur_material != mat_index:
+                    with DepsgraphLock():
+                        root_elements.cur_material = mat_index
+
+    if update.is_updated_geometry:
+        group_entry = bpy.context.scene.wow_wmo_root_elements.groups.get(obj.name)
+
+        if group_entry:  # TODO: find out why there is a possible WMO group not in the list yet.
+            group_entry.export = True
+
+
+def handle_fog_update(update):
+    obj = bpy.data.objects[update.id.name, update.id.library]
+
+    with DepsgraphLock():
+        # enforce object mode
+        if obj.mode != 'OBJECT':
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def handle_liquid_update(update):
+    obj = bpy.data.objects[update.id.name, update.id.library]
+
+    if obj.mode == 'EDIT':
+        win = bpy.context.window
+
+        # avoid focusing settings window if left open
+        if win.screen.name == 'temp':
+
+            for win_ in bpy.context.window_manager.windows:
+                if win_.screen.name != 'temp':
+                    win = win_
+
+        scr = win.screen
+        areas3d = [area for area in scr.areas if area.type == 'VIEW_3D']
+        region = [region for region in areas3d[0].regions if region.type == 'WINDOW'][0]
+        space = [space for space in areas3d[0].regions if space.type == 'VIEW_3D']
+
+        override = {'window': win,
+                    'screen': scr,
+                    'area': areas3d[0],
+                    'region': region,
+                    'scene': bpy.context.scene,
+                    'workspace': bpy.context.workspace,
+                    'space_data': space,
+                    'region_data': region
+                    }
+
+        # we need a timer here to prevent operator recognizing tab event as exit
+        bpy.app.timers.register(partial(_liquid_edit_mode_timer, override), first_interval=0.1)
+
+    # enforce object mode or sculpt mode
+    elif obj.mode not in ('OBJECT', 'SCULPT', 'EDIT', 'VERTEX_PAINT'):
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    # enforce Z plane for sculpting brushes
+    if obj.mode == 'SCULPT':
+        for brush in bpy.data.brushes:
+            brush.sculpt_plane = 'Z'
+
+    obj.scale = (1, 1, 1)
+    obj.rotation_mode = 'XYZ'
+    obj.rotation_euler = (0, 0, 0)
+
+    # remove modifiers
+    if len(obj.modifiers):
+        obj.modifiers.clear()
+
+
+def handle_doodad_update(update) -> bool:
+    delete = False
+    obj = bpy.data.objects[update.id.name, update.id.library]
+
+    # handle object copies
+    if obj.active_material:
+        if obj.active_material.users > 1:
+            for i, mat in enumerate(obj.data.materials):
+                mat = mat.copy()
+                obj.data.materials[i] = mat
+                is_duplicated = True
+
+    if is_duplicated:
+        return delete
+
+    # enforce object mode
+    if obj.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    # remove modifiers
+    if len(obj.modifiers):
+        obj.modifiers.clear()
+
+    # delete if object was processed by a specific operator
+    if bpy.context.window_manager.operators \
+            and bpy.context.window_manager.operators[-1].bl_idname in banned_ops:
+        delete = True
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    if update.is_updated_transform:
+        # check if object is scaled evenly
+        max_scale = 0.0
+        for j in range(3):
+            if obj.scale[j] > max_scale:
+                max_scale = obj.scale[j]
+
+        obj.scale = (max_scale, max_scale, max_scale)
+
+    return delete
+
+
 @persistent
 def on_depsgraph_update(_):
     if DepsgraphLock().DEPSGRAPH_UPDATE_LOCK:
         return
 
-    delete = False
-    is_duplicated = False
+    delete_msg = False
+    with DepsgraphLock():
 
-    for update in bpy.context.view_layer.depsgraph.updates:
+        for update in bpy.context.view_layer.depsgraph.updates:
 
-        try:
             if isinstance(update.id, bpy.types.Object) and update.id.type == 'MESH':
-                if update.id.wow_wmo_doodad.enabled:
-                    obj = bpy.data.objects[update.id.name, update.id.library]
-                    DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = True
-
-                    # handle object copies
-                    if obj.active_material:
-                        if obj.active_material.users > 1:
-                            for i, mat in enumerate(obj.data.materials):
-                                mat = mat.copy()
-                                obj.data.materials[i] = mat
-                                is_duplicated = True
-
-                    if is_duplicated:
-                        continue
-
-                    # enforce object mode
-                    if obj.mode != 'OBJECT':
-                        bpy.ops.object.mode_set(mode='OBJECT')
-
-                    # remove modifiers
-                    if len(obj.modifiers):
-                        obj.modifiers.clear()
-
-                    # delete if object was processed by a specific operator
-                    if bpy.context.window_manager.operators \
-                    and bpy.context.window_manager.operators[-1].bl_idname in banned_ops:
-                        delete = True
-                        bpy.data.objects.remove(obj, do_unlink=True)
-
-                    if update.is_updated_transform:
-                        # check if object is scaled evenly
-                        max_scale = 0.0
-                        for j in range(3):
-                            if obj.scale[j] > max_scale:
-                                max_scale = obj.scale[j]
-
-                        obj.scale = (max_scale, max_scale, max_scale)
-
-                elif update.id.wow_wmo_liquid.enabled:
-                    obj = bpy.data.objects[update.id.name, update.id.library]
-
-                    with DepsgraphLock():
-                        if obj.mode == 'EDIT':
-
-                            win = bpy.context.window
-
-                            # avoid focusing settings window if left open
-                            if win.screen.name == 'temp':
-
-                                for win_ in bpy.context.window_manager.windows:
-                                    if win_.screen.name != 'temp':
-                                        win = win_
-
-                            scr = win.screen
-                            areas3d = [area for area in scr.areas if area.type == 'VIEW_3D']
-                            region = [region for region in areas3d[0].regions if region.type == 'WINDOW'][0]
-                            space = [space for space in areas3d[0].regions if space.type == 'VIEW_3D']
-
-                            override = {'window': win,
-                                        'screen': scr,
-                                        'area': areas3d[0],
-                                        'region': region,
-                                        'scene': bpy.context.scene,
-                                        'workspace': bpy.context.workspace,
-                                        'space_data': space,
-                                        'region_data': region
-                                        }
-
-                            # we need a timer here to prevent operator recognizing tab event as exit
-                            bpy.app.timers.register(partial(_liquid_edit_mode_timer, override), first_interval=0.1)
-
-                        # enforce object mode or sculpt mode
-                        elif obj.mode not in ('OBJECT', 'SCULPT', 'EDIT', 'VERTEX_PAINT'):
-                            bpy.context.view_layer.objects.active = obj
-                            bpy.ops.object.mode_set(mode='OBJECT')
-
-                        # enforce Z plane for sculpting brushes
-                        if obj.mode == 'SCULPT':
-                            for brush in bpy.data.brushes:
-                                brush.sculpt_plane = 'Z'
-
-                        obj.scale = (1, 1, 1)
-                        obj.rotation_mode = 'XYZ'
-                        obj.rotation_euler = (0, 0, 0)
-
-                        # remove modifiers
-                        if len(obj.modifiers):
-                            obj.modifiers.clear()
-
-                elif update.id.wow_wmo_fog.enabled:
-                    obj = bpy.data.objects[update.id.name, update.id.library]
-
-                    with DepsgraphLock():
-                        # enforce object mode
-                        if obj.mode != 'OBJECT':
-                            bpy.context.view_layer.objects.active = obj
-                            bpy.ops.object.mode_set(mode='OBJECT')
-
-                elif update.id.wow_wmo_group.enabled:
-                    obj = bpy.data.objects[update.id.name, update.id.library]
-                    mesh = obj.data
-
-                    for col_name, flag in wmo_render_flag_map.items():
-                        col = mesh.vertex_colors.get(col_name)
-
-                        if col:
-                            obj.pass_index |= flag
-                        else:
-                            obj.pass_index &= ~flag
-
-                    if obj.mode == 'EDIT':
-                        bm = bmesh.from_edit_mesh(mesh)
-
-                        if bm.faces.active:
-
-                            root_elements = bpy.context.scene.wow_wmo_root_elements
-                            mat_index_active = bm.faces.active.material_index
-
-                            if mesh.materials:
-                                mat_index = root_elements.materials.find(mesh.materials[mat_index_active].name)
-
-                                if mat_index >= 0 and root_elements.cur_material != mat_index:
-
-                                    with DepsgraphLock():
-                                        root_elements.cur_material = mat_index
-
-                    if update.is_updated_geometry:
-                        group_entry = bpy.context.scene.wow_wmo_root_elements.groups.get(obj.name)
-
-                        if group_entry:  # TODO: find out why there is a possible WMO group not in the list yet.
-                            group_entry.export = True
+                delete_msg = handle_mesh_update(update)
 
             elif isinstance(update.id, bpy.types.Scene):
-
-                if bpy.context.view_layer.objects.active \
-                and bpy.context.view_layer.objects.active.select_get():
-
-                    # sync collection active items
-                    act_obj = bpy.context.view_layer.objects.active
-
-                    root_comps = bpy.context.scene.wow_wmo_root_elements
-                    if act_obj:
-                        if act_obj.wow_wmo_group.enabled:
-                            slot_idx = root_comps.groups.find(act_obj.name)
-                            root_comps.cur_group = slot_idx
-
-                        elif act_obj.wow_wmo_fog.enabled:
-                            slot_idx = root_comps.fogs.find(act_obj.name)
-                            root_comps.cur_fog = slot_idx
-
-                        elif act_obj.wow_wmo_light.enabled:
-                            slot_idx = root_comps.lights.find(act_obj.name)
-                            root_comps.cur_light = slot_idx
-
-                        elif act_obj.wow_wmo_portal.enabled:
-                            slot_idx = root_comps.portals.find(act_obj.name)
-                            root_comps.cur_portal = slot_idx
-
-                        elif act_obj.wow_wmo_doodad.enabled:
-                            d_set = root_comps.doodad_sets[root_comps.cur_doodad_set]
-
-                            if d_set.pointer:
-                                slot_idx = d_set.doodads.find(act_obj.name)
-
-                                if slot_idx >= 0:
-                                    d_set.cur_doodad = slot_idx
-
-                # fill collections
-                n_objs = len(bpy.context.scene.objects)
-
-                if n_objs == bpy.wbs_n_scene_objects:
-                    continue
-
-                if n_objs < bpy.wbs_n_scene_objects:
-                    bpy.wbs_n_scene_objects = n_objs
-
-                    _remove_col_items(bpy.context.scene, 'groups')
-                    _remove_col_items(bpy.context.scene, 'portals')
-                    _remove_col_items(bpy.context.scene, 'fogs')
-                    _remove_col_items(bpy.context.scene, 'lights')
-                    _remove_col_items(bpy.context.scene, 'doodad_sets')
-                    _remove_col_items_doodads(bpy.context.scene)
-
-                else:
-                    bpy.wbs_n_scene_objects = n_objs
-                    _add_col_items(bpy.context.scene)
+                handle_scene_update()
 
             elif isinstance(update.id, bpy.types.Material):
+                handle_material_update(update)
 
-                mat = bpy.data.materials[update.id.name, update.id.library]
-
-                if mat.wow_wmo_material.enabled \
-                and bpy.context.scene.wow_wmo_root_elements.materials.find(mat.name) < 0:
-                    mat.wow_wmo_material.enabled = False
-                    slot = bpy.context.scene.wow_wmo_root_elements.materials.add()
-                    slot.pointer = mat
-
-        finally:
-            DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = False
-
-    if delete:
+    if delete_msg:
         show_message_box('One or more doodads were deleted due to mesh changes. Editing doodads is not allowed.'
                          , "WoW Blender Studio Error"
                          , icon='ERROR')
 
 
+@persistent
+def initialize_handler_variables(_):
+    bpy.app.driver_namespace["n_scene_objects"] = 0
+
+
 def register():
-    bpy.wbs_n_scene_objects = 0
-    bpy.types.Object.wow_subject_to_removal = bpy.props.BoolProperty(default=False)
+    bpy.app.handlers.load_post.append(initialize_handler_variables)
     bpy.app.handlers.depsgraph_update_post.append(on_depsgraph_update)
 
 
 def unregister():
     bpy.app.handlers.depsgraph_update_post.remove(on_depsgraph_update)
-    del bpy.wbs_n_scene_objects
-    del bpy.types.Object.wow_subject_to_removal
+
+    if "n_scene_objects" in bpy.app.driver_namespace:
+        del bpy.app.driver_namespace["n_scene_objects"]
 

@@ -269,7 +269,6 @@ class BlenderWMOSceneGroup:
 
         obj.wow_wmo_liquid.enabled = True
 
-
         obj.wow_wmo_liquid.color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
 
         wmo_group_obj = bpy.context.scene.objects[group_name]
