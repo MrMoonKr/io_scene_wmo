@@ -1048,8 +1048,8 @@ class BlenderM2Scene:
                     anim_pair.object = obj
                     self._bl_create_action(anim_pair, name)
 
-                    self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
-                                            'wow_m2_attachment.animate', attachment.animate_attached)
+                    #self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
+                    #                        'wow_m2_attachment.animate', attachment.animate_attached)
 
     def load_lights(self):
 
