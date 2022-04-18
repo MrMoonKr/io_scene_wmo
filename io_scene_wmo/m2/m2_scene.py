@@ -1329,7 +1329,6 @@ class BlenderM2Scene:
         else:
             print("\nImporting cameras.")
 
-        anim_data_dbc = load_game_data().db_files_client.AnimationData
         for camera in self.m2.root.cameras:
 
             # create camera object
@@ -1391,6 +1390,7 @@ class BlenderM2Scene:
                     animate_camera_roll(t_anim_pair, t_name, camera.roll, 0)
 
             # load animations
+            anim_data_table = M2SequenceNames()
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
                 sequence = self.m2.root.sequences[anim_index]
@@ -1403,7 +1403,7 @@ class BlenderM2Scene:
                 t_anim_pair.type = 'OBJECT'
                 t_anim_pair.object = t_obj
 
-                field_name = anim_data_dbc.get_field(sequence.id, 'Name')
+                field_name = anim_data_table.get_sequence_name(sequence.id)
                 name = '_{}_UnkAnim'.format(str(anim_index).zfill(3)) if not field_name \
                     else "_{}_{}_({})".format(str(anim_index).zfill(3), field_name, sequence.variation_index)
 
