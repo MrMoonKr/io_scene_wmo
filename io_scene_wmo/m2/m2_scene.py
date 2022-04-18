@@ -1344,8 +1344,8 @@ class BlenderM2Scene:
 
             obj.location = camera.position_base
             obj.wow_m2_camera.type = str(camera.type)
-            obj.wow_m2_camera.clip_start = camera.near_clip
-            obj.wow_m2_camera.clip_end = camera.far_clip
+            obj.data.clip_start = camera.near_clip
+            obj.data.clip_end = camera.far_clip
             obj.data.lens_unit = 'FOV'
             obj.data.angle = camera.fov
 
@@ -1591,6 +1591,26 @@ class BlenderM2Scene:
         # TODO: should we always do this?
         if len(self.m2.root.key_bone_lookup) == 0:
             self.m2.root.key_bone_lookup.append(-1)
+
+    def save_cameras(self):
+        cameras = [cam for cam in bpy.data.objects if cam.type == 'CAMERA']
+        cameras.sort(key=lambda cam: int(cam.wow_m2_camera.type) if int(cam.wow_m2_camera.type) >= 0 else 3)
+        for i, blender_cam in enumerate(cameras):
+            m2_cam = M2Camera()
+            m2_cam.position_base = blender_cam.location
+            m2_cam.type = int(blender_cam.wow_m2_camera.type)
+            m2_cam.near_clip = blender_cam.data.clip_start
+            m2_cam.far_clip = blender_cam.data.clip_end
+            m2_cam.fov = blender_cam.data.angle
+
+            if blender_cam.wow_m2_camera.target:
+                m2_cam.target_position_base = blender_cam.wow_m2_camera.target.location
+
+            self.m2.root.cameras.append(m2_cam)
+            if m2_cam.type >= 0:
+                while len(self.m2.root.camera_lookup_table) <= m2_cam.type:
+                    self.m2.root.camera_lookup_table.append(-1)
+                self.m2.root.camera_lookup_table.set_index(m2_cam.type, i)
 
     def save_animations(self,preset_bounds):
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
