@@ -7,8 +7,13 @@ class M2_PT_light_panel(bpy.types.Panel):
     bl_context = "data"
     bl_label = "M2 Light"
 
+    def draw_header(self, context):
+        self.layout.prop(context.object.wow_m2_attachment, "enabled", text="")
+
     def draw(self, context):
         layout = self.layout
+        layout.enabled = context.object.data.wow_m2_light.enabled
+
         col = layout.column()
         col.prop(context.object.data.wow_m2_light, "type")
         col.prop(context.object.data.wow_m2_light, "ambient_color")
@@ -85,8 +90,13 @@ class WowM2LightPropertyGroup(bpy.types.PropertyGroup):
     )
 
     visibility:  bpy.props.BoolProperty(
-        name='Enabled',
+        name='Visible',
         default=True
+    )
+
+    enabled:  bpy.props.BoolProperty(
+        name='Enabled',
+        default=False
     )
 
 

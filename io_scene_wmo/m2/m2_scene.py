@@ -1067,14 +1067,15 @@ class BlenderM2Scene:
             self._bl_create_action(anim_pair, action_name)
             action_group = self._bl_create_action_group(anim_pair.action, 'Color_{}'.format(prop_name))
 
-            self._bl_create_fcurves(anim_pair.action, action_group, self._bl_convert_track_dummy, length, anim_index,
-                                    'data.wow_m2_light.{}'.format(prop_name), prop_track)
+            #self._bl_create_fcurves(anim_pair.action, action_group, self._bl_convert_track_dummy, length, anim_index,
+            #                        'data.wow_m2_light.{}'.format(prop_name), prop_track)
 
         for i, light in enumerate(self.m2.root.lights):
             #bpy.ops.object.lamp_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
             bpy.ops.object.light_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.data.wow_m2_light.type = str(light.type)
+            obj.data.wow_m2_light.enabled = True
 
             if self.rig:
                 obj.parent = self.rig
@@ -1087,7 +1088,7 @@ class BlenderM2Scene:
                 constraint.subtarget = bone.name
 
                 bl_edit_bone = self.rig.data.bones[bone.name]
-                obj.location = bl_edit_bone.matrix_local.inverted() @ Vector(light.position)
+                obj.location = light.position
 
             # animate light
             obj.animation_data_create()
@@ -1643,6 +1644,17 @@ class BlenderM2Scene:
                 'GOPlaySoundKitCustom',
                 'GOAddShake'):
                 evt.data = obj.wow_m2_event.data
+
+    def save_lights(self):
+        lights = [light for light in bpy.data.objects if light.type == 'LIGHT' and light.data.wow_m2_light.enabled]
+        for bl_light in lights:
+            light = M2Light()
+            self.m2.root.lights.append(light)
+            light.type = int(bl_light.data.wow_m2_light.type)
+            if len(bl_light.constraints) > 0:
+                # TODO: properly find constraint
+                light.bone = self.bone_ids[bl_light.constraints[0].subtarget]
+            light.position = bl_light.location
 
     def save_animations(self,preset_bounds):
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:

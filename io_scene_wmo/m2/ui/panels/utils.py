@@ -34,11 +34,12 @@ def update_current_object(self, context, col_name, cur_item_name):
 
 def is_obj_unused(obj):
     for prop in _obj_props:
-        if prop == 'wow_m2_light' and obj.type != 'LIGHT':
-            continue
-
-        if getattr(obj, prop).enabled:
-            return False
+        if prop == 'wow_m2_light':
+            if obj.type == 'LIGHT' and getattr(obj.data, prop).enabled:
+                return False
+        else:
+            if getattr(obj, prop).enabled:
+                return False
 
 
     # if obj.wow_m2_geoset.collision_mesh:

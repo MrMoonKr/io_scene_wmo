@@ -12,6 +12,7 @@ def create_m2(version, filepath, selected_only, fill_textures, root_preset_bound
     bl_m2.save_cameras()
     bl_m2.save_attachments()
     bl_m2.save_events()
+    bl_m2.save_lights()
     bl_m2.save_animations(animation_preset_bounds)
     bl_m2.save_geosets(selected_only, fill_textures)
     bl_m2.save_collision(selected_only)
