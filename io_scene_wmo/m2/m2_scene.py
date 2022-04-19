@@ -984,7 +984,7 @@ class BlenderM2Scene:
             obj = bpy.context.view_layer.objects.active
             obj.scale = (0.094431, 0.094431, 0.094431)
             obj.empty_display_size = 0.07
-            bpy.ops.object.constraint_add(type='COPY_TRANSFORMS')
+            bpy.ops.object.constraint_add(type='CHILD_OF')
             constraint = obj.constraints[-1]
             constraint.target = self.rig
             obj.parent = self.rig
@@ -992,7 +992,7 @@ class BlenderM2Scene:
             constraint.subtarget = bone.name
 
             bl_edit_bone = self.rig.data.bones[bone.name]
-            obj.location = bl_edit_bone.matrix_local.inverted() @ Vector(attachment.position)
+            obj.location = attachment.position
 
             obj.name = M2AttachmentTypes.get_attachment_name(attachment.id, i)
             obj.wow_m2_attachment.enabled = True
@@ -1611,6 +1611,21 @@ class BlenderM2Scene:
                 while len(self.m2.root.camera_lookup_table) <= m2_cam.type:
                     self.m2.root.camera_lookup_table.append(-1)
                 self.m2.root.camera_lookup_table.set_index(m2_cam.type, i)
+
+    def save_attachments(self):
+        attachments = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_attachment.enabled]
+        attachments.sort(key=lambda att: int(att.wow_m2_attachment.type) if int(att.wow_m2_attachment.type) >= 0 else float('inf'))
+        for i, bl_att in enumerate(attachments):
+            att = M2Attachment()
+            self.m2.root.attachments.append(att)
+            att.id = int(bl_att.wow_m2_attachment.type)
+            if len(bl_att.constraints) > 0:
+                subtarget = bl_att.constraints[0].space_subtarget
+                att.bone = self.bone_ids[bl_att.constraints[0].subtarget]
+                att.position = bl_att.location
+            while len(self.m2.root.attachment_lookup_table) <= att.id:
+                self.m2.root.attachment_lookup_table.append(0xffff)
+            self.m2.root.attachment_lookup_table.set_index(att.id,i)
 
     def save_animations(self,preset_bounds):
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
