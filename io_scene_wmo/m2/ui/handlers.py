@@ -61,7 +61,6 @@ def _add_col_items(scene):
                 if prop_group.enabled:
                     col = getattr(scene.wow_m2_root_elements, col_name)
                     if col.find(obj.name) < 0:
-                        prop_group.enabled = False
                         slot = col.add()
                         slot.pointer = obj
 
