@@ -982,7 +982,6 @@ class BlenderM2Scene:
         for i, attachment in enumerate(self.m2.root.attachments):
             bpy.ops.object.empty_add(type='SPHERE', location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
-            obj.scale = (0.094431, 0.094431, 0.094431)
             obj.empty_display_size = 0.07
             bpy.ops.object.constraint_add(type='CHILD_OF')
             constraint = obj.constraints[-1]
