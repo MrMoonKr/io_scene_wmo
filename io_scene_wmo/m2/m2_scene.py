@@ -1619,12 +1619,30 @@ class BlenderM2Scene:
             self.m2.root.attachments.append(att)
             att.id = int(bl_att.wow_m2_attachment.type)
             if len(bl_att.constraints) > 0:
-                subtarget = bl_att.constraints[0].space_subtarget
+                # TODO: properly find constraint
                 att.bone = self.bone_ids[bl_att.constraints[0].subtarget]
                 att.position = bl_att.location
             while len(self.m2.root.attachment_lookup_table) <= att.id:
                 self.m2.root.attachment_lookup_table.append(0xffff)
             self.m2.root.attachment_lookup_table.set_index(att.id,i)
+
+    def save_events(self):
+        events = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_event.enabled]
+        for bl_evt in events:
+            evt = M2Event()
+            self.m2.root.events.append(evt)
+            evt.identifier = bl_evt.wow_m2_event.token
+            token = M2EventTokens.get_event_name(evt.identifier)
+            if len(bl_evt.constraints) > 0:
+                # TODO: properly find constraint
+                evt.bone = self.bone_ids[bl_evt.constraints[0].subtarget]
+                evt.position = bl_evt.location
+            if token in ('PlayEmoteSound',
+                'DoodadSoundUnknown',
+                'DoodadSoundOneShot',
+                'GOPlaySoundKitCustom',
+                'GOAddShake'):
+                evt.data = obj.wow_m2_event.data
 
     def save_animations(self,preset_bounds):
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
