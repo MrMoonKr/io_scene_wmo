@@ -440,7 +440,7 @@ class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
                 if item.object.type == 'ARMATURE':
                     icon = 'OUTLINER_OB_ARMATURE'
                 elif item.object.type == 'LIGHT':
-                    icon = 'LAMP_SUN'
+                    icon = 'LIGHT_SUN'
                 elif item.object.type == 'CAMERA':
                     icon = 'RESTRICT_RENDER_OFF'
                 elif item.object.type == 'EMPTY':
@@ -449,7 +449,7 @@ class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
                     elif item.object.wow_m2_event.enabled:
                         icon = 'PLUGIN'
                     elif item.object.wow_m2_camera.enabled:
-                        icon = 'BBOX'
+                        icon = 'OUTLINER_DATA_EMPTY'
                     elif item.object.wow_m2_uv_transform.enabled:
                         icon = 'ASSET_MANAGER'
 
