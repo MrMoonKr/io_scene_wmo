@@ -69,7 +69,7 @@ class M2_OT_color_remove(bpy.types.Operator):
 
 def update_color_change(self, context):
     for mat in bpy.data.materials:
-        if mat.use_nodes and mat.texture_slots[mat.active_texture_index].texture.wow_m2_texture.color == self.name:
+        if mat.use_nodes and len(mat.texture_paint_slots) > mat.paint_active_slot and mat.texture_paint_slots[mat.paint_active_slot].texture.wow_m2_texture.color == self.name:
             mat.node_tree.nodes['ColorRamp'].color_ramp.elements[0].color = self.color
             mat.invert_z = mat.invert_z
 
