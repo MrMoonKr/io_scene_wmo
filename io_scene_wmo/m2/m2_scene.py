@@ -1699,105 +1699,142 @@ class BlenderM2Scene:
                     assert last_interp == point.interpolation
             return last_interp
 
-        def write_track(ids, value_type, m2_track, bl_track, interpolation, conv):
-            (seq_id,global_seq_id) = ids
-            while len(m2_track.timestamps) <= seq_id:
-                m2_track.timestamps.add(M2Array(uint32))
-            while len(m2_track.values) <= seq_id:
-                m2_track.values.add(M2Array(value_type))
+        # Used to measure the highest duration for any keyframe of a given sequence index
+        global_seq_durations = {}
+        seq_durations = {}
 
-            m2_times = m2_track.timestamps[seq_id]
-            m2_values = m2_track.values[seq_id]
+        # Used to ensure consistent data between tracks
+        track_global_sequences = {}
+        track_interpolations = {}
 
-            # TODO: these two values should not be written here
-            m2_track.global_sequence_id = global_seq_id
-            m2_track.interpolation_type = bl_to_m2_interpolation(interpolation)
+        class TrackCompound:
+            def __init__(self,seq_id,global_seq_id,data):
+                self.seq_id = seq_id
+                self.global_seq_id = global_seq_id
+                self.ids = ids
+                self.data = data
 
-            bl_track.sort(key=lambda x: x[0])
-            highest_time = 0
-            for (time,value) in bl_track:
-                highest_time = bl_to_m2_time(time)
-                m2_times.add(highest_time)
-                m2_values.add(conv(value))
-            return highest_time
+            def get_paths(self):
+                return self.data.keys()
 
-        def write_attachment(ids, pair, highest_timestamp):
-            assert len(pair.action.fcurves) == 1
-            fcurve = pair.action.fcurves[0]
-            attachment = self.m2.root.attachments[self.attachment_ids[pair.object.name]]
-            points = [point.co for point in fcurve.keyframe_points]
-            time = write_track(ids,int32,attachment.animate_attached,points,bl_find_interpolation(fcurve),lambda x: int(x))
-            if time > highest_timestamp:
-                highest_timestamp = time
-            return highest_timestamp
+            def get_frames(self, path):
+                return self.data[path]['frames']
 
-        def write_bone(ids, m2_bone, tracks):
-            def conv_quat(quat):
-                return M2CompQuaternion((
-                    bl_to_m2_quat(quat["w"]),
-                    bl_to_m2_quat(quat["x"]),
-                    bl_to_m2_quat(quat["y"]),
-                    bl_to_m2_quat(quat["z"]),
-                ))
+            def get_interpolation(self, path):
+                return self.data[path]['interpolation']
 
-            def conv_vec(vec):
-                return (vec["x"],vec["y"],vec["z"])
+            def write_track(self, path,m2_track,value_type,converter = lambda x: x):
+                if not path in self.data:
+                    return
 
-            def write_bone_track(track,name,type,conv):
-                write_track(ids,type,track,tracks[name]["frames"],tracks[name]["interpolation"],conv)
+                while len(m2_track.timestamps) <= self.seq_id:
+                    m2_track.timestamps.add(M2Array(uint32))
+                while len(m2_track.values) <= self.seq_id:
+                    m2_track.values.add(M2Array(value_type))
 
-            if "rotation_quaternion" in tracks:
-                m2_bone.flags = m2_bone.flags | 512
-                write_bone_track(m2_bone.rotation,"rotation_quaternion",M2CompQuaternion,conv_quat)
+                m2_times = m2_track.timestamps[seq_id]
+                m2_values = m2_track.values[seq_id]
 
-            if "scale" in tracks:
-                m2_bone.flags = m2_bone.flags | 512
-                write_bone_track(m2_bone.scale,"scale",vec3D,conv_vec)
+                highest_time = 0
+                for (time,value) in self.get_frames(path):
+                    highest_time = bl_to_m2_time(time)
+                    m2_times.add(highest_time)
+                    m2_values.add(converter(value))
 
-            # TODO: this probably doesn't work if bone is not at 0,0,0
-            if "location" in tracks:
-                m2_bone.flags = m2_bone.flags | 512
-                write_bone_track(m2_bone.translation,"location",vec3D,conv_vec)
+                if self.global_seq_id >= 0:
+                    if not self.global_seq_id in global_seq_durations or highest_time > global_seq_durations[self.global_seq_id]:
+                        global_seq_durations[self.global_seq_id] = highest_time
+                else:
+                    if not self.seq_id in seq_durations or highest_time > seq_durations[self.seq_id]:
+                        seq_durations[self.seq_id] = highest_time
 
-        def write_armature(ids, pair, highest_timestamp):
-            # Track pass 1: Collect data into more readable format
-            armature_data = {} # {location|rotation|scale:{interpolation:string,keyframes:{[timestamps]:<PointType>[]}}}
+                if not m2_track in track_global_sequences:
+                    track_global_sequences[m2_track] = self.global_seq_id
+                    m2_track.global_sequence = self.global_seq_id
+                else:
+                    assert track_global_sequences[m2_track] == self.global_seq_id
+
+                if not m2_track in track_interpolations:
+                    track_interpolations[m2_track] = self.get_interpolation(path)
+                    m2_track.interpolation_type = bl_to_m2_interpolation(self.get_interpolation(path))
+                else:
+                    assert track_interpolations[m2_track] == self.get_interpolation(path)
+
+        def write_data_compound(seq_id,global_seq_id, pair, callback):
+            compound_data = {} # { channel: {interpolation:string, keyframes: {[timestamps]:<PointType>[]}} }
             for curve in pair.action.fcurves:
-                def next_dict(cur,key):
-                    if not key in cur: cur[key] = {}
+                def next_item(cur,key,val):
+                    if not key in cur: cur[key] = val
                     return cur[key]
-                bone = re.search('"(.+?)"',curve.data_path).group(1)
-                curve_type = re.search('([a-zA-Z_]+)$',curve.data_path).group(0)
-                bone_data = next_dict(armature_data,bone)
-                track_data = next_dict(bone_data,curve_type)
-                track_data["interpolation"] = bl_find_interpolation(curve)
-                track_frames = next_dict(track_data,"frames")
-                index = curve.array_index
+                curve_data = next_item(compound_data, curve.data_path, {})
+                curve_data["interpolation"] = bl_find_interpolation(curve)
+                curve_frames = next_item(curve_data,"frames",{})
+                index = int(curve.array_index)
                 for i,point in enumerate(curve.keyframe_points):
-                    keyframe_data = next_dict(track_frames,point.co[0])
-                    if curve_type == "rotation_quaternion":
-                        key = ["w","x","y","z"][index]
-                    else:
-                        key = ["x","y","z"][index]
-                    keyframe_data[key] = point.co[1]
+                    keyframe_data = next_item(curve_frames,point.co[0],[])
+                    while len(keyframe_data) <= index:
+                        keyframe_data.append(None)
+                    keyframe_data[index] = point.co[1]
 
-            # Track pass 2: Sort tracks by timestamp
-            # armature_data -> {location|rotation|scale: {timestamp,<PointType>[]}[]}
-            for bone,tracks in armature_data.items():
-                for trackname,frame_dict in tracks.items():
-                    track = tracks[trackname] # {interpolation,frames}
-                    frames = track['frames'] = [(timestamp,values) for timestamp,values in track['frames'].items()]
-                    frames.sort(key=lambda track:track[0])
-                    if len(track) > 0:
-                        last_timestamp = frames[len(frames)-1][0]
-                        if last_timestamp > highest_timestamp:
-                            highest_timestamp = last_timestamp
+            for name,tracks in compound_data.items():
+                frames = tracks['frames'] = [(timestamp,tuple(values) if len(values) > 1 else values[0]) for timestamp,values in tracks['frames'].items()]
+                frames.sort(key=lambda frame:frame[0])
 
-            # Track pass 3: Write m2 tracks
-            for bone_name,tracks in armature_data.items():
-                write_bone(ids, self.m2.root.bones[self.bone_ids[bone_name]], tracks)
+            callback(TrackCompound(seq_id,global_seq_id,compound_data), pair)
 
-            return highest_timestamp
+        def write_light(cpd, pair):
+            m2_light = self.m2.root.lights.values[self.light_ids[pair.object.name]]
+            cpd.write_track('data.wow_m2_light.ambient_color',
+                m2_light.ambient_color,vec3D)
+
+            cpd.write_track('data.wow_m2_light.diffuse_color',
+                m2_light.diffuse_color,vec3D)
+
+            cpd.write_track('data.wow_m2_light.ambient_intensity',
+                m2_light.ambient_intensity,float32)
+
+            cpd.write_track('data.wow_m2_light.diffuse_intensity',
+                m2_light.diffuse_intensity,float32)
+
+            cpd.write_track('data.wow_m2_light.attenuation_start',
+                m2_light.attenuation_start,float32)
+
+            cpd.write_track('data.wow_m2_light.attenuation_end',
+                m2_light.attenuation_end,float32)
+
+            cpd.write_track('data.wow_m2_light.visibility',
+                m2_light.visibility,uint8, lambda x: int(x)
+            )
+
+        def write_attachment(cpd, pair):
+            m2_attachment = self.m2.root.attachments.values[self.attachment_ids[pair.object.name]]
+            cpd.write_track('wow_m2_attachment.animate',
+                m2_attachment.animate_attached,boolean,lambda x: bool(x))
+
+        def write_bone(cpd, pair):
+            for path in cpd.get_paths():
+                bone = re.search('"(.+?)"',path).group(1)
+                curve_type = re.search('([a-zA-Z_]+)$',path).group(0)
+
+                m2_bone = self.m2.root.bones.values[self.bone_ids[bone]]
+                m2_bone.flags = m2_bone.flags | 512
+
+                if curve_type == 'rotation_quaternion':
+                    cpd.write_track(path,m2_bone.rotation,M2CompQuaternion,
+                        lambda x: M2CompQuaternion((
+                            bl_to_m2_quat(x[0]),
+                            bl_to_m2_quat(x[1]),
+                            bl_to_m2_quat(x[2]),
+                            bl_to_m2_quat(x[3])
+                        ))
+                    )
+
+                if curve_type == 'scale':
+                    cpd.write_track(path,m2_bone.scale,vec3D)
+
+                # TODO: this probably doesn't work if bone is not at 0,0,0
+                if curve_type == 'location':
+                    cpd.write_track(path,m2_bone.translation,vec3D)
 
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
             self.m2.root.sequence_lookup.append(0xffff)
@@ -1819,6 +1856,7 @@ class BlenderM2Scene:
 
             if wow_seq.is_global_sequence:
                 global_seq_id = len(self.m2.root.global_sequences)
+                self.m2.root.global_sequences.append(0)
             else:
                 is_alias = "64" in wow_seq.flags
 
@@ -1842,10 +1880,6 @@ class BlenderM2Scene:
                     0, # TODO: old was just wrong
                 )
 
-            # Write tracks
-            highest_timestamp = 0
-            seq_frame_range = [0,0]
-
             for pair in wow_seq.anim_pairs:
                 if pair.object is None or pair.action is None:
                     continue
@@ -1860,27 +1894,20 @@ class BlenderM2Scene:
                     if pair.object.wow_m2_camera.enabled:
                         pair_type = 'CAMERA_TARGET'
 
-                highest_timestamp = 0
                 ids = (seq_id,global_seq_id)
                 if pair_type == 'ARMATURE':
-                    highest_timestamp = write_armature(ids, pair, highest_timestamp)
+                    write_data_compound(seq_id, global_seq_id, pair, write_bone)
                 if pair_type == 'ATTACHMENT':
-                    highest_timestamp = write_attachment(ids, pair, highest_timestamp)
+                    write_data_compound(seq_id, global_seq_id, pair, write_attachment)
+                if pair_type == 'LIGHT':
+                    write_data_compound(seq_id, global_seq_id, pair, write_light)
 
-                pair_frame_range = pair.action.frame_range.to_tuple()
-                # in wow, if highest timestamp is 0 length is also 0
-                if highest_timestamp == 0:
-                    pair_frame_range = (0,0)
+            for global_seq_id,duration in global_seq_durations.items():
+                assert global_seq_id < len(self.m2.root.global_sequences)
+                self.m2.root.global_sequences.set_index(global_seq_id,duration)
 
-                if seq_frame_range[0] > pair_frame_range[0]: seq_frame_range[0] = pair_frame_range[0]
-                if seq_frame_range[1] < pair_frame_range[1]: seq_frame_range[1] = pair_frame_range[1]
-
-            duration = int(round((seq_frame_range[1]-seq_frame_range[0])/0.02666666))
-
-            # Write highest timestamp
-            if wow_seq.is_global_sequence:
-                self.m2.root.global_sequences.append(duration)
-            else:
+            for seq_id,duration in seq_durations.items():
+                assert seq_id < len(self.m2.root.sequences)
                 self.m2.root.sequences[seq_id].duration = duration
 
         # Write alias durations
