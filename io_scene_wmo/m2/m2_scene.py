@@ -1876,12 +1876,16 @@ class BlenderM2Scene:
                 self.m2.root.sequences[seq_id].duration = duration
 
         # Write alias durations
-        for wow_seq in self.m2.root.sequences.values:
-            if not 64 & wow_seq.flags: continue
-            cur_seq = wow_seq
-            while 64 & cur_seq.flags:
-                cur_seq = self.m2.root.sequences.values[cur_seq.alias_next]
-            wow_seq.duration = cur_seq.duration
+        #for i,wow_seq in enumerate(self.m2.root.sequences.values):
+        #    if not 64 & wow_seq.flags: continue
+        #    cur_seq = wow_seq
+        #    visited = [i]
+        #    while 64 & cur_seq.flags:
+        #        assert cur_seq.alias_next != -1,"alias action without alias_next set"
+        #        assert not (cur_seq.alias_next in visited),f"Circular alias_next: {cur_seq.alias_next} ({visited})"
+        #        visited.append(cur_seq.alias_next)
+        #        cur_seq = self.m2.root.sequences.values[cur_seq.alias_next]
+        #    wow_seq.duration = cur_seq.duration
 
 
     def save_geosets(self, selected_only, fill_textures):
