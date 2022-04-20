@@ -28,6 +28,11 @@ class BlenderM2Scene:
         self.m2 = m2
         self.materials = {}
         self.bone_ids = {}
+        self.attachment_ids = {}
+        self.event_ids = {}
+        self.camera_ids = {}
+        self.camera_target_ids = {}
+        self.light_ids = {}
         self.uv_transforms = {}
         self.geosets = []
         self.animations = []
@@ -1596,6 +1601,7 @@ class BlenderM2Scene:
         cameras = [cam for cam in bpy.data.objects if cam.type == 'CAMERA']
         cameras.sort(key=lambda cam: int(cam.wow_m2_camera.type) if int(cam.wow_m2_camera.type) >= 0 else 3)
         for i, blender_cam in enumerate(cameras):
+            self.camera_ids[blender_cam.name] = i
             m2_cam = M2Camera()
             m2_cam.position_base = blender_cam.location
             m2_cam.type = int(blender_cam.wow_m2_camera.type)
@@ -1605,6 +1611,7 @@ class BlenderM2Scene:
 
             if blender_cam.wow_m2_camera.target:
                 m2_cam.target_position_base = blender_cam.wow_m2_camera.target.location
+                self.camera_target_ids[blender_cam.wow_m2_camera.target.name] = i
 
             self.m2.root.cameras.append(m2_cam)
             if m2_cam.type >= 0:
@@ -1616,6 +1623,7 @@ class BlenderM2Scene:
         attachments = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_attachment.enabled]
         attachments.sort(key=lambda att: int(att.wow_m2_attachment.type) if int(att.wow_m2_attachment.type) >= 0 else float('inf'))
         for i, bl_att in enumerate(attachments):
+            self.attachment_ids[bl_att.name] = i
             att = M2Attachment()
             self.m2.root.attachments.append(att)
             att.id = int(bl_att.wow_m2_attachment.type)
@@ -1629,7 +1637,8 @@ class BlenderM2Scene:
 
     def save_events(self):
         events = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_event.enabled]
-        for bl_evt in events:
+        for i, bl_evt in enumerate(events):
+            self.event_ids[bl_evt.name] = i
             evt = M2Event()
             self.m2.root.events.append(evt)
             evt.identifier = bl_evt.wow_m2_event.token
@@ -1647,7 +1656,8 @@ class BlenderM2Scene:
 
     def save_lights(self):
         lights = [light for light in bpy.data.objects if light.type == 'LIGHT' and light.data.wow_m2_light.enabled]
-        for bl_light in lights:
+        for i, bl_light in enumerate(lights):
+            self.light_ids[bl_light.name] = i
             light = M2Light()
             self.m2.root.lights.append(light)
             light.type = int(bl_light.data.wow_m2_light.type)
@@ -1657,6 +1667,130 @@ class BlenderM2Scene:
             light.position = bl_light.location
 
     def save_animations(self,preset_bounds):
+        def bl_to_m2_time(bl):
+            return int(round(bl/0.02666666))
+
+        def bl_to_m2_quat(n):
+            n = max(min(n,1),-1) * 32767
+            return int(n + 32767 if n <= 0 else n-32768)
+
+        def bl_to_m2_interpolation(interpolation):
+            if interpolation == 'CONSTANT': return 0
+            if interpolation == 'LINEAR': return 1
+            if interpolation == 'BEZIER': return 2
+            if interpolation == 'CUBIC': return 3
+            raise AssertionError('Invalid interpolation type ' + interpolation)
+
+        def bl_find_interpolation(fcurve):
+            last_interp = None
+            for point in fcurve.keyframe_points:
+                if last_interp is None:
+                    last_interp = point.interpolation
+                else:
+                    # wow does not support changing interpolation type
+                    assert last_interp == point.interpolation
+            return last_interp
+
+        def write_track(ids, value_type, m2_track, bl_track, interpolation, conv):
+            (seq_id,global_seq_id) = ids
+            while len(m2_track.timestamps) <= seq_id:
+                m2_track.timestamps.add(M2Array(uint32))
+            while len(m2_track.values) <= seq_id:
+                m2_track.values.add(M2Array(value_type))
+
+            m2_times = m2_track.timestamps[seq_id]
+            m2_values = m2_track.values[seq_id]
+
+            # TODO: these two values should not be written here
+            m2_track.global_sequence_id = global_seq_id
+            m2_track.interpolation_type = bl_to_m2_interpolation(interpolation)
+
+            bl_track.sort(key=lambda x: x[0])
+            highest_time = 0
+            for (time,value) in bl_track:
+                highest_time = bl_to_m2_time(time)
+                m2_times.add(highest_time)
+                m2_values.add(conv(value))
+            return highest_time
+
+        def write_attachment(ids, pair, highest_timestamp):
+            assert len(pair.action.fcurves) == 1
+            fcurve = pair.action.fcurves[0]
+            attachment = self.m2.root.attachments[self.attachment_ids[pair.object.name]]
+            points = [point.co for point in fcurve.keyframe_points]
+            time = write_track(ids,int32,attachment.animate_attached,points,bl_find_interpolation(fcurve),lambda x: int(x))
+            if time > highest_timestamp:
+                highest_timestamp = time
+            return highest_timestamp
+
+        def write_bone(ids, m2_bone, tracks):
+            def conv_quat(quat):
+                return M2CompQuaternion((
+                    bl_to_m2_quat(quat["w"]),
+                    bl_to_m2_quat(quat["x"]),
+                    bl_to_m2_quat(quat["y"]),
+                    bl_to_m2_quat(quat["z"]),
+                ))
+
+            def conv_vec(vec):
+                return (vec["x"],vec["y"],vec["z"])
+
+            def write_bone_track(track,name,type,conv):
+                write_track(ids,type,track,tracks[name]["frames"],tracks[name]["interpolation"],conv)
+
+            if "rotation_quaternion" in tracks:
+                m2_bone.flags = m2_bone.flags | 512
+                write_bone_track(m2_bone.rotation,"rotation_quaternion",M2CompQuaternion,conv_quat)
+
+            if "scale" in tracks:
+                m2_bone.flags = m2_bone.flags | 512
+                write_bone_track(m2_bone.scale,"scale",vec3D,conv_vec)
+
+            # TODO: this probably doesn't work if bone is not at 0,0,0
+            if "location" in tracks:
+                m2_bone.flags = m2_bone.flags | 512
+                write_bone_track(m2_bone.translation,"location",vec3D,conv_vec)
+
+        def write_armature(ids, pair, highest_timestamp):
+            # Track pass 1: Collect data into more readable format
+            armature_data = {} # {location|rotation|scale:{interpolation:string,keyframes:{[timestamps]:<PointType>[]}}}
+            for curve in pair.action.fcurves:
+                def next_dict(cur,key):
+                    if not key in cur: cur[key] = {}
+                    return cur[key]
+                bone = re.search('"(.+?)"',curve.data_path).group(1)
+                curve_type = re.search('([a-zA-Z_]+)$',curve.data_path).group(0)
+                bone_data = next_dict(armature_data,bone)
+                track_data = next_dict(bone_data,curve_type)
+                track_data["interpolation"] = bl_find_interpolation(curve)
+                track_frames = next_dict(track_data,"frames")
+                index = curve.array_index
+                for i,point in enumerate(curve.keyframe_points):
+                    keyframe_data = next_dict(track_frames,point.co[0])
+                    if curve_type == "rotation_quaternion":
+                        key = ["w","x","y","z"][index]
+                    else:
+                        key = ["x","y","z"][index]
+                    keyframe_data[key] = point.co[1]
+
+            # Track pass 2: Sort tracks by timestamp
+            # armature_data -> {location|rotation|scale: {timestamp,<PointType>[]}[]}
+            for bone,tracks in armature_data.items():
+                for trackname,frame_dict in tracks.items():
+                    track = tracks[trackname] # {interpolation,frames}
+                    frames = track['frames'] = [(timestamp,values) for timestamp,values in track['frames'].items()]
+                    frames.sort(key=lambda track:track[0])
+                    if len(track) > 0:
+                        last_timestamp = frames[len(frames)-1][0]
+                        if last_timestamp > highest_timestamp:
+                            highest_timestamp = last_timestamp
+
+            # Track pass 3: Write m2 tracks
+            for bone_name,tracks in armature_data.items():
+                write_bone(ids, self.m2.root.bones[self.bone_ids[bone_name]], tracks)
+
+            return highest_timestamp
+
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
             self.m2.root.sequence_lookup.append(0xffff)
 
@@ -1671,171 +1805,83 @@ class BlenderM2Scene:
             texture_weight.timestamps.new().add(0)
             texture_weight.values.new().add(32767)
 
-        # 1. Collect valid actions
-        actions = []
-        global_sequences = []
-        global_sequence_count = 0
-        for wow_action in self.scene.wow_m2_animations:
-            if wow_action.is_global_sequence:
-                global_sequence_count+=1
+        for wow_seq in self.scene.wow_m2_animations:
+            seq_id = 0
+            global_seq_id = -1
 
-            # if it's an alias
-            if "64" in wow_action.flags:
-                actions.append((wow_action,None,None))
-                continue
-
-            blender_action = None
-            armature = None
-
-            for pair in wow_action.anim_pairs:
-                if pair.action != None and pair.object != None:
-                    blender_action = pair.action
-                    armature = pair.object
-                    break
-
-            if blender_action != None and armature != None:
-                if wow_action.is_global_sequence:
-                    global_sequences.append((wow_action,blender_action,armature))
-                else:
-                    actions.append((wow_action,blender_action,armature))
+            if wow_seq.is_global_sequence:
+                global_seq_id = len(self.m2.root.global_sequences)
             else:
-                raise ValueError("Null action/object in animation " + wow_action.name)
+                is_alias = "64" in wow_seq.flags
 
-        def write_sequence(seq_id,wow_action,blender_action,armature,global_sequence_id):
-            # Track pass 1: Collect data into more readable format
-            armature_data = {} # {location|rotation|scale:{[timestamps]:<PointType>[]}}
-            # TODO temp try/except to ignore weird curve names
-            try:
-                for curve in blender_action.fcurves:
-                    def next_dict(cur,key):
-                        if not key in cur: cur[key] = {}
-                        return cur[key]
-                    bone = re.search('"(.+?)"',curve.data_path).group(1)
-                    curve_type = re.search('([a-zA-Z_]+)$',curve.data_path).group(0)
-                    bone_data = next_dict(armature_data,bone)
-                    track_data = next_dict(bone_data,curve_type)
-                    index = curve.array_index
-                    for i,point in enumerate(curve.keyframe_points):
-                        keyframe_data = next_dict(track_data,point.co[0])
-                        if curve_type == "rotation_quaternion":
-                            key = ["w","x","y","z"][index]
-                        else:
-                            key = ["x","y","z"][index]
-                        keyframe_data[key] = point.co[1]
-            except:
-                return
+                # TODO using root boundings hwen not using preset, better than nothing
+                use_preset_bounds = (preset_bounds == "ALWAYS") or (preset_bounds == "INDIVIDUAL" and wow_seq.use_preset_bounds)
+                min_bounds = (wow_seq.preset_bounds_min_x,wow_seq.preset_bounds_min_y,wow_seq.preset_bounds_min_z) if use_preset_bounds else self.m2.root.bounding_box.min
+                max_bounds = (wow_seq.preset_bounds_max_x,wow_seq.preset_bounds_max_y,wow_seq.preset_bounds_max_z) if use_preset_bounds else self.m2.root.bounding_box.max
+                radius = wow_seq.preset_bounds_radius if use_preset_bounds else self.m2.root.bounding_sphere_radius
 
-            # Track pass 2: Sort tracks by timestamp
-            # armature_data -> {location|rotation|scale: {timestamp,<PointType>[]}[]}
+                seq_id = self.m2.add_anim(
+                    int(wow_seq.animation_id),
+                    wow_seq.chain_index, # titi, to test
+                    (0,0), # set it later
+                    wow_seq.move_speed,
+                    construct_bitfield(wow_seq.flags),
+                    wow_seq.frequency,
+                    (wow_seq.replay_min, wow_seq.replay_max),
+                    wow_seq.blend_time,  # TODO: multiversioning
+                    ((min_bounds,max_bounds), radius),
+                    wow_seq.VariationNext,
+                    0, # TODO: old was just wrong
+                )
+
+            # Write tracks
             highest_timestamp = 0
-            for bone,tracks in armature_data.items():
-                for trackname,frame_dict in tracks.items():
-                    track = tracks[trackname] = [{'timestamp':timestamp,'values':values}
-                        for timestamp,values in frame_dict.items()]
-                    track.sort(key=lambda track:track['timestamp'])
-                    if len(track) > 0:
-                        last_timestamp = track[len(track)-1]['timestamp']
-                        if last_timestamp > highest_timestamp:
-                            highest_timestamp = last_timestamp
+            seq_frame_range = [0,0]
 
-            # Track pass 3: Write m2 tracks
-            for bone_name,tracks in armature_data.items():
-                bone_id = self.bone_ids[bone_name]
-                m2_bone = self.m2.root.bones[bone_id]
+            for pair in wow_seq.anim_pairs:
+                if pair.object is None or pair.action is None:
+                    continue
 
-                def prep_track(track,valueType):
-                    while len(track.timestamps) <= seq_id:
-                        track.timestamps.add(M2Array(uint32))
-                    while len(track.values) <= seq_id:
-                        track.values.add(M2Array(valueType))
-                    return (track.timestamps[seq_id],track.values[seq_id])
+                # Fix pair type
+                pair_type = pair.object.type
+                if pair_type == 'EMPTY':
+                    if pair.object.wow_m2_attachment.enabled:
+                        pair_type = 'ATTACHMENT'
+                    if pair.object.wow_m2_event.enabled:
+                        pair_type = 'EVENT'
+                    if pair.object.wow_m2_camera.enabled:
+                        pair_type = 'CAMERA_TARGET'
 
-                # TODO: check if tracks are used by multiple global sequences (or mixing actions with global sequences)
+                highest_timestamp = 0
+                ids = (seq_id,global_seq_id)
+                if pair_type == 'ARMATURE':
+                    highest_timestamp = write_armature(ids, pair, highest_timestamp)
+                if pair_type == 'ATTACHMENT':
+                    highest_timestamp = write_attachment(ids, pair, highest_timestamp)
 
-                if "rotation_quaternion" in tracks:
-                    m2_bone.flags = m2_bone.flags | 512
-                    m2_bone.rotation.interpolation_type = 1 # TODO: assumes linear, should be read
-                    m2_bone.rotation.global_sequence = global_sequence_id
-                    (track_times,track_values) = prep_track(m2_bone.rotation,M2CompQuaternion)
-                    for keyframe in tracks["rotation_quaternion"]:
-                        def to_wow_quat(n):
-                            n = max(min(n,1),-1) * 32767
-                            return int(n + 32767 if n <= 0 else n-32768)
-
-                        track_times.add(int((keyframe["timestamp"])/0.0266666))
-                        quat = keyframe["values"]
-                        track_values.add(M2CompQuaternion((
-                              to_wow_quat(quat["w"])
-                            , to_wow_quat(quat["x"])
-                            , to_wow_quat(quat["y"])
-                            , to_wow_quat(quat["z"])
-                        )))
-                if "scale" in tracks:
-                    m2_bone.flags = m2_bone.flags | 512
-                    m2_bone.scale.global_sequence = global_sequence_id
-                    m2_bone.scale.interpolation_type = 1
-                    (track_times,track_values) = prep_track(m2_bone.scale,vec3D)
-                    for keyframe in tracks["scale"]:
-                        track_times.add(int((keyframe["timestamp"])/0.02666666))
-                        track_values.add((
-                            keyframe["values"]["x"],
-                            keyframe["values"]["y"],
-                            keyframe["values"]["z"],
-                        ))
-
-                # TODO: this probably doesn't work if bone is not at 0,0,0
-                if "location" in tracks:
-                    m2_bone.flags = m2_bone.flags | 512
-                    m2_bone.translation.global_sequence = global_sequence_id
-                    m2_bone.translation.interpolation_type = 1
-                    (track_times,track_values) = prep_track(m2_bone.translation,vec3D)
-                    for keyframe in tracks["location"]:
-                        track_times.add(int((keyframe["timestamp"])/0.02666666))
-                        track_values.add((
-                            keyframe["values"]["x"],
-                            keyframe["values"]["y"],
-                            keyframe["values"]["z"],
-                        ))
-            return highest_timestamp
-
-        # 2. Write action sequences
-        for (wow_action,blender_action,armature) in actions:
-            is_alias = "64" in wow_action.flags
-            range_action = blender_action if not is_alias else actions[wow_action.alias_next-global_sequence_count][1]
-
-            # TODO using root boundings hwen not using preset, better than nothing
-            use_preset_bounds = (preset_bounds == "ALWAYS") or (preset_bounds == "INDIVIDUAL" and wow_action.use_preset_bounds)
-            min_bounds = (wow_action.preset_bounds_min_x,wow_action.preset_bounds_min_y,wow_action.preset_bounds_min_z) if use_preset_bounds else self.m2.root.bounding_box.min
-            max_bounds = (wow_action.preset_bounds_max_x,wow_action.preset_bounds_max_y,wow_action.preset_bounds_max_z) if use_preset_bounds else self.m2.root.bounding_box.max
-            radius = wow_action.preset_bounds_radius if use_preset_bounds else self.m2.root.bounding_sphere_radius
-
-            seq_id = self.m2.add_anim(
-                int(wow_action.animation_id),
-                wow_action.chain_index, # titi, to test
-                range_action.frame_range.to_tuple() if range_action is not None else (0,0),
-                wow_action.move_speed,
-                construct_bitfield(wow_action.flags),
-                wow_action.frequency,
-                (wow_action.replay_min, wow_action.replay_max),
-                wow_action.blend_time,  # TODO: multiversioning
-                ((min_bounds,max_bounds), radius),
-                wow_action.VariationNext,
-                max(0,wow_action.alias_next-global_sequence_count)
-            )
-
-            if not is_alias:
-                highest_timestamp = write_sequence(seq_id,wow_action,blender_action,armature,-1)
+                pair_frame_range = pair.action.frame_range.to_tuple()
+                # in wow, if highest timestamp is 0 length is also 0
                 if highest_timestamp == 0:
-                    self.m2.root.sequences[seq_id].duration = 0
+                    pair_frame_range = (0,0)
 
-        # 3. Write global sequences
-        for i,(wow_action,blender_action,armature) in enumerate(global_sequences):
-            highest_timestamp = write_sequence(i,wow_action,blender_action,armature,i)
-            if highest_timestamp == 0:
-                self.m2.root.global_sequences.append(0)
+                if seq_frame_range[0] > pair_frame_range[0]: seq_frame_range[0] = pair_frame_range[0]
+                if seq_frame_range[1] < pair_frame_range[1]: seq_frame_range[1] = pair_frame_range[1]
+
+            duration = int(round((seq_frame_range[1]-seq_frame_range[0])/0.02666666))
+
+            # Write highest timestamp
+            if wow_seq.is_global_sequence:
+                self.m2.root.global_sequences.append(duration)
             else:
-                bounds = blender_action.frame_range
-                self.m2.root.global_sequences.append(int(round((bounds[1]-bounds[0])/0.02666666)))
+                self.m2.root.sequences[seq_id].duration = duration
+
+        # Write alias durations
+        for wow_seq in self.m2.root.sequences.values:
+            if not 64 & wow_seq.flags: continue
+            cur_seq = wow_seq
+            while 64 & cur_seq.flags:
+                cur_seq = self.m2.root.sequences.values[cur_seq.alias_next]
+            wow_seq.duration = cur_seq.duration
 
 
     def save_geosets(self, selected_only, fill_textures):
