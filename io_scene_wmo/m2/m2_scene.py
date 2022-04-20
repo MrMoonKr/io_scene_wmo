@@ -495,7 +495,7 @@ class BlenderM2Scene:
 
                 for k in range(len(value)):
                     keyframe = f_curves[k].keyframe_points[j]
-                    keyframe.co = frame, (value[k] if length > 1 else value)
+                    keyframe.co = frame, value[k]
                     keyframe.interpolation = interp_type
 
         else:
@@ -540,7 +540,7 @@ class BlenderM2Scene:
 
     @staticmethod
     def _bl_convert_track_dummy(value=None):
-        return value
+        return [value]
 
     def _bl_add_sequence(self, name: str = "Sequence", is_global: bool = False, is_alias: bool = False):
         seq = self.scene.wow_m2_animations.add()
@@ -1047,8 +1047,8 @@ class BlenderM2Scene:
                     anim_pair.object = obj
                     self._bl_create_action(anim_pair, name)
 
-                    #self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
-                    #                        'wow_m2_attachment.animate', attachment.animate_attached)
+                    self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
+                                            'wow_m2_attachment.animate', attachment.animate_attached)
 
     def load_lights(self):
 
