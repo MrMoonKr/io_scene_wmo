@@ -547,6 +547,14 @@ class BlenderM2Scene:
     def _bl_convert_track_dummy(value=None):
         return [value]
 
+    @staticmethod
+    def _bl_convert_track_value(value=None):
+        return [value]
+
+    @staticmethod
+    def _bl_convert_track_tuple(value=None):
+        return value
+
     def _bl_add_sequence(self, name: str = "Sequence", is_global: bool = False, is_alias: bool = False):
         seq = self.scene.wow_m2_animations.add()
         seq.is_global_sequence = is_global
@@ -1072,8 +1080,8 @@ class BlenderM2Scene:
             self._bl_create_action(anim_pair, action_name)
             action_group = self._bl_create_action_group(anim_pair.action, 'Color_{}'.format(prop_name))
 
-            #self._bl_create_fcurves(anim_pair.action, action_group, self._bl_convert_track_dummy, length, anim_index,
-            #                        'data.wow_m2_light.{}'.format(prop_name), prop_track)
+            self._bl_create_fcurves(anim_pair.action, action_group, self._bl_convert_track_value if length == 1 else self._bl_convert_track_tuple, length, anim_index,
+                                    'data.wow_m2_light.{}'.format(prop_name), prop_track)
 
         for i, light in enumerate(self.m2.root.lights):
             #bpy.ops.object.lamp_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
