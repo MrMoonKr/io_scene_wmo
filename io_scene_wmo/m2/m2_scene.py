@@ -32,6 +32,7 @@ class BlenderM2Scene:
         self.event_ids = {}
         self.camera_ids = {}
         self.camera_target_ids = {}
+        self.texture_transform_ids = {}
         self.light_ids = {}
         self.uv_transforms = {}
         self.geosets = []
@@ -90,8 +91,8 @@ class BlenderM2Scene:
                 return
 
             # create fcurve
-            f_curve = action.fcurves.new(data_path='wow_m2_colors[{}].color'.format(color_index),
-                                         index=3, action_group='Color_{}'.format(color_index))
+            f_curve = action.fcurves.new(data_path='wow_m2_colors[{}].alpha'.format(color_index),
+                                         index=0, action_group='Color_{}'.format(color_index))
 
             # init keyframes on the curve
             f_curve.keyframe_points.add(len(frames))
@@ -169,7 +170,7 @@ class BlenderM2Scene:
 
             # create fcurve
             f_curve = action.fcurves.new(data_path='wow_m2_transparency[{}].value'.format(trans_index),
-                                         index=3, action_group='Transparency_{}'.format(trans_index))
+                                         index=0, action_group='Transparency_{}'.format(trans_index))
 
             # init keyframes on the curve
             f_curve.keyframe_points.add(len(frames))
@@ -983,8 +984,8 @@ class BlenderM2Scene:
                             if tex_transform.scaling.global_sequence < 0 \
                                     and tex_transform.scaling.timestamps.n_elements > j:
                                 action = self._bl_create_action(anim_pair, name)
-                                self._bl_create_fcurves(action, obj.name, self._bl_convert_track_dummy, 4, j,
-                                                        'rotation_quaternion', tex_transform.rotation)
+                                self._bl_create_fcurves(action, obj.name, self._bl_convert_track_tuple, 3, j,
+                                                        'scale', tex_transform.scaling)
 
                             if not anim_pair.action:
                                 anim.anim_pairs.remove(cur_index)
@@ -1660,7 +1661,7 @@ class BlenderM2Scene:
                 'DoodadSoundOneShot',
                 'GOPlaySoundKitCustom',
                 'GOAddShake'):
-                evt.data = obj.wow_m2_event.data
+                evt.data = bl_evt.wow_m2_event.data
 
     def save_lights(self):
         lights = [light for light in bpy.data.objects if light.type == 'LIGHT' and light.data.wow_m2_light.enabled]
@@ -1711,7 +1712,6 @@ class BlenderM2Scene:
             def __init__(self,seq_id,global_seq_id,data):
                 self.seq_id = seq_id
                 self.global_seq_id = global_seq_id
-                self.ids = ids
                 self.data = data
 
             def get_paths(self):
@@ -1727,19 +1727,27 @@ class BlenderM2Scene:
                 if not path in self.data:
                     return
 
+                frames = self.get_frames(path)
+                if len(frames) == 0:
+                    return
+
                 while len(m2_track.timestamps) <= self.seq_id:
                     m2_track.timestamps.add(M2Array(uint32))
-                while len(m2_track.values) <= self.seq_id:
-                    m2_track.values.add(M2Array(value_type))
-
                 m2_times = m2_track.timestamps[seq_id]
-                m2_values = m2_track.values[seq_id]
 
                 highest_time = 0
-                for (time,value) in self.get_frames(path):
-                    highest_time = bl_to_m2_time(time)
-                    m2_times.add(highest_time)
-                    m2_values.add(converter(value))
+                if not value_type is None:
+                    while len(m2_track.values) <= self.seq_id:
+                        m2_track.values.add(M2Array(value_type))
+                    m2_values = m2_track.values[seq_id]
+                    for (time,value) in frames:
+                        highest_time = bl_to_m2_time(time)
+                        m2_times.add(highest_time)
+                        m2_values.add(converter(value))
+                else:
+                    for (time,_) in frames:
+                        highest_time = bl_to_m2_time(time)
+                        m2_times.add(highest_time)
 
                 if self.global_seq_id >= 0:
                     if not self.global_seq_id in global_seq_durations or highest_time > global_seq_durations[self.global_seq_id]:
@@ -1836,6 +1844,69 @@ class BlenderM2Scene:
                 if curve_type == 'location':
                     cpd.write_track(path,m2_bone.translation,vec3D)
 
+        def write_scene(cpd, pair):
+            def extract_scene_data(path):
+                index = re.search('\\[(.+?)\\]', path).group(1)
+                data_path = re.search('\\]\.(.+)', path).group(1)
+                return (int(index),data_path)
+
+            for path in cpd.get_paths():
+                if path.startswith("wow_m2_colors"):
+                    (index,data_path) = extract_scene_data(path)
+                    while len(self.m2.root.colors) <= index:
+                        self.m2.root.colors.append(M2Color())
+
+                    col = self.m2.root.colors[index]
+                    if data_path == 'color':
+                        cpd.write_track(path,col.color,vec3D)
+                    if data_path == 'alpha':
+                        cpd.write_track(path,col.alpha,fixed16,lambda x: int(x*0x7fff))
+
+                if path.startswith("wow_m2_transparency"):
+                    (index,_) = extract_scene_data(path)
+                    while len(self.m2.root.texture_weights) <= index:
+                        self.m2.root.texture_weights.append(M2Track(fixed16,M2Header))
+                    weight = self.m2.root.texture_weights.values[index]
+                    cpd.write_track(path,weight,fixed16, lambda x: int(x*0x7fff))
+
+        def write_event(cpd, pair):
+            m2_event = self.m2.root.events[self.event_ids[pair.object.name]]
+            cpd.write_track("wow_m2_event.fire",m2_event.enabled,None)
+
+        def write_texture_transform(cpd, pair):
+            self.texture_transform_ids[pair.object.name] = len(self.m2.root.texture_transforms)
+            trans = M2TextureTransform()
+            self.m2.root.texture_transforms.append(trans)
+
+            cpd.write_track("location",trans.translation,vec3D)
+            cpd.write_track("scale",trans.scaling,vec3D)
+            cpd.write_track("rotation_quaternion",trans.rotation,quat,
+                lambda x: (
+                     x[2],
+                    -x[1],
+                     x[3],
+                     x[0]
+                )
+            )
+
+        def write_ribbon(cpd, pair):
+            pass
+
+        def write_particle(cpd, pair):
+            pass
+
+        def write_camera(cpd, pair):
+            pass
+
+        def write_camera_target(cpd, pair):
+            m2_camera = self.m2.root.cameras[self.camera_target_ids[pair.object.name]]
+            def convert_spline(x):
+                key = M2SplineKey(float32)
+                key.value = x
+                return key
+            # TODO: can't write this because the track thinks the m2array type is generic for some reason
+            #cpd.write_track("rotation_axis_angle",m2_camera.roll,float32,convert_spline)
+
         while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
             self.m2.root.sequence_lookup.append(0xffff)
 
@@ -1845,10 +1916,6 @@ class BlenderM2Scene:
             return
 
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
-        texture_weight = self.m2.root.texture_weights.new()
-        if self.m2.root.version >= M2Versions.WOTLK:
-            texture_weight.timestamps.new().add(0)
-            texture_weight.values.new().add(32767)
 
         for wow_seq in self.scene.wow_m2_animations:
             seq_id = 0
@@ -1881,26 +1948,28 @@ class BlenderM2Scene:
                 )
 
             for pair in wow_seq.anim_pairs:
-                if pair.object is None or pair.action is None:
+                if (pair.type != 'SCENE' and pair.object is None) or pair.action is None:
                     continue
 
-                # Fix pair type
-                pair_type = pair.object.type
-                if pair_type == 'EMPTY':
-                    if pair.object.wow_m2_attachment.enabled:
-                        pair_type = 'ATTACHMENT'
-                    if pair.object.wow_m2_event.enabled:
-                        pair_type = 'EVENT'
-                    if pair.object.wow_m2_camera.enabled:
-                        pair_type = 'CAMERA_TARGET'
-
-                ids = (seq_id,global_seq_id)
-                if pair_type == 'ARMATURE':
+                if pair.type == 'SCENE':
+                    write_data_compound(seq_id, global_seq_id, pair, write_scene)
+                elif pair.object.type == 'ARMATURE':
                     write_data_compound(seq_id, global_seq_id, pair, write_bone)
-                if pair_type == 'ATTACHMENT':
-                    write_data_compound(seq_id, global_seq_id, pair, write_attachment)
-                if pair_type == 'LIGHT':
+                elif pair.object.type == 'LIGHT':
                     write_data_compound(seq_id, global_seq_id, pair, write_light)
+                elif pair.object.type == 'CAMERA':
+                    write_data_compound(seq_id, global_seq_id, pair, write_camera)
+                elif pair.object.type == 'CAMERA_TARGET':
+                    write_data_compound(seq_id, global_seq_id, pair, write_camera_target)
+                elif pair.object.type == 'EMPTY':
+                    if pair.object.wow_m2_attachment.enabled:
+                        write_data_compound(seq_id, global_seq_id, pair, write_attachment)
+                    elif pair.object.wow_m2_event.enabled:
+                        write_data_compound(seq_id, global_seq_id, pair, write_event)
+                    elif pair.object.wow_m2_camera.enabled:
+                        write_data_compound(seq_id, global_seq_id, pair, write_camera_target)
+                    elif pair.object.wow_m2_uv_transform.enabled:
+                        write_data_compound(seq_id, global_seq_id, pair, write_texture_transform)
 
             for global_seq_id,duration in global_seq_durations.items():
                 assert global_seq_id < len(self.m2.root.global_sequences)
@@ -1909,6 +1978,13 @@ class BlenderM2Scene:
             for seq_id,duration in seq_durations.items():
                 assert seq_id < len(self.m2.root.sequences)
                 self.m2.root.sequences[seq_id].duration = duration
+
+        # Add dummy texture weight
+        if len(self.m2.root.texture_weights) == 0:
+            texture_weight = self.m2.root.texture_weights.new()
+            if self.m2.root.version >= M2Versions.WOTLK:
+                texture_weight.timestamps.new().add(0)
+                texture_weight.values.new().add(32767)
 
         # Write alias durations
         #for i,wow_seq in enumerate(self.m2.root.sequences.values):
