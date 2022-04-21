@@ -32,6 +32,7 @@ class BlenderM2Scene:
         self.event_ids = {}
         self.camera_ids = {}
         self.camera_target_ids = {}
+        self.color_ids = {}
         self.texture_transform_ids = {}
         self.light_ids = {}
         self.uv_transforms = {}
@@ -1857,6 +1858,13 @@ class BlenderM2Scene:
                         self.m2.root.colors.append(M2Color())
 
                     col = self.m2.root.colors[index]
+                    col_name = bpy.context.scene.wow_m2_colors[index].name
+                    if col_name in self.color_ids:
+                        old_index = self.color_ids[col_name]
+                        assert old_index == index,f'Color {col_name} has multiple ids: {index},{old_index}'
+                    else:
+                        self.color_ids[col_name] = index
+
                     if data_path == 'color':
                         cpd.write_track(path,col.color,vec3D)
                     if data_path == 'alpha':
@@ -2164,9 +2172,10 @@ class BlenderM2Scene:
                 bl_mode = int(material.wow_m2_material.blending_mode)
                 shader_id = int(material.wow_m2_material.shader)
                 mat_layer = int(material.wow_m2_material.layer)
+                color_id = self.color_ids[material.wow_m2_material.color]
 
                 self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id,
-                                                tex_unit_coord, priority_plane, mat_layer, texture_count)
+                                                tex_unit_coord, priority_plane, mat_layer, texture_count, color_id)
 
             bpy.data.objects.remove(new_obj, do_unlink=True)
 
