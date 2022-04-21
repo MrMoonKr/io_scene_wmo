@@ -279,7 +279,7 @@ class WBS_OT_M2_test(bpy.types.Operator):
 
         def diff(obj1,obj2):
             if type(obj1) != type(obj2):
-                return 'TypeError('+str(type(obj1))+','+str(type(obj2))+')'
+                return f'TypeError({str(type(obj1))},{str(type(obj2))}) ({obj1},{obj2})'
             dtype = type(obj1)
             if dtype is dict:
                 diffObj = {}
