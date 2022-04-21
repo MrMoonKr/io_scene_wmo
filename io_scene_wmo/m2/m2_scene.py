@@ -33,6 +33,7 @@ class BlenderM2Scene:
         self.camera_ids = {}
         self.camera_target_ids = {}
         self.color_ids = {}
+        self.transparency_ids = {}
         self.texture_transform_ids = {}
         self.light_ids = {}
         self.uv_transforms = {}
@@ -1874,7 +1875,23 @@ class BlenderM2Scene:
                     (index,_) = extract_scene_data(path)
                     while len(self.m2.root.texture_weights) <= index:
                         self.m2.root.texture_weights.append(M2Track(fixed16,M2Header))
+
+                    # (3.3.5a)
+                    # The transparency lookup table is seemingly worthless,
+                    # it always just contains 0,1,2,3,4... in blizzard m2s
+                    lt = self.m2.root.transparency_lookup_table
+                    while len(lt) <= index:
+                        lt.append(len(lt))
+
                     weight = self.m2.root.texture_weights.values[index]
+
+                    weight_name = bpy.context.scene.wow_m2_transparency[index].name
+                    if weight_name in self.transparency_ids:
+                        old_index = self.transparency_ids[weight_name]
+                        assert old_index == index,f'Transparency {weight_name} has multiple ids: {index},{old_index}'
+                    else:
+                        self.transparency_ids[weight_name] = index
+
                     cpd.write_track(path,weight,fixed16, lambda x: int(x*0x7fff))
 
         def write_event(cpd, pair):
@@ -2173,9 +2190,10 @@ class BlenderM2Scene:
                 shader_id = int(material.wow_m2_material.shader)
                 mat_layer = int(material.wow_m2_material.layer)
                 color_id = self.color_ids[material.wow_m2_material.color]
+                transparency_id = self.transparency_ids[material.wow_m2_material.transparency]
 
                 self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id,
-                                                tex_unit_coord, priority_plane, mat_layer, texture_count, color_id)
+                                                tex_unit_coord, priority_plane, mat_layer, texture_count, color_id, transparency_id)
 
             bpy.data.objects.remove(new_obj, do_unlink=True)
 
