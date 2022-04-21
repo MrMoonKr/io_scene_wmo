@@ -612,8 +612,8 @@ class BlenderM2Scene:
                 anim.is_alias = True
 
                 for j, seq in m2_sequences:
+                    anim.alias_next = j
                     if j == sequence.alias_next:
-                        anim.alias_next = j + len(self.m2.root.global_sequences)
                         self.alias_animation_lookup[i] = j
                         break
 
@@ -1917,6 +1917,11 @@ class BlenderM2Scene:
 
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
 
+        global_seq_count = 0
+        for wow_seq in self.scene.wow_m2_animations:
+            if wow_seq.is_global_sequence:
+                global_seq_count += 1
+
         for wow_seq in self.scene.wow_m2_animations:
             seq_id = 0
             global_seq_id = -1
@@ -1944,7 +1949,7 @@ class BlenderM2Scene:
                     wow_seq.blend_time,  # TODO: multiversioning
                     ((min_bounds,max_bounds), radius),
                     wow_seq.VariationNext,
-                    0, # TODO: old was just wrong
+                    wow_seq.alias_next
                 )
 
             for pair in wow_seq.anim_pairs:
@@ -1987,16 +1992,17 @@ class BlenderM2Scene:
                 texture_weight.values.new().add(32767)
 
         # Write alias durations
-        #for i,wow_seq in enumerate(self.m2.root.sequences.values):
-        #    if not 64 & wow_seq.flags: continue
-        #    cur_seq = wow_seq
-        #    visited = [i]
-        #    while 64 & cur_seq.flags:
-        #        assert cur_seq.alias_next != -1,"alias action without alias_next set"
-        #        assert not (cur_seq.alias_next in visited),f"Circular alias_next: {cur_seq.alias_next} ({visited})"
-        #        visited.append(cur_seq.alias_next)
-        #        cur_seq = self.m2.root.sequences.values[cur_seq.alias_next]
-        #    wow_seq.duration = cur_seq.duration
+        for i,wow_seq in enumerate(self.m2.root.sequences.values):
+            if not 64 & wow_seq.flags: continue
+            cur_seq = wow_seq
+            visited = [i]
+            while 64 & cur_seq.flags:
+                assert cur_seq.alias_next != -1,"alias action without alias_next set"
+                assert not (cur_seq.alias_next in visited),f"Circular alias_next: {cur_seq.alias_next} ({visited})"
+                assert cur_seq.alias_next < len(self.m2.root.sequences.values)
+                visited.append(cur_seq.alias_next)
+                cur_seq = self.m2.root.sequences.values[cur_seq.alias_next]
+            wow_seq.duration = cur_seq.duration
 
 
     def save_geosets(self, selected_only, fill_textures):
