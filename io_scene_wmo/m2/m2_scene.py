@@ -2189,8 +2189,8 @@ class BlenderM2Scene:
                 bl_mode = int(material.wow_m2_material.blending_mode)
                 shader_id = int(material.wow_m2_material.shader)
                 mat_layer = int(material.wow_m2_material.layer)
-                color_id = self.color_ids[material.wow_m2_material.color]
-                transparency_id = self.transparency_ids[material.wow_m2_material.transparency]
+                color_id = self.color_ids[material.wow_m2_material.color] if material.wow_m2_material.color != "" else 0
+                transparency_id = self.transparency_ids[material.wow_m2_material.transparency] if material.wow_m2_material.transparency != "" else 0
 
                 self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_id,
                                                 tex_unit_coord, priority_plane, mat_layer, texture_count, color_id, transparency_id)
