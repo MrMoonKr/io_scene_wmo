@@ -2138,7 +2138,7 @@ class BlenderM2Scene:
                     v_bone_weights = [0, 0, 0, 0]
 
                     for i, group_info in enumerate(vertex.groups):
-                        bone_id = self.bone_ids.get(new_obj.vertex_groups[i].name)
+                        bone_id = self.bone_ids.get(new_obj.vertex_groups[group_info.group].name)
                         weight = group_info.weight
 
                         if bone_id is None:
