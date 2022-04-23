@@ -277,6 +277,70 @@ class WBS_OT_M2_test(bpy.types.Operator):
         context.scene.wow_scene.type = 'M2'
         m2_out = create_m2(int(context.scene.wow_scene.version), self.filepath, False, False,True,'INDIVIDUAL')
 
+        def objectify(obj_in,visited_stack = []):
+            def is_primitive(type_in):
+                return type_in in ['bool','float','int','str']
+
+            def has_visited(obj):
+                for value in visited_stack:
+                    if obj is value:
+                        return True
+                return False
+
+            obj_type = type(obj_in).__name__
+            def skip_field(typename,fieldname):
+                if obj_type == 'M2CompBone':
+                    return fieldname in ['name','index','parent','children']
+                pass
+
+            def transform(value):
+                if obj_type == 'M2Array':
+                    return value['values']
+                if obj_type == 'Array':
+                    return value['values']
+                else:
+                    return value
+
+            if obj_type == 'Vector':
+                return (obj_in.x,obj_in.y,obj_in.z) if hasattr(obj_in,'z') else (obj_in.x,obj_in.y)
+
+            if obj_type == 'Quaternion':
+                return (obj_in.w,obj_in.x,obj_in.y,obj_in.z)
+
+            if is_primitive(obj_type):
+                return obj_in
+
+            visited_stack.append(obj_in)
+
+            if obj_type == 'list' or obj_type == 'tuple':
+                list_out = []
+                for value in obj_in:
+                    value_type = type(value).__name__
+                    if not is_primitive(type(value).__name__):
+                        if has_visited(value):
+                            continue
+                        value = objectify(value, visited_stack)
+                    list_out.append(value)
+                return list_out
+            else:
+                obj_out = {}
+                for key in dir(obj_in):
+                    if skip_field(obj_type,key):
+                        continue
+                    if key.startswith('__'):
+                        continue
+                    if not hasattr(obj_in,key):
+                        continue
+                    value = getattr(obj_in,key)
+                    if callable(value):
+                        continue
+                    if not is_primitive(type(value).__name__):
+                        if has_visited(value):
+                            continue
+                        value = objectify(value, visited_stack)
+                    obj_out[key] = value
+                return transform(obj_out)
+
         def diff(obj1,obj2):
             if type(obj1) != type(obj2):
                 return f'TypeError({str(type(obj1))},{str(type(obj2))}) ({obj1},{obj2})'
@@ -309,7 +373,7 @@ class WBS_OT_M2_test(bpy.types.Operator):
                 return str(obj1) + ' != ' + str(obj2) if obj1 != obj2 else None
 
         with open(self.filepath+".json",'w') as f:
-            f.write(json.dumps(diff(m2_in.to_obj(),m2_out.to_obj()),indent=4))
+            f.write(json.dumps(diff(objectify(m2_in),objectify(m2_out)),indent=4))
         m2_out.write(self.filepath[:-2]+"out.m2")
         return {'FINISHED'}
 
@@ -317,7 +381,6 @@ class WBS_OT_M2_test(bpy.types.Operator):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
-
 
 '''
 Created on Dec 30, 2019
