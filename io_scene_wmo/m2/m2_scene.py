@@ -471,18 +471,6 @@ class BlenderM2Scene:
                 parent = armature.edit_bones[self.m2.root.bones[bone.parent_bone].name]
                 bl_edit_bone.parent = parent
 
-        # set preset bounds
-        meta = bpy.context.scene.m2_meta
-        meta.preset_bounds_min_x = self.m2.root.bounding_box.min[0]
-        meta.preset_bounds_min_y = self.m2.root.bounding_box.min[1]
-        meta.preset_bounds_min_z = self.m2.root.bounding_box.min[2]
-
-        meta.preset_bounds_max_x = self.m2.root.bounding_box.max[0]
-        meta.preset_bounds_max_y = self.m2.root.bounding_box.max[1]
-        meta.preset_bounds_max_z = self.m2.root.bounding_box.max[2]
-
-        meta.preset_bounds_radius = self.m2.root.bounding_sphere_radius
-
         bpy.context.view_layer.update()  # update scene.
         bpy.ops.object.mode_set(mode='OBJECT')  # return to object mode.
 
@@ -583,7 +571,7 @@ class BlenderM2Scene:
 
         return seq
 
-    def _bl_load_sequences(self,use_preset_bounds=False):
+    def _bl_load_sequences(self):
         anim_data_table = M2SequenceNames()
 
         # import global sequence animations
@@ -628,16 +616,6 @@ class BlenderM2Scene:
             anim.replay_max = sequence.replay.maximum
             anim.VariationNext = sequence.variation_next
 
-            anim.use_preset_bounds = use_preset_bounds
-            anim.preset_bounds_min_x = sequence.bounds.extent.min[0]
-            anim.preset_bounds_min_y = sequence.bounds.extent.min[1]
-            anim.preset_bounds_min_z = sequence.bounds.extent.min[2]
-
-            anim.preset_bounds_max_x = sequence.bounds.extent.max[0]
-            anim.preset_bounds_max_y = sequence.bounds.extent.max[1]
-            anim.preset_bounds_max_z = sequence.bounds.extent.max[2]
-            anim.preset_bounds_radius = sequence.bounds.radius
-
             if self.m2.root.version >= M2Versions.WOD:
                 anim.blend_time_in = sequence.blend_time_in
                 anim.blend_time_out = sequence.blend_time_out
@@ -654,9 +632,7 @@ class BlenderM2Scene:
 
         return name
 
-    def load_animations(self,use_preset_bounds):
-
-        bpy.context.scene.m2_meta.min_animation_lookups = len(self.m2.root.sequence_lookup)
+    def load_animations(self):
 
         # TODO: pre-wotlk
 
@@ -694,7 +670,7 @@ class BlenderM2Scene:
         rig.animation_data.action_blend_type = 'ADD'
         bpy.context.view_layer.objects.active = rig
 
-        self._bl_load_sequences(use_preset_bounds)
+        self._bl_load_sequences()
 
         # import fcurves
         for bone in self.m2.root.bones:
@@ -1493,24 +1469,18 @@ class BlenderM2Scene:
         obj.hide_set(True)
         # TODO: add transparent material
 
-    def save_properties(self, filepath, selected_only, use_preset_bounds):
+    def save_properties(self, filepath, selected_only):
         self.m2.root.name.value = os.path.basename(filepath)
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
 
-        if use_preset_bounds:
-            m = bpy.context.scene.m2_meta
-            self.m2.root.bounding_box.min = (m.preset_bounds_min_x,m.preset_bounds_min_y,m.preset_bounds_min_z)
-            self.m2.root.bounding_box.max = (m.preset_bounds_max_x,m.preset_bounds_max_y,m.preset_bounds_max_z)
-            self.m2.root.bounding_box_sphere_radius = m.preset_bounds_radius
-        else:
-            b_min, b_max = get_objs_boundbox_world(filter(lambda ob: not ob.wow_m2_geoset.collision_mesh
-                                                                    and ob.type == 'MESH'
-                                                                    and not ob.hide_get(), objects))
-            self.m2.root.bounding_box.min = b_min
-            self.m2.root.bounding_box.max = b_max
-            self.m2.root.bounding_sphere_radius = sqrt((b_max[0]-b_min[0]) ** 2
-                                                    + (b_max[1]-b_min[2]) ** 2
-                                                    + (b_max[2]-b_min[2]) ** 2) / 2
+        b_min, b_max = get_objs_boundbox_world(filter(lambda ob: not ob.wow_m2_geoset.collision_mesh
+                                                                and ob.type == 'MESH'
+                                                                and not ob.hide_get(), objects))
+        self.m2.root.bounding_box.min = b_min
+        self.m2.root.bounding_box.max = b_max
+        self.m2.root.bounding_sphere_radius = sqrt((b_max[0]-b_min[0]) ** 2
+                                                + (b_max[1]-b_min[2]) ** 2
+                                                + (b_max[2]-b_min[2]) ** 2) / 2
 
         # TODO: flags, collision bounding box
 
@@ -1677,7 +1647,7 @@ class BlenderM2Scene:
                 light.bone = self.bone_ids[bl_light.constraints[0].subtarget]
             light.position = bl_light.location
 
-    def save_animations(self,preset_bounds):
+    def save_animations(self):
         def bl_to_m2_time(bl):
             return int(round(bl/0.02666666))
 
@@ -1950,10 +1920,6 @@ class BlenderM2Scene:
                 is_alias = "64" in wow_seq.flags
 
                 # TODO using root boundings hwen not using preset, better than nothing
-                use_preset_bounds = (preset_bounds == "ALWAYS") or (preset_bounds == "INDIVIDUAL" and wow_seq.use_preset_bounds)
-                min_bounds = (wow_seq.preset_bounds_min_x,wow_seq.preset_bounds_min_y,wow_seq.preset_bounds_min_z) if use_preset_bounds else self.m2.root.bounding_box.min
-                max_bounds = (wow_seq.preset_bounds_max_x,wow_seq.preset_bounds_max_y,wow_seq.preset_bounds_max_z) if use_preset_bounds else self.m2.root.bounding_box.max
-                radius = wow_seq.preset_bounds_radius if use_preset_bounds else self.m2.root.bounding_sphere_radius
 
                 seq_id = self.m2.add_anim(
                     int(wow_seq.animation_id),
@@ -1964,7 +1930,8 @@ class BlenderM2Scene:
                     wow_seq.frequency,
                     (wow_seq.replay_min, wow_seq.replay_max),
                     wow_seq.blend_time,  # TODO: multiversioning
-                    ((min_bounds,max_bounds), radius),
+                    ((self.m2.root.bounding_box.min,self.m2.root.bounding_box.max),
+                        self.m2.root.bounding_sphere_radius),
                     wow_seq.VariationNext,
                     wow_seq.alias_next
                 )

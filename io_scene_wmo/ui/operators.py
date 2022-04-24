@@ -185,14 +185,8 @@ class WBS_OT_m2_import(bpy.types.Operator):
         options={'HIDDEN'}
         )
 
-    use_preset_bounds: BoolProperty(
-        name="Use Preset Bounds",
-        description="Use preset bounds data instead of calculating on export",
-        default=False,
-        )
-
     def execute(self, context):
-        import_m2(int(context.scene.wow_scene.version), self.filepath, self.use_preset_bounds, True)
+        import_m2(int(context.scene.wow_scene.version), self.filepath, True)
         context.scene.wow_scene.type = 'M2'
         return {'FINISHED'}
 
@@ -233,26 +227,9 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
         default=True
         )
 
-    animation_preset_bounds: EnumProperty(
-        name="Animation Preset Bounds",
-        description="How to handle animation preset bounds data",
-        items=[
-            ('ALWAYS','Always','Use preset data regardless of animation setting'),
-            ('NEVER','Never','Calculate bounds data regardless of animation setting'),
-            ('INDIVIDUAL','Individual','Respect individual animation settings'),
-        ],
-        default='INDIVIDUAL'
-    )
-
-    root_preset_bounds: BoolProperty(
-        name="Root Preset Bounds",
-        description="Whether to use preset data for root m2 bounds data",
-        default=False
-    )
-
     def execute(self, context):
         if context.scene and context.scene.wow_scene.type == 'M2':
-            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures,self.root_preset_bounds,self.animation_preset_bounds)
+            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures)
             return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')
