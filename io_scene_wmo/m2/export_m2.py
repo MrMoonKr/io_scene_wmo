@@ -11,6 +11,8 @@ def create_m2(version, filepath, selected_only, fill_textures):
     importlib.reload(m2_scene)
     bl_m2 = m2_scene.BlenderM2Scene(m2, addon_prefs)
 
+    print("\nPreparing Pose")
+    bl_m2.prepare_pose(selected_only)
     print("\nExporting properties")
     bl_m2.save_properties(filepath, selected_only)
     print("\nExporting bones")
@@ -29,6 +31,8 @@ def create_m2(version, filepath, selected_only, fill_textures):
     bl_m2.save_geosets(selected_only, fill_textures)
     print("\nExporting collisions")
     bl_m2.save_collision(selected_only)
+    print("\nRestoring Pose")
+    bl_m2.restore_pose()
     return m2
 
 def export_m2(version, filepath, selected_only, fill_textures):

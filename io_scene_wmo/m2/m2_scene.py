@@ -41,6 +41,11 @@ class BlenderM2Scene:
         self.animations = []
         self.alias_animation_lookup = {}
         self.global_sequences = []
+        self.old_actions = []
+        self.old_selections = []
+        self.old_active = None
+        self.old_mode = None
+        self.reset_pose_actions = []
         self.rig = None
         self.collision_mesh = None
         self.settings = prefs
@@ -1468,6 +1473,54 @@ class BlenderM2Scene:
         obj.wow_m2_geoset.collision_mesh = True
         obj.hide_set(True)
         # TODO: add transparent material
+
+    def prepare_pose(self, selected_only):
+        self.old_mode = bpy.context.object.mode
+        self.old_selections = [obj for obj in bpy.context.selected_objects]
+        self.old_active = bpy.context.active_object
+
+        # TODO: this is a temporary fix to reset pose, because wbs uses the wrong data
+        #       when reading bone and vertex positions.
+        objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
+
+        for obj in objects:
+            if obj.type != 'ARMATURE':
+                continue
+            if obj.animation_data and obj.animation_data.action:
+                self.old_actions.append((obj,obj.animation_data.action))
+
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            action = bpy.data.actions.new(name=obj.name+"__RESET_POSE")
+            self.reset_pose_actions.append(action)
+            for bone in obj.data.bones:
+                def make_curve(data_path,index, value):
+                    curve = action.fcurves.new(data_path = data_path, index = index)
+                    curve.keyframe_points.add(1)
+                    curve.keyframe_points[0].co[0] = 0
+                    curve.keyframe_points[0].co[1] = value
+
+                make_curve(f"pose.bones[\"{bone.name}\"].rotation_quaternion", 0, 1)
+                for i in range(3):
+                    make_curve(f"pose.bones[\"{bone.name}\"].location", i, 0)
+                    make_curve(f"pose.bones[\"{bone.name}\"].scale", i, 1)
+                    make_curve(f"pose.bones[\"{bone.name}\"].rotation_quaternion", i+1, 0)
+            obj.animation_data.action = action
+
+    def restore_pose(self):
+        for (obj,action) in self.old_actions:
+            obj.animation_data.action = action
+
+        for action in self.reset_pose_actions:
+            bpy.data.actions.remove(action)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in self.old_selections:
+            obj.select_set(True)
+        if self.old_active:
+            bpy.context.view_layer.objects.active = self.old_active
+        if self.old_mode:
+            bpy.ops.object.mode_set( mode = self.old_mode )
 
     def save_properties(self, filepath, selected_only):
         self.m2.root.name.value = os.path.basename(filepath)
