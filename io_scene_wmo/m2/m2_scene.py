@@ -1932,14 +1932,6 @@ class BlenderM2Scene:
             # TODO: can't write this because the track thinks the m2array type is generic for some reason
             #cpd.write_track("rotation_axis_angle",m2_camera.roll,float32,convert_spline)
 
-        while len(self.m2.root.sequence_lookup) < bpy.context.scene.m2_meta.min_animation_lookups:
-            self.m2.root.sequence_lookup.append(0xffff)
-
-        # if there are no actions, make a default Stand anim.
-        if not len(bpy.data.actions):
-            self.m2.add_dummy_anim_set(get_origin_position())
-            return
-
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
 
         global_seq_count = 0
@@ -2028,6 +2020,15 @@ class BlenderM2Scene:
                 visited.append(cur_seq.alias_next)
                 cur_seq = self.m2.root.sequences.values[cur_seq.alias_next]
             wow_seq.duration = cur_seq.duration
+
+        if len(self.m2.root.sequences) == 0:
+            self.m2.add_dummy_anim_set((0,0,0))
+
+        while len(self.m2.root.sequence_lookup) < 5: # don't crash creatures
+            self.m2.root.sequence_lookup.append(0xffff)
+        if self.m2.root.sequence_lookup[4] == -1:
+            self.m2.root.sequence_lookup[4] = 0
+
 
 
     def save_geosets(self, selected_only, fill_textures):
