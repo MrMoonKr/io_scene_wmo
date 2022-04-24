@@ -382,6 +382,32 @@ class WBS_OT_M2_test(bpy.types.Operator):
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
+class WBS_OT_M2_ConvertBones(bpy.types.Operator):
+    """Convert Bones and Animation Tracks To WoW-style bones"""
+    bl_idname = "convert_bones.m2"
+    bl_label = "Convert Bones to WoW"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        import importlib
+        from ..m2.operations import convert_m2_bones
+        importlib.reload(convert_m2_bones)
+        convert_m2_bones.convert_m2_bones()
+        return {'FINISHED'}
+
+class WBS_OT_M2_RemoveScaleTracks(bpy.types.Operator):
+    """Remove all scale tracks"""
+    bl_idname = "remove_scale.m2"
+    bl_label = "Remove Scale Tracks"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        import importlib
+        from ..m2.operations import remove_scale_tracks
+        importlib.reload(remove_scale_tracks)
+        remove_scale_tracks.remove_scale_tracks()
+        return {'FINISHED'}
+
 '''
 Created on Dec 30, 2019
 

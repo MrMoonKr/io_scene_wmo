@@ -218,6 +218,8 @@ menu_export_wmo = lambda self, ctx: self.layout.operator("export_mesh.wmo", text
 menu_import_m2 = lambda self, ctx: self.layout.operator("import_mesh.m2", text="WoW M2 (.m2)")
 menu_export_m2 = lambda self, ctx: self.layout.operator("export_mesh.m2", text="WoW M2 (.m2)")
 menu_test_m2 = lambda self, ctx: self.layout.operator("test.m2", text="Test M2 (.m2)")
+menu_convert_bones = lambda self, ctx: self.layout.operator("convert_bones.m2", text="Convert Bones To WoW")
+menu_remove_scale = lambda self, ctx: self.layout.operator("remove_scale.m2", text="Remove Scale Tracks")
 
 def register():
     register_wow_scene_properties()
@@ -228,6 +230,9 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_export_wmo)
     bpy.types.TOPBAR_MT_file_export.append(menu_export_m2)
     bpy.types.TOPBAR_MT_file_import.append(menu_test_m2)
+    # TODO: temporary, I don't know how to enable these without a panel
+    bpy.types.TOPBAR_MT_file_export.append(menu_convert_bones)
+    bpy.types.TOPBAR_MT_file_export.append(menu_remove_scale)
 
 
 def unregister():
@@ -239,3 +244,5 @@ def unregister():
     bpy.types.TOPBAR_MT_file_export.remove(menu_export_m2)
     bpy.types.TOPBAR_HT_upper_bar.remove(render_top_bar)
     bpy.types.VIEW3D_HT_header.append(render_viewport_toggles_left)
+    bpy.types.TOPBAR_MT_file_export.remove(menu_convert_bones)
+    bpy.types.TOPBAR_MT_file_export.remove(menu_remove_scale)

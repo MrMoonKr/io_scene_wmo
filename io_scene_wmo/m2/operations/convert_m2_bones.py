@@ -1,0 +1,130 @@
+import bpy
+import re
+from mathutils import Matrix, Vector, Quaternion
+
+def convert_m2_bones():
+    def fix_scale(matrix,curves,keyframe_count):
+        for i in range(keyframe_count):
+            def co(j): return fcurves[j].keyframe_points[i].co
+
+            # read vector defining the old rotation
+            vec = Vector((co(0)[1], co(1)[1], co(2)[1]))
+
+            # TODO: CHANGE VECTOR USING 'matrix' HERE SOMEHOW
+
+            # write vector back
+            co(0)[1] = vec.x
+            co(1)[1] = vec.y
+            co(2)[1] = vec.z
+
+    def fix_rotation(matrix,fcurves,keyframe_count):
+        def quat_dist(q1,q2):
+            # takes polarity into account on purpose.
+            # we just want to do _mostly_ correct rotations,
+            # but there might be a better formula to use here.
+            return (
+                pow(q1.w-q2.w,2) +
+                pow(q1.x-q2.x,2) +
+                pow(q1.y-q2.y,2) +
+                pow(q1.z-q2.z,2))
+
+        last_quat = None
+        for i in range(keyframe_count):
+            def co(j): return fcurves[j].keyframe_points[i].co
+
+            q_in = Quaternion((co(0)[1], co(1)[1], co(2)[1], co(3)[1]))
+            axis,angle = q_in.to_axis_angle()
+            axis.rotate(matrix)
+
+            rot_q = Quaternion(axis,angle)
+            if last_quat is None:
+                last_quat = rot_q
+            else:
+                rot_q_neg = Quaternion(-rot_q)
+                dist = quat_dist(rot_q,last_quat)
+                neg_dist = quat_dist(rot_q_neg,last_quat)
+                last_quat = rot_q if dist <= neg_dist else rot_q_neg
+
+            co(0)[1] = last_quat.w
+            co(2)[1] = last_quat.x
+            co(1)[1] = -last_quat.y
+            co(3)[1] = last_quat.z
+
+    def fix_location(matrix, fcurves,keyframe_count):
+        for i in range(keyframe_count):
+            def co(j): return fcurves[j].keyframe_points[i].co
+            vec = Vector((co(0)[1],co(1)[1], co(2)[1]))
+            vec.rotate(matrix)
+
+            co(1)[1] = vec.x
+            co(0)[1] = -vec.y
+            co(2)[1] = vec.z
+
+    def fix_curves(name, matrix, fcurves, track_count, callback):
+        for i in range(track_count):
+            if not i in fcurves:
+                raise ValueError(f'Track index {i} missing in {name} fcurves')
+
+        keyframe_count = len(fcurves[0].keyframe_points)
+        for i,fcurve in fcurves.items():
+            cur_count = len(fcurve.keyframe_points)
+            if cur_count != keyframe_count:
+                raise ValueError(f'Track index {i} keyframe count ({cur_count}) is different from index 0 {keyframe_count}')
+
+        for i in range(keyframe_count):
+            time = fcurves[0].keyframe_points[i].co[0]
+            for j in range(track_count):
+                cur_time = fcurves[j].keyframe_points[i].co[0]
+                if cur_time != time:
+                    raise ValueError(f'Track index {j} frame {j} has a different time value ({cur_time}) from index 0 ({time})')
+
+        callback(matrix,fcurves,keyframe_count)
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+
+    changed_bones = {}
+    for obj in bpy.data.objects:
+        if obj.type != 'ARMATURE': continue
+        obj.select_set(True)
+
+        bpy.ops.object.mode_set(mode='EDIT')
+
+        for bone in obj.data.edit_bones:
+            if bone.use_connect:
+                bone.use_connect = False
+
+        for bone in obj.data.edit_bones:
+            bone.use_connect = False
+            bone.roll = 0
+            bone.tail = bone.head + Vector((1,0,0))
+            changed_bones[bone.name] = Matrix(obj.data.bones[bone.name].matrix_local)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    for action in bpy.data.actions:
+        fcurve_compounds = {}
+        for fcurve in action.fcurves:
+            if not fcurve.data_path.startswith("pose.bones"):
+                continue
+            if not fcurve.data_path in fcurve_compounds:
+                fcurve_compounds[fcurve.data_path] = {}
+            fcurve_compounds[fcurve.data_path][fcurve.array_index] = fcurve
+
+        for key,fcurves in fcurve_compounds.items():
+            bone = re.search('"(.+?)"',key).group(1)
+            if not bone in changed_bones:
+                continue
+            matrix = changed_bones[bone]
+            curve_type = re.search('([a-zA-Z_]+)$',key).group(0)
+
+            if curve_type == 'scale':
+                fix_curves(key,matrix,fcurves,3,fix_scale)
+
+            if curve_type == 'location':
+                fix_curves(key,matrix,fcurves,3,fix_location)
+
+            if curve_type == 'rotation_quaternion':
+                fix_curves(key,matrix,fcurves,4,fix_rotation)
+
+            for fcurve in fcurves.values():
+                fcurve.update()
