@@ -48,6 +48,7 @@ class BlenderM2Scene:
         self.reset_pose_actions = []
         self.axis_order = [0,1]
         self.axis_polarity = [1,1]
+        self.scale = 1
         self.rig = None
         self.collision_mesh = None
         self.settings = prefs
@@ -1476,7 +1477,8 @@ class BlenderM2Scene:
         obj.hide_set(True)
         # TODO: add transparent material
 
-    def prepare_export_axis(self, forward_axis):
+    def prepare_export_axis(self, forward_axis, scale):
+        self.scale = scale
         if forward_axis == 'X+':
             self.axis_order = [0,1]
             self.axis_polarity = [1,1]
@@ -1494,9 +1496,9 @@ class BlenderM2Scene:
 
     def _convert_vec(self,vec):
         return (
-            vec[self.axis_order[0]]*self.axis_polarity[0],
-            vec[self.axis_order[1]]*self.axis_polarity[1],
-            vec[2]
+            vec[self.axis_order[0]] * self.axis_polarity[0] * self.scale,
+            vec[self.axis_order[1]] * self.axis_polarity[1] * self.scale,
+            vec[2] * self.scale
         )
 
     def prepare_pose(self, selected_only):
@@ -1556,9 +1558,9 @@ class BlenderM2Scene:
                                                                 and not ob.hide_get(), objects))
         self.m2.root.bounding_box.min = b_min
         self.m2.root.bounding_box.max = b_max
-        self.m2.root.bounding_sphere_radius = sqrt((b_max[self.axis_order[0]]-b_min[self.axis_order[0]]) ** 2
-                                                + (b_max[self.axis_order[1]]-b_min[self.axis_order[1]]) ** 2
-                                                + (b_max[2]-b_min[2]) ** 2) / 2
+        self.m2.root.bounding_sphere_radius = sqrt(((b_max[self.axis_order[0]]-b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
+                                                + ((b_max[self.axis_order[1]]-b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
+                                                + ((b_max[2]-b_min[2]) * self.scale) ** 2) / 2
 
         # TODO: flags, collision bounding box
 
@@ -2297,7 +2299,7 @@ class BlenderM2Scene:
         b_min, b_max = get_objs_boundbox_world(objects)
         self.m2.root.collision_box.min = b_min
         self.m2.root.collision_box.max = b_max
-        self.m2.root.collision_sphere_radius = sqrt((b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) ** 2
-                                                    + (b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) ** 2
-                                                    + (b_max[2] - b_min[2]) ** 2) / 2
+        self.m2.root.collision_sphere_radius = sqrt(((b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
+                                                    + ((b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
+                                                    + ((b_max[2] - b_min[2])*self.scale) ** 2) / 2
 

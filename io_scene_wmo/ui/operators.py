@@ -1,6 +1,6 @@
 import bpy
 import json
-from bpy.props import StringProperty, BoolProperty, EnumProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy_extras.io_utils import ExportHelper
 
 from ..wmo.import_wmo import import_wmo_to_blender_scene
@@ -228,6 +228,12 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
         default='X+'
     )
 
+    scale: FloatProperty (
+        name="Scale",
+        description="How much to scale the output model",
+        default=1.0
+    )
+
     autofill_textures: BoolProperty(
         name="Fill texture paths",
         description="Automatically assign texture paths based on texture filenames",
@@ -236,7 +242,7 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         if context.scene and context.scene.wow_scene.type == 'M2':
-            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis)
+            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale)
             return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')
