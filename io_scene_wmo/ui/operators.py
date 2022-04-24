@@ -221,6 +221,13 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
         default='264'
     )
 
+    forward_axis: EnumProperty(
+        name="Forward Axis",
+        description="The direction the exported model is facing",
+        items=[('X+','X+',''), ('X-','X-',''), ('Y+','Y+',''), ('Y-','Y-','')],
+        default='X+'
+    )
+
     autofill_textures: BoolProperty(
         name="Fill texture paths",
         description="Automatically assign texture paths based on texture filenames",
@@ -229,7 +236,7 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         if context.scene and context.scene.wow_scene.type == 'M2':
-            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures)
+            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis)
             return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')

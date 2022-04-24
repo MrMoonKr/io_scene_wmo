@@ -46,6 +46,8 @@ class BlenderM2Scene:
         self.old_active = None
         self.old_mode = None
         self.reset_pose_actions = []
+        self.axis_order = [0,1]
+        self.axis_polarity = [1,1]
         self.rig = None
         self.collision_mesh = None
         self.settings = prefs
@@ -1474,6 +1476,29 @@ class BlenderM2Scene:
         obj.hide_set(True)
         # TODO: add transparent material
 
+    def prepare_export_axis(self, forward_axis):
+        if forward_axis == 'X+':
+            self.axis_order = [0,1]
+            self.axis_polarity = [1,1]
+        elif forward_axis == 'X-':
+            self.axis_order = [0,1]
+            self.axis_polarity = [-1,-1]
+        elif forward_axis == 'Y+':
+            self.axis_order = [1,0]
+            self.axis_polarity = [1,-1]
+        elif forward_axis == 'Y-':
+            self.axis_order = [1,0]
+            self.axis_polarity = [-1,1]
+        else:
+            raise ValueError(f'Invalid forward axis: {forward_axis}')
+
+    def _convert_vec(self,vec):
+        return (
+            vec[self.axis_order[0]]*self.axis_polarity[0],
+            vec[self.axis_order[1]]*self.axis_polarity[1],
+            vec[2]
+        )
+
     def prepare_pose(self, selected_only):
         self.old_mode = bpy.context.object.mode
         self.old_selections = [obj for obj in bpy.context.selected_objects]
@@ -1531,8 +1556,8 @@ class BlenderM2Scene:
                                                                 and not ob.hide_get(), objects))
         self.m2.root.bounding_box.min = b_min
         self.m2.root.bounding_box.max = b_max
-        self.m2.root.bounding_sphere_radius = sqrt((b_max[0]-b_min[0]) ** 2
-                                                + (b_max[1]-b_min[2]) ** 2
+        self.m2.root.bounding_sphere_radius = sqrt((b_max[self.axis_order[0]]-b_min[self.axis_order[0]]) ** 2
+                                                + (b_max[self.axis_order[1]]-b_min[self.axis_order[1]]) ** 2
                                                 + (b_max[2]-b_min[2]) ** 2) / 2
 
         # TODO: flags, collision bounding box
@@ -1543,7 +1568,7 @@ class BlenderM2Scene:
             key_bone_id = int(bl_bone.wow_m2_bone.key_bone_id)
             flags = construct_bitfield(bl_bone.wow_m2_bone.flags)
             parent_bone = self.bone_ids[bl_bone.parent.name] if bl_bone.parent else -1
-            pivot = bl_bone.head
+            pivot = self._convert_vec(bl_bone.head)
 
             m2_bone = self.bone_ids[bl_bone.name] = self.m2.add_bone(
                 pivot,
@@ -1623,9 +1648,9 @@ class BlenderM2Scene:
             # Add an empty bone, if the model is not animated
             if selected_only:
                 bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-                origin = get_origin_position()
+                origin = self._convert_vec(get_origin_position())
             else:
-                origin = get_origin_position()
+                origin = self._convert_vec(get_origin_position())
 
         # TODO: should we always do this?
         if len(self.m2.root.key_bone_lookup) == 0:
@@ -1637,14 +1662,14 @@ class BlenderM2Scene:
         for i, blender_cam in enumerate(cameras):
             self.camera_ids[blender_cam.name] = i
             m2_cam = M2Camera()
-            m2_cam.position_base = blender_cam.location
+            m2_cam.position_base = self._convert_vec(blender_cam.location)
             m2_cam.type = int(blender_cam.wow_m2_camera.type)
             m2_cam.near_clip = blender_cam.data.clip_start
             m2_cam.far_clip = blender_cam.data.clip_end
             m2_cam.fov = blender_cam.data.angle
 
             if blender_cam.wow_m2_camera.target:
-                m2_cam.target_position_base = blender_cam.wow_m2_camera.target.location
+                m2_cam.target_position_base = self._convert_vec(blender_cam.wow_m2_camera.target.location)
                 self.camera_target_ids[blender_cam.wow_m2_camera.target.name] = i
 
             self.m2.root.cameras.append(m2_cam)
@@ -1664,7 +1689,7 @@ class BlenderM2Scene:
             if len(bl_att.constraints) > 0:
                 # TODO: properly find constraint
                 att.bone = self.bone_ids[bl_att.constraints[0].subtarget]
-                att.position = bl_att.location
+                att.position = self._convert_vec(bl_att.location)
             while len(self.m2.root.attachment_lookup_table) <= att.id:
                 self.m2.root.attachment_lookup_table.append(0xffff)
             self.m2.root.attachment_lookup_table.set_index(att.id,i)
@@ -1698,7 +1723,7 @@ class BlenderM2Scene:
             if len(bl_light.constraints) > 0:
                 # TODO: properly find constraint
                 light.bone = self.bone_ids[bl_light.constraints[0].subtarget]
-            light.position = bl_light.location
+            light.position = self._convert_vec(bl_light.location)
 
     def save_animations(self):
         def bl_to_m2_time(bl):
@@ -1856,19 +1881,20 @@ class BlenderM2Scene:
                     cpd.write_track(path,m2_bone.rotation,M2CompQuaternion,
                         lambda x: M2CompQuaternion((
                             bl_to_m2_quat(x[0]),
-                            bl_to_m2_quat(x[1]),
-                            bl_to_m2_quat(x[2]),
+                            bl_to_m2_quat(x[self.axis_order[0] + 1] * self.axis_polarity[0]),
+                            bl_to_m2_quat(x[self.axis_order[1] + 1] * self.axis_polarity[1]),
                             bl_to_m2_quat(x[3])
                         ))
                     )
 
                 if curve_type == 'scale':
-                    cpd.write_track(path,m2_bone.scale,vec3D)
+                    cpd.write_track(path,m2_bone.scale,vec3D,
+                        lambda x: self._convert_vec(x))
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
                 if curve_type == 'location':
                     cpd.write_track(path,m2_bone.translation,vec3D,
-                        lambda x: (x[1],-x[0],x[2]))
+                        lambda x: self._convert_vec((x[1],-x[0],x[2])))
 
         def write_scene(cpd, pair):
             def extract_scene_data(path):
@@ -1929,6 +1955,8 @@ class BlenderM2Scene:
 
             cpd.write_track("location",trans.translation,vec3D)
             cpd.write_track("scale",trans.scaling,vec3D)
+
+            # TODO: fix this with axis order!
             cpd.write_track("rotation_quaternion",trans.rotation,quat,
                 lambda x: (
                      x[2],
@@ -2113,8 +2141,8 @@ class BlenderM2Scene:
             bpy.ops.object.mode_set(mode='OBJECT')
 
             # export vertices
-            vertices = [new_obj.matrix_world @ vertex.co for vertex in mesh.vertices]
-            normals = [vertex.normal for vertex in mesh.vertices]
+            vertices = [self._convert_vec(new_obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+            normals = [self._convert_vec(vertex.normal) for vertex in mesh.vertices]
             tex_coords = [(0.0, 0.0)] * len(vertices)
 
             for loop in mesh.loops:
@@ -2254,9 +2282,9 @@ class BlenderM2Scene:
             bpy.ops.object.mode_set(mode='OBJECT')
 
             # collect geometry data
-            vertices = [tuple(new_obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+            vertices = [self._convert_vec(tuple(new_obj.matrix_world @ vertex.co)) for vertex in mesh.vertices]
             faces = [tuple([vertex for vertex in poly.vertices]) for poly in mesh.polygons]
-            normals = [tuple(poly.normal) for poly in mesh.polygons]
+            normals = [self._convert_vec(tuple(poly.normal)) for poly in mesh.polygons]
 
             self.m2.add_collision_mesh(vertices, faces, normals)
             bpy.data.objects.remove(new_obj, do_unlink=True)
@@ -2269,7 +2297,7 @@ class BlenderM2Scene:
         b_min, b_max = get_objs_boundbox_world(objects)
         self.m2.root.collision_box.min = b_min
         self.m2.root.collision_box.max = b_max
-        self.m2.root.collision_sphere_radius = sqrt((b_max[0] - b_min[0]) ** 2
-                                                    + (b_max[1] - b_min[2]) ** 2
+        self.m2.root.collision_sphere_radius = sqrt((b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) ** 2
+                                                    + (b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) ** 2
                                                     + (b_max[2] - b_min[2]) ** 2) / 2
 

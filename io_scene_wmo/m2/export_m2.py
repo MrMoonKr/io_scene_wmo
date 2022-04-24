@@ -4,13 +4,15 @@ import importlib
 
 from ..ui import get_addon_prefs
 
-def create_m2(version, filepath, selected_only, fill_textures):
+def create_m2(version, filepath, selected_only, fill_textures, forward_axis):
     print("\n\n### Exporting M2 model ###")
     addon_prefs = get_addon_prefs()
     m2 = M2File(version)
     importlib.reload(m2_scene)
     bl_m2 = m2_scene.BlenderM2Scene(m2, addon_prefs)
 
+    print("\nPreparing Axis Settings")
+    bl_m2.prepare_export_axis(forward_axis)
     print("\nPreparing Pose")
     bl_m2.prepare_pose(selected_only)
     print("\nExporting properties")
@@ -35,5 +37,5 @@ def create_m2(version, filepath, selected_only, fill_textures):
     bl_m2.restore_pose()
     return m2
 
-def export_m2(version, filepath, selected_only, fill_textures):
-    create_m2(version,filepath,selected_only,fill_textures).write(filepath)
+def export_m2(version, filepath, selected_only, fill_textures, forward_axis):
+    create_m2(version,filepath,selected_only,fill_textures,forward_axis).write(filepath)
