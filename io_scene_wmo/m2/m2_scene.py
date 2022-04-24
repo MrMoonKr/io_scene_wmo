@@ -1867,7 +1867,8 @@ class BlenderM2Scene:
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
                 if curve_type == 'location':
-                    cpd.write_track(path,m2_bone.translation,vec3D)
+                    cpd.write_track(path,m2_bone.translation,vec3D,
+                        lambda x: (x[1],-x[0],x[2]))
 
         def write_scene(cpd, pair):
             def extract_scene_data(path):
