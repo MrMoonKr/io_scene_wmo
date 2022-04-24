@@ -366,6 +366,19 @@ class WBS_OT_M2_test(bpy.types.Operator):
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
+class WBS_OT_M2_Print_Warnings(bpy.types.Operator):
+    """Print Warnings for M2 Exports"""
+    bl_idname = "print_warnings.m2"
+    bl_label = "Find common problems with exported M2 models and print warnings about them"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        import importlib
+        from ..m2.operations import m2_export_warnings
+        importlib.reload(m2_export_warnings)
+        m2_export_warnings.print_warnings()
+        return {'FINISHED'}
+
 class WBS_OT_M2_ConvertBones(bpy.types.Operator):
     """Convert Bones and Animation Tracks To WoW-style bones"""
     bl_idname = "convert_bones.m2"

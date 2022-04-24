@@ -1,5 +1,6 @@
 from ..pywowlib.m2_file import M2File
 from . import m2_scene
+from .operations import m2_export_warnings
 import importlib
 
 from ..ui import get_addon_prefs
@@ -9,6 +10,7 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis):
     addon_prefs = get_addon_prefs()
     m2 = M2File(version)
     importlib.reload(m2_scene)
+    importlib.reload(m2_export_warnings)
     bl_m2 = m2_scene.BlenderM2Scene(m2, addon_prefs)
 
     print("\nPreparing Axis Settings")
@@ -35,6 +37,7 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis):
     bl_m2.save_collision(selected_only)
     print("\nRestoring Pose")
     bl_m2.restore_pose()
+    m2_export_warnings.print_warnings()
     return m2
 
 def export_m2(version, filepath, selected_only, fill_textures, forward_axis):
