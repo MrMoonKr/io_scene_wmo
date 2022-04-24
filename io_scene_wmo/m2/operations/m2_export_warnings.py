@@ -169,6 +169,44 @@ def missing_animation_items():
                 items.append(f'Sequence {sequence.name} pair {j} has no action set')
     return (name,description,items)
 
+def non_primary_sequences():
+    name = "Non-primary sequence"
+    description = [
+        "Issue: WBS currently does not support non-primary sequences",
+        "Effect: The animation will break completely if not crash the game",
+        "Fix: Add the 'primary sequence' flag"
+    ]
+    items = []
+    for sequence in bpy.context.scene.wow_m2_animations:
+        if not "32" in sequence.flags:
+            items.append(f'Sequence {sequence.name} does not have the primary sequence flag')
+
+    return (name,description,items)
+
+def scale_tracks():
+    name = "Scale Tracks"
+    description = [
+        "Issue: WBS currently does not support scale tracks",
+        "Effect: Your animations will break completely",
+        "Fix: Run the 'Remove Scale Tracks'"
+    ]
+    items = []
+    
+    for action in bpy.data.actions:
+        found = False
+        for fcurve in action.fcurves:
+            if not fcurve.data_path.startswith("pose.bones"):
+                continue
+            if not fcurve.data_path.endswith("scale"):
+                continue
+            found = True
+            break
+        if found:
+            items.append(f"Action {action.name} has scale curves")
+
+    return (name,description,items)
+
+
 def print_warnings():
     printed_warnings = False
     def warning_section(callback):
@@ -196,6 +234,8 @@ def print_warnings():
     warning_section(bone_constraints)
     warning_section(no_animation_pairs)
     warning_section(missing_animation_items)
+    warning_section(non_primary_sequences)
+    warning_section(scale_tracks)
 
     if not printed_warnings:
         print("\nNo warnings found!")
