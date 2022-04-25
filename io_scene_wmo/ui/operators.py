@@ -263,9 +263,9 @@ class WBS_OT_M2_test(bpy.types.Operator):
         )
 
     def execute(self, context):
-        m2_in = import_m2(int(context.scene.wow_scene.version), self.filepath, True, True)
+        m2_in = import_m2(int(context.scene.wow_scene.version), self.filepath)
         context.scene.wow_scene.type = 'M2'
-        m2_out = create_m2(int(context.scene.wow_scene.version), self.filepath, False, False,True,'INDIVIDUAL')
+        m2_out = create_m2(int(context.scene.wow_scene.version), self.filepath, False, False,'X+',1)
 
         def objectify(obj_in,visited_stack = []):
             def is_primitive(type_in):
