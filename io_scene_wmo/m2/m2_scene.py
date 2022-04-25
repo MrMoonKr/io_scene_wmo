@@ -20,6 +20,7 @@ from ..pywowlib.file_formats.wow_common_types import *
 from ..pywowlib.file_formats.m2_format import *
 from ..pywowlib.m2_file import M2File
 from ..pywowlib.io_utils.types import vec3D
+from .util import make_fcurve_compound
 
 class BlenderM2Scene:
     """ This class is used for assembling a Blender scene from an M2 file or saving the scene back to it."""
@@ -46,6 +47,7 @@ class BlenderM2Scene:
         self.old_active = None
         self.old_mode = None
         self.reset_pose_actions = []
+        self.forward_axis = 'X+'
         self.axis_order = [0,1]
         self.axis_polarity = [1,1]
         self.scale = 1
@@ -1479,6 +1481,7 @@ class BlenderM2Scene:
 
     def prepare_export_axis(self, forward_axis, scale):
         self.scale = scale
+        self.forward_axis = forward_axis
         if forward_axis == 'X+':
             self.axis_order = [0,1]
             self.axis_polarity = [1,1]
@@ -1764,15 +1767,8 @@ class BlenderM2Scene:
             def __init__(self,seq_id,global_seq_id,pair,callback):
                 self.seq_id = seq_id
                 self.global_seq_id = global_seq_id
-                self.compounds = {} # {channel: FCurve[] }
+                self.compounds = make_fcurve_compound(pair.action.fcurves)
                 self.pair = pair
-                for fcurve in pair.action.fcurves:
-                    compound = None
-                    if not fcurve.data_path in self.compounds:
-                        compound = self.compounds[fcurve.data_path] = {}
-                    else:
-                        compound = self.compounds[fcurve.data_path]
-                    compound[fcurve.array_index] = fcurve
                 callback(self,pair)
 
             def get_paths(self):
@@ -1918,8 +1914,11 @@ class BlenderM2Scene:
                     )
 
                 if curve_type == 'scale':
-                    cpd.write_track(path,3,m2_bone.scale,vec3D,
-                        lambda x: self._convert_vec(x))
+                    def convert_scale(scale):
+                        if self.forward_axis != 'X+' and (scale.x != scale.y or scale.x != scale.z):
+                            raise ValueError(f'WBS currently cannot write non-uniform scale with forward axis {self.forward_axis} (must be X+ for now)')
+                        return scale
+                    cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale)
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
                 if curve_type == 'location':

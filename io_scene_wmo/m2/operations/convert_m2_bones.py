@@ -1,12 +1,15 @@
 import bpy
 import re
 from mathutils import Matrix, Vector, Quaternion
+from ..util import can_apply_scale,make_fcurve_compound
 
 def convert_m2_bones():
     def fix_scale(matrix,curves,keyframe_count):
+        if not can_apply_scale(curves,keyframe_count):
+            return (True,'Non-uniform scaling')
+
         for i in range(keyframe_count):
             def co(j): return fcurves[j].keyframe_points[i].co
-
             # read vector defining the old rotation
             vec = Vector((co(0)[1], co(1)[1], co(2)[1]))
 
@@ -16,6 +19,8 @@ def convert_m2_bones():
             co(0)[1] = vec.x
             co(1)[1] = vec.y
             co(2)[1] = vec.z
+
+        return (False,'')
 
     def fix_rotation(matrix,fcurves,keyframe_count):
         def quat_dist(q1,q2):
@@ -49,6 +54,7 @@ def convert_m2_bones():
             co(2)[1] = last_quat.x
             co(1)[1] = -last_quat.y
             co(3)[1] = last_quat.z
+        return (False,'')
 
     def fix_location(matrix, fcurves,keyframe_count):
         for i in range(keyframe_count):
@@ -59,6 +65,7 @@ def convert_m2_bones():
             co(1)[1] = vec.x
             co(0)[1] = -vec.y
             co(2)[1] = vec.z
+        return (False,'')
 
     def fix_curves(name, matrix, fcurves, track_count, callback):
         for i in range(track_count):
@@ -78,15 +85,18 @@ def convert_m2_bones():
                 if cur_time != time:
                     raise ValueError(f'Track index {j} frame {j} has a different time value ({cur_time}) from index 0 ({time})')
 
-        callback(matrix,fcurves,keyframe_count)
+        return callback(matrix,fcurves,keyframe_count)
 
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
 
     changed_bones = {}
+    changed_objects = []
+
     for obj in bpy.data.objects:
         if obj.type != 'ARMATURE': continue
         obj.select_set(True)
+        changed_objects.append(obj)
 
         bpy.ops.object.mode_set(mode='EDIT')
 
@@ -102,14 +112,9 @@ def convert_m2_bones():
         bpy.ops.object.mode_set(mode='OBJECT')
 
     for action in bpy.data.actions:
-        fcurve_compounds = {}
-        for fcurve in action.fcurves:
-            if not fcurve.data_path.startswith("pose.bones"):
-                continue
-            if not fcurve.data_path in fcurve_compounds:
-                fcurve_compounds[fcurve.data_path] = {}
-            fcurve_compounds[fcurve.data_path][fcurve.array_index] = fcurve
-
+        fcurve_compounds = make_fcurve_compound(action.fcurves,
+            lambda path: path.startswith('pose.bones')
+        )
         for key,fcurves in fcurve_compounds.items():
             bone = re.search('"(.+?)"',key).group(1)
             if not bone in changed_bones:
@@ -117,14 +122,30 @@ def convert_m2_bones():
             matrix = changed_bones[bone]
             curve_type = re.search('([a-zA-Z_]+)$',key).group(0)
 
+            remove_reason = None
+            should_remove = False
             if curve_type == 'scale':
-                fix_curves(key,matrix,fcurves,3,fix_scale)
+                (should_remove,remove_reason) = fix_curves(key,matrix,fcurves,3,fix_scale)
 
             if curve_type == 'location':
-                fix_curves(key,matrix,fcurves,3,fix_location)
+                (should_remove,remove_reason) = fix_curves(key,matrix,fcurves,3,fix_location)
 
             if curve_type == 'rotation_quaternion':
-                fix_curves(key,matrix,fcurves,4,fix_rotation)
+                (should_remove,remove_reason) = fix_curves(key,matrix,fcurves,4,fix_rotation)
 
-            for fcurve in fcurves.values():
-                fcurve.update()
+            if should_remove:
+                print(f"Deleting incompatible fcurves {fcurve.data_path}: {remove_reason}")
+                for fcurve in fcurves.values():
+                    action.fcurves.remove(fcurve)
+                    for obj in changed_objects:
+                        bpy.ops.object.mode_set(mode='OBJECT')
+                        bpy.ops.object.select_all(action='DESELECT')
+                        obj.select_set(True)
+                        bpy.ops.object.mode_set(mode='POSE')
+                        # clear other curves if needed
+                        bpy.ops.pose.scale_clear()
+                        bpy.ops.object.mode_set(mode='OBJECT')
+                        bpy.ops.object.select_all(action='DESELECT')
+            else:
+                for fcurve in fcurves.values():
+                    fcurve.update()

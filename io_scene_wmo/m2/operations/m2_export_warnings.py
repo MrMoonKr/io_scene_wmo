@@ -1,4 +1,7 @@
 import bpy
+import re
+from mathutils import Vector
+from ..util import can_apply_scale, make_fcurve_compound
 
 def wrong_scene_type():
     name = "Wrong Scene Type"
@@ -183,26 +186,38 @@ def non_primary_sequences():
 
     return (name,description,items)
 
-def scale_tracks():
-    name = "Scale Tracks"
+def non_uniform_scale_tracks():
+    name = "Incompatible Scale Tracks"
     description = [
-        "Issue: WBS currently does not support scale tracks",
-        "Effect: Your animations will break completely",
-        "Fix: Run the 'Remove Scale Tracks'"
+        "Issue: You have bones with non-uniform scale tracks",
+        "Effect: Your animations will break completely, WBS cannot currently convert non-uniform scale tracks.",
+        "Note: In the future, it should be possible to write non-uniform scales for bones in axis aligned directions, but never for bones in non-axis aligned directions.",
+        "Fix: Run 'Convert Bones To WoW' to automatically strip these tracks and manually rewrite scale if necessary",
     ]
     items = []
-    
-    for action in bpy.data.actions:
-        found = False
-        for fcurve in action.fcurves:
-            if not fcurve.data_path.startswith("pose.bones"):
-                continue
-            if not fcurve.data_path.endswith("scale"):
-                continue
-            found = True
-            break
-        if found:
-            items.append(f"Action {action.name} has scale curves")
+
+    # We don't want to warn for this on blizzard models.
+    # If users run this after they've converted the model and still export with a different output, j
+    def find_transformed_bone():
+        for obj in bpy.data.objects:
+            if obj.type != 'ARMATURE': continue
+            for bone in obj.data.bones:
+                vec = Vector(bone.tail-bone.head)
+                vec.normalize()
+                if abs(vec.x-1)>0.001 or abs(vec.y)>0.001 or abs(vec.z)>0.001:
+                    found_transformed_bone = True
+                    return True
+        return False
+
+    if find_transformed_bone():
+        for action in bpy.data.actions:
+            fcurve_compounds = make_fcurve_compound(action.fcurves,
+                lambda path: path.startswith('pose.bones') and path.endswith('scale'))
+
+            for path,fcurves in fcurve_compounds.items():
+                bone = re.search('"(.+?)"',path).group(1)
+                if not can_apply_scale(fcurves, len(fcurves[0].keyframe_points)):
+                    items.append(f'Curve {path} is a non-uniform rotation')
 
     return (name,description,items)
 
@@ -235,7 +250,7 @@ def print_warnings():
     warning_section(no_animation_pairs)
     warning_section(missing_animation_items)
     warning_section(non_primary_sequences)
-    warning_section(scale_tracks)
+    warning_section(non_uniform_scale_tracks)
 
     if not printed_warnings:
         print("\nNo warnings found!")
