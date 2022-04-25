@@ -1760,116 +1760,144 @@ class BlenderM2Scene:
         track_global_sequences = {}
         track_interpolations = {}
 
-        class TrackCompound:
-            def __init__(self,seq_id,global_seq_id,data):
+        class ObjectTracks:
+            def __init__(self,seq_id,global_seq_id,pair,callback):
                 self.seq_id = seq_id
                 self.global_seq_id = global_seq_id
-                self.data = data
+                self.compounds = {} # {channel: FCurve[] }
+                self.pair = pair
+                for fcurve in pair.action.fcurves:
+                    compound = None
+                    if not fcurve.data_path in self.compounds:
+                        compound = self.compounds[fcurve.data_path] = {}
+                    else:
+                        compound = self.compounds[fcurve.data_path]
+                    compound[fcurve.array_index] = fcurve
+                callback(self,pair)
 
             def get_paths(self):
-                return self.data.keys()
+                return self.compounds.keys()
 
-            def get_frames(self, path):
-                return self.data[path]['frames']
+            def get_curves(self, path):
+                return self.compounds[path]
 
-            def get_interpolation(self, path):
-                return self.data[path]['interpolation']
-
-            def write_track(self, path,m2_track,value_type,converter = lambda x: x):
-                if not path in self.data:
+            def write_track(self,path,track_count,m2_track,value_type,converter = lambda x: x):
+                # Exit on empty tracks
+                if not path in self.compounds:
+                    return
+                fcurves = self.get_curves(path)
+                if len(fcurves) == 0:
                     return
 
-                frames = self.get_frames(path)
-                if len(frames) == 0:
-                    return
+                # Find interpolation
+                interpolation = None
+                for fcurve in fcurves.values():
+                    for point in fcurve.keyframe_points:
+                        if interpolation is None:
+                            interpolation = point.interpolation
+                        else:
+                            if interpolation != point.interpolation:
+                                raise ValueError(f'Track {i} has interpolation {point.interpolation}, but last type for this object was {interpolation}, WoW only supports one interpolation setting.')
 
-                while len(m2_track.timestamps) <= self.seq_id:
-                    m2_track.timestamps.add(M2Array(uint32))
-                m2_times = m2_track.timestamps[seq_id]
-
-                highest_time = 0
-                if not value_type is None:
-                    while len(m2_track.values) <= self.seq_id:
-                        m2_track.values.add(M2Array(value_type))
-                    m2_values = m2_track.values[seq_id]
-                    for (time,value) in frames:
-                        highest_time = bl_to_m2_time(time)
-                        m2_times.add(highest_time)
-                        m2_values.add(converter(value))
+                if m2_track in track_interpolations:
+                    if track_interpolations[m2_track] != interpolation:
+                        raise ValueError(f'Path {path} in action {self.pair.action.name} has multiple interpolation settings, WoW only supports one.')
                 else:
-                    for (time,_) in frames:
-                        highest_time = bl_to_m2_time(time)
-                        m2_times.add(highest_time)
+                    m2_track.interpolation_type = bl_to_m2_interpolation(interpolation)
+                    track_interpolations[m2_track] = interpolation
 
-                if self.global_seq_id >= 0:
-                    if not self.global_seq_id in global_seq_durations or highest_time > global_seq_durations[self.global_seq_id]:
-                        global_seq_durations[self.global_seq_id] = highest_time
-                else:
-                    if not self.seq_id in seq_durations or highest_time > seq_durations[self.seq_id]:
-                        seq_durations[self.seq_id] = highest_time
-
+                # Find global sequence id discrepancies
                 if not m2_track in track_global_sequences:
                     track_global_sequences[m2_track] = self.global_seq_id
                     m2_track.global_sequence = self.global_seq_id
                 else:
-                    assert track_global_sequences[m2_track] == self.global_seq_id
+                    if track_global_sequences[m2_track] != self.global_seq_id:
+                        # TODO: better error
+                        raise ValueError(f'Global Sequence ID Discrepancy')
 
-                if not m2_track in track_interpolations:
-                    track_interpolations[m2_track] = self.get_interpolation(path)
-                    m2_track.interpolation_type = bl_to_m2_interpolation(self.get_interpolation(path))
+                # Find missing tracks
+                for i in range(track_count):
+                    if not i in fcurves:
+                        raise ValueError(f'Track index {i} missing in {name} fcurves')
+
+                # Find keyframe count discrepancies
+                keyframe_count = len(fcurves[0].keyframe_points)
+                for i,fcurve in fcurves.items():
+                    cur_count = len(fcurve.keyframe_points)
+                    if cur_count != keyframe_count:
+                        raise ValueError(f'Track index {i} keyframe count ({cur_count}) is different from index 0 {keyframe_count}')
+
+                # Find timestamp discrepancies
+                for i in range(keyframe_count):
+                    time = fcurves[0].keyframe_points[i].co[0]
+                    for j in range(track_count):
+                        cur_time = fcurves[j].keyframe_points[i].co[0]
+                        if cur_time != time:
+                            raise ValueError(f'Track index {j} frame {j} has a different time value ({cur_time}) from index 0 ({time})')
+
+                # Make sure time track exists
+                while len(m2_track.timestamps) <= self.seq_id:
+                    m2_track.timestamps.add(M2Array(uint32))
+                m2_times = m2_track.timestamps[seq_id]
+
+                # Make sure value track exists
+                m2_values = None
+                if not value_type is None:
+                    while len(m2_track.values) <= self.seq_id:
+                        m2_track.values.add(M2Array(value_type))
+                    m2_values = m2_track.values[seq_id]
+
+                # Write keyframes
+                time = 0
+                if not value_type is None:
+                    for i in range(keyframe_count):
+                        time = bl_to_m2_time(fcurves[0].keyframe_points[i].co[0])
+                        values = []
+                        for j in range(track_count):
+                            values.append(fcurves[j].keyframe_points[i].co[1])
+                        m2_values.add(converter(tuple(values) if len(values) > 1 else values[0]))
+                        m2_times.append(time)
                 else:
-                    assert track_interpolations[m2_track] == self.get_interpolation(path)
+                    for i in range(keyframe_count):
+                        time = bl_to_m2_time(fcurves[0].keyframe_points[i].co[0])
+                        m2_times.add(time)
 
-        def write_data_compound(seq_id,global_seq_id, pair, callback):
-            compound_data = {} # { channel: {interpolation:string, keyframes: {[timestamps]:<PointType>[]}} }
-            for curve in pair.action.fcurves:
-                def next_item(cur,key,val):
-                    if not key in cur: cur[key] = val
-                    return cur[key]
-                curve_data = next_item(compound_data, curve.data_path, {})
-                curve_data["interpolation"] = bl_find_interpolation(curve)
-                curve_frames = next_item(curve_data,"frames",{})
-                index = int(curve.array_index)
-                for i,point in enumerate(curve.keyframe_points):
-                    keyframe_data = next_item(curve_frames,point.co[0],[])
-                    while len(keyframe_data) <= index:
-                        keyframe_data.append(None)
-                    keyframe_data[index] = point.co[1]
-
-            for name,tracks in compound_data.items():
-                frames = tracks['frames'] = [(timestamp,tuple(values) if len(values) > 1 else values[0]) for timestamp,values in tracks['frames'].items()]
-                frames.sort(key=lambda frame:frame[0])
-
-            callback(TrackCompound(seq_id,global_seq_id,compound_data), pair)
+                # Increase the highest duration
+                if self.global_seq_id >= 0:
+                    if not self.global_seq_id in global_seq_durations or time > global_seq_durations[self.global_seq_id]:
+                        global_seq_durations[self.global_seq_id] = time
+                else:
+                    if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
+                        seq_durations[self.seq_id] = time
 
         def write_light(cpd, pair):
             m2_light = self.m2.root.lights.values[self.light_ids[pair.object.name]]
             cpd.write_track('data.wow_m2_light.ambient_color',
-                m2_light.ambient_color,vec3D)
+                3, m2_light.ambient_color,vec3D)
 
             cpd.write_track('data.wow_m2_light.diffuse_color',
-                m2_light.diffuse_color,vec3D)
+                3, m2_light.diffuse_color,vec3D)
 
             cpd.write_track('data.wow_m2_light.ambient_intensity',
-                m2_light.ambient_intensity,float32)
+                1, m2_light.ambient_intensity,float32)
 
             cpd.write_track('data.wow_m2_light.diffuse_intensity',
-                m2_light.diffuse_intensity,float32)
+                1, m2_light.diffuse_intensity,float32)
 
             cpd.write_track('data.wow_m2_light.attenuation_start',
-                m2_light.attenuation_start,float32)
+                1, m2_light.attenuation_start,float32)
 
             cpd.write_track('data.wow_m2_light.attenuation_end',
-                m2_light.attenuation_end,float32)
+                1, m2_light.attenuation_end,float32)
 
             cpd.write_track('data.wow_m2_light.visibility',
-                m2_light.visibility,uint8, lambda x: int(x)
+                1, m2_light.visibility,uint8, lambda x: int(x)
             )
 
         def write_attachment(cpd, pair):
             m2_attachment = self.m2.root.attachments.values[self.attachment_ids[pair.object.name]]
             cpd.write_track('wow_m2_attachment.animate',
-                m2_attachment.animate_attached,boolean,lambda x: bool(x))
+                1, m2_attachment.animate_attached,boolean,lambda x: bool(x))
 
         def write_bone(cpd, pair):
             for path in cpd.get_paths():
@@ -1880,7 +1908,7 @@ class BlenderM2Scene:
                 m2_bone.flags = m2_bone.flags | 512
 
                 if curve_type == 'rotation_quaternion':
-                    cpd.write_track(path,m2_bone.rotation,M2CompQuaternion,
+                    cpd.write_track(path,4,m2_bone.rotation,M2CompQuaternion,
                         lambda x: M2CompQuaternion((
                             bl_to_m2_quat(x[0]),
                             bl_to_m2_quat(x[self.axis_order[0] + 1] * self.axis_polarity[0]),
@@ -1890,12 +1918,12 @@ class BlenderM2Scene:
                     )
 
                 if curve_type == 'scale':
-                    cpd.write_track(path,m2_bone.scale,vec3D,
+                    cpd.write_track(path,3,m2_bone.scale,vec3D,
                         lambda x: self._convert_vec(x))
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
                 if curve_type == 'location':
-                    cpd.write_track(path,m2_bone.translation,vec3D,
+                    cpd.write_track(path,3,m2_bone.translation,vec3D,
                         lambda x: self._convert_vec((x[1],-x[0],x[2])))
 
         def write_scene(cpd, pair):
@@ -1919,9 +1947,9 @@ class BlenderM2Scene:
                         self.color_ids[col_name] = index
 
                     if data_path == 'color':
-                        cpd.write_track(path,col.color,vec3D)
+                        cpd.write_track(path,3,col.color,vec3D)
                     if data_path == 'alpha':
-                        cpd.write_track(path,col.alpha,fixed16,lambda x: int(x*0x7fff))
+                        cpd.write_track(path,1,col.alpha,fixed16,lambda x: int(x*0x7fff))
 
                 if path.startswith("wow_m2_transparency"):
                     (index,_) = extract_scene_data(path)
@@ -1944,22 +1972,22 @@ class BlenderM2Scene:
                     else:
                         self.transparency_ids[weight_name] = index
 
-                    cpd.write_track(path,weight,fixed16, lambda x: int(x*0x7fff))
+                    cpd.write_track(path,1,weight,fixed16, lambda x: int(x*0x7fff))
 
         def write_event(cpd, pair):
             m2_event = self.m2.root.events[self.event_ids[pair.object.name]]
-            cpd.write_track("wow_m2_event.fire",m2_event.enabled,None)
+            cpd.write_track("wow_m2_event.fire",1,m2_event.enabled,None)
 
         def write_texture_transform(cpd, pair):
             self.texture_transform_ids[pair.object.name] = len(self.m2.root.texture_transforms)
             trans = M2TextureTransform()
             self.m2.root.texture_transforms.append(trans)
 
-            cpd.write_track("location",trans.translation,vec3D)
-            cpd.write_track("scale",trans.scaling,vec3D)
+            cpd.write_track("location",3,trans.translation,vec3D)
+            cpd.write_track("scale",3,trans.scaling,vec3D)
 
             # TODO: fix this with axis order!
-            cpd.write_track("rotation_quaternion",trans.rotation,quat,
+            cpd.write_track("rotation_quaternion",4,trans.rotation,quat,
                 lambda x: (
                      x[2],
                     -x[1],
@@ -2025,24 +2053,24 @@ class BlenderM2Scene:
                     continue
 
                 if pair.type == 'SCENE':
-                    write_data_compound(seq_id, global_seq_id, pair, write_scene)
+                    ObjectTracks(seq_id, global_seq_id, pair, write_scene)
                 elif pair.object.type == 'ARMATURE':
-                    write_data_compound(seq_id, global_seq_id, pair, write_bone)
+                    ObjectTracks(seq_id, global_seq_id, pair, write_bone)
                 elif pair.object.type == 'LIGHT':
-                    write_data_compound(seq_id, global_seq_id, pair, write_light)
+                    ObjectTracks(seq_id, global_seq_id, pair, write_light)
                 elif pair.object.type == 'CAMERA':
-                    write_data_compound(seq_id, global_seq_id, pair, write_camera)
+                    ObjectTracks(seq_id, global_seq_id, pair, write_camera)
                 elif pair.object.type == 'CAMERA_TARGET':
-                    write_data_compound(seq_id, global_seq_id, pair, write_camera_target)
+                    ObjectTracks(seq_id, global_seq_id, pair, write_camera_target)
                 elif pair.object.type == 'EMPTY':
                     if pair.object.wow_m2_attachment.enabled:
-                        write_data_compound(seq_id, global_seq_id, pair, write_attachment)
+                        ObjectTracks(seq_id, global_seq_id, pair, write_attachment)
                     elif pair.object.wow_m2_event.enabled:
-                        write_data_compound(seq_id, global_seq_id, pair, write_event)
+                        ObjectTracks(seq_id, global_seq_id, pair, write_event)
                     elif pair.object.wow_m2_camera.enabled:
-                        write_data_compound(seq_id, global_seq_id, pair, write_camera_target)
+                        ObjectTracks(seq_id, global_seq_id, pair, write_camera_target)
                     elif pair.object.wow_m2_uv_transform.enabled:
-                        write_data_compound(seq_id, global_seq_id, pair, write_texture_transform)
+                        ObjectTracks(seq_id, global_seq_id, pair, write_texture_transform)
 
             for global_seq_id,duration in global_seq_durations.items():
                 assert global_seq_id < len(self.m2.root.global_sequences)
