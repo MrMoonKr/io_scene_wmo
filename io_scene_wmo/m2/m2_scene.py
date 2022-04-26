@@ -28,6 +28,7 @@ class BlenderM2Scene:
     def __init__(self, m2: M2File, prefs):
         self.m2 = m2
         self.materials = {}
+        self.loaded_textures = {}
         self.bone_ids = {}
         self.attachment_ids = {}
         self.event_ids = {}
@@ -37,6 +38,7 @@ class BlenderM2Scene:
         self.transparency_ids = {}
         self.texture_transform_ids = {}
         self.light_ids = {}
+        self.ribbon_ids = {}
         self.uv_transforms = {}
         self.geosets = []
         self.animations = []
@@ -54,6 +56,7 @@ class BlenderM2Scene:
         self.rig = None
         self.collision_mesh = None
         self.settings = prefs
+        self.actions = {} # maps action names to actions
 
         self.scene = bpy.context.scene
 
@@ -236,6 +239,45 @@ class BlenderM2Scene:
                 if m2_transparency.global_sequence < 0:
                     animate_transparency(anim_pair, m2_transparency, i, anim_index)
 
+    def load_texture(self,index):
+        if index in self.loaded_textures:
+            return self.loaded_textures[index]
+
+        texture = self.m2.root.textures[index]
+        tex_path_png = ""
+
+        if not texture.type:  # check if texture is hardcoded
+
+            try:
+                tex_path_blp = self.m2.texture_path_map[texture.fdid] \
+                    if texture.fdid else self.m2.texture_path_map[texture.filename.value]
+
+                tex_path_png = os.path.splitext(tex_path_blp)[0] + '.png'
+            except KeyError:
+                pass
+
+        if tex_path_png:
+            try:
+                tex = bpy.data.images.load(tex_path_png)
+            except RuntimeError:
+                print("\nWarning: failed to load texture \"{}\".".format(tex_path_png))
+
+        if not tex:
+            tex = bpy.data.images.new('Failed Loading', 256, 256)
+
+        tex.wow_m2_texture.enabled = True
+        tex.wow_m2_texture.flags = parse_bitfield(texture.flags, 0x2)
+        tex.wow_m2_texture.texture_type = str(texture.type)
+        tex.wow_m2_texture.path = texture.filename.value
+
+        # titi test textures ui
+        slot = bpy.context.scene.wow_m2_root_elements.textures.add()
+        slot.pointer = tex
+
+        self.loaded_textures[index] = tex
+        return tex
+        ####
+
     def load_materials(self):
 
         skin = self.m2.skins[0]
@@ -249,44 +291,8 @@ class BlenderM2Scene:
             blender_mat.wow_m2_material.live_update = True
 
             for i in range(tex_unit.texture_count):
-
-                texture = self.m2.root.textures[self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i]]
-                tex = loaded_textures.get(self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i])
-
-                if not tex:
-
-                    tex_path_png = ""
-
-                    if not texture.type:  # check if texture is hardcoded
-
-                        try:
-                            tex_path_blp = self.m2.texture_path_map[texture.fdid] \
-                                if texture.fdid else self.m2.texture_path_map[texture.filename.value]
-
-                            tex_path_png = os.path.splitext(tex_path_blp)[0] + '.png'
-                        except KeyError:
-                            pass
-
-                    if tex_path_png:
-                        try:
-                            tex = bpy.data.images.load(tex_path_png)
-                        except RuntimeError:
-                            print("\nWarning: failed to load texture \"{}\".".format(tex_path_png))
-
-                    if not tex:
-                        tex = bpy.data.images.new('Failed Loading', 256, 256)
-                    
-                    # titi test textures ui
-                    slot = bpy.context.scene.wow_m2_root_elements.textures.add()
-                    slot.pointer = tex
-                    ####
-
-                    loaded_textures[self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i]] = tex
-
+                tex = self.load_texture(tex_unit.texture_combo_index + i)
                 setattr(blender_mat.wow_m2_material, "texture_{}".format(i + 1), tex)
-                tex.wow_m2_texture.flags = parse_bitfield(texture.flags, 0x2)
-                tex.wow_m2_texture.texture_type = str(texture.type)
-                tex.wow_m2_texture.path = texture.filename.value
 
             # bind transparency to material
             if tex_unit.texture_weight_combo_index >= 0:
@@ -511,6 +517,68 @@ class BlenderM2Scene:
                 keyframe = f_curves[0].keyframe_points[j]
                 keyframe.co = frame, True
                 keyframe.interpolation = interp_type
+
+    def _bl_create_sequences(self, m2_obj, m2_track_name, prefix, bl_obj, bl_obj_name, bl_track_name, track_count, conv):
+        # Create tracks (and actions, as needed) for all sequences for a specific M2Track
+
+        track = getattr(m2_obj,m2_track_name)
+        seq_name_table = M2SequenceNames()
+        n_global_sequences = len(self.global_sequences)
+
+        # M2Track uses global sequences
+        if track.global_sequence >= 0:
+            global_seq_str = str(track.global_sequence).zfill(3)
+            action_name = f'{prefix}_{i}_{obj.name}_Global_sequence_{global_seq_str}'
+
+            # Create new animation pair if action doesn't already exist
+            if action_name in self.actions:
+                action = self.actions[action_name]
+            else:
+                sequence = scene.wow_m2_animations[self.global_sequences[global_sequence]]
+                pair = sequence.anim_pairs.add()
+                anim_pair.object = bl_obj
+                anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair,action_name)
+                action = self.actions[action_name] = anim_pair.action
+
+            self._bl_create_fcurves(
+                anim_pair.action,
+                '',
+                conv,
+                track_count,
+                0,
+                bl_obj_name+'.'+bl_track_name,
+                track
+            )
+        # M2Track uses normal sequences
+        else:
+            for j, anim_index in enumerate(self.animations):
+                anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
+                sequence = self.m2.root.sequences[anim_index]
+                if track.timestamps.n_elements > anim_index:
+                    if not len(track.timestamps[anim_index]):
+                        continue
+                field_name = seq_name_table.get_sequence_name(sequence.id) 
+                action_name = f'{prefix}_{bl_obj.name}_{str(j).zfill(3)}_{sequence.variation_index}'
+
+                # Create new animation pair if action doesn't already exist
+                if action_name in self.actions:
+                    action = self.actions[action_name]
+                else:
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = 'OBJECT'
+                    anim_pair.object = bl_obj
+                    anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair,action_name)
+                    action = self.actions[action_name] = anim_pair.action
+
+                self._bl_create_fcurves(
+                    action,
+                    '',
+                    conv,
+                    track_count,
+                    j,
+                    bl_obj_name+'.'+bl_track_name,
+                    track
+                )
 
     @staticmethod
     def _bl_create_fcurves(action, action_group, callback, length, anim_index, data_path, anim_track):
@@ -1431,14 +1499,86 @@ class BlenderM2Scene:
             bpy.context.view_layer.objects.active = obj  # active object is required for constraints to install properly
             obj.wow_m2_camera.target = t_obj
 
+    def load_ribbons(self):
+        if not len(self.m2.root.ribbon_emitters):
+            print("\nNo ribbons found to import.")
+            return
+        else:
+            print("\nImport ribbons.")
+
+        loaded_mats = {}
+        for i,ribbon in enumerate(self.m2.root.ribbon_emitters):
+            bpy.ops.object.empty_add(type='SPHERE', location=(0, 0, 0))
+            obj = bpy.context.view_layer.objects.active
+            obj.empty_display_size = 0.07
+            bpy.ops.object.constraint_add(type='CHILD_OF')
+            constraint = obj.constraints[-1]
+            constraint.target = self.rig
+            obj.parent = self.rig
+            bone = self.m2.root.bones[ribbon.bone_index]
+            constraint.subtarget = bone.name
+
+            bl_edit_bone = self.rig.data.bones[bone.name]
+            obj.location = ribbon.position
+
+            obj.name = f'Ribbon {i}'
+            obj.wow_m2_ribbon.enabled = True
+
+            obj.wow_m2_ribbon.edges_per_second = ribbon.edges_per_second
+            obj.wow_m2_ribbon.edge_lifetime = ribbon.edge_lifetime
+            obj.wow_m2_ribbon.gravity = ribbon.gravity
+            obj.wow_m2_ribbon.texture_rows = ribbon.texture_rows
+            obj.wow_m2_ribbon.texture_cols = ribbon.texture_cols
+
+            obj.animation_data_create()
+            obj.animation_data.action_blend_type = 'ADD'
+
+            for tex_id in ribbon.texture_indices:
+                tex = self.load_texture(tex_id)
+                slot = obj.wow_m2_ribbon.textures.add()
+                slot.pointer = tex
+
+            for mat_id in ribbon.material_indices:
+                mat = None
+                if mat_id in loaded_mats:
+                    mat = loaded_mats[mat_id]
+                else:
+                    material = self.m2.root.materials[mat_id]
+                    mat = bpy.data.materials.new(name=f'Ribbon Material #{mat_id}')
+                    mat.wow_m2_material.enabled = True
+                    mat.wow_m2_material.render_flags = parse_bitfield(material.flags, 0x800)
+                    mat.wow_m2_material.blending_mode = str(material.blending_mode)
+                    loaded_mats[mat_id] = mat
+
+            slot = obj.wow_m2_ribbon.materials.add()
+            slot.pointer = mat
+
+            self._bl_create_sequences(ribbon,'color_track',
+                f'RB_{i}',obj,'wow_m2_ribbon','color',3,self._bl_convert_track_tuple)
+
+            self._bl_create_sequences(ribbon,'alpha_track',
+                f'RB_{i}',obj,'wow_m2_ribbon','alpha',1,lambda value: [value/0x7fff])
+
+            self._bl_create_sequences(ribbon,'height_above_track',
+                f'RB_{i}',obj,'wow_m2_ribbon','height_above',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(ribbon,'height_below_track',
+                f'RB_{i}',obj,'wow_m2_ribbon','height_below',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(ribbon,'tex_slot_track',
+                f'RB_{i}',obj,'wow_m2_ribbon','texture_slot',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(ribbon,'visibility_track',
+                f'RB_{i}',obj,'wow_m2_ribbon','visibility',1,self._bl_convert_track_value)
+
     def load_particles(self):
-        if not len(self.m2.root.particles):
+        if not len(self.m2.root.particle_emitters):
             print("\nNo particles found to import.")
             return
         else:
             print("\nImport particles.")
 
-        for particle in self.m2.root.particles:
+        for particle in self.m2.root.particles_emitters:
             if particle.emitter_type == 1:
                 bpy.ops.mesh.primitive_plane_add(radius=1, location=(0, 0, 0))
                 emitter = bpy.context.view_layer.objects.active
@@ -1730,6 +1870,51 @@ class BlenderM2Scene:
                 light.bone = self.bone_ids[bl_light.constraints[0].subtarget]
             light.position = self._convert_vec(bl_light.location)
 
+    def save_ribbons(self):
+        ribbons = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_ribbon.enabled]
+
+        ribbon_textures = {}
+        ribbon_materials = {}
+
+        for i, bl_ribbon in enumerate(ribbons):
+            self.ribbon_ids[bl_ribbon.name] = i
+            m2_ribbon = M2Ribbon()
+            self.m2.root.ribbon_emitters.append(m2_ribbon)
+            if len(bl_ribbon.constraints) > 0:
+                m2_ribbon.bone_index = self.bone_ids[bl_ribbon.constraints[0].subtarget]
+            m2_ribbon.position = self._convert_vec(bl_ribbon.location)
+            m2_ribbon.edges_per_second = bl_ribbon.wow_m2_ribbon.edges_per_second
+            m2_ribbon.edge_lifetime = bl_ribbon.wow_m2_ribbon.edge_lifetime
+            m2_ribbon.gravity = bl_ribbon.wow_m2_ribbon.gravity
+            m2_ribbon.texture_rows = bl_ribbon.wow_m2_ribbon.texture_rows
+            m2_ribbon.texture_cols = bl_ribbon.wow_m2_ribbon.texture_cols
+
+            for tex_slot in bl_ribbon.wow_m2_ribbon.textures:
+                bl_texture = tex_slot.pointer
+                if bl_texture in ribbon_textures:
+                    tex_id = ribbon_textures[bl_texture]
+                else:
+                    tex_id = self.m2.add_texture(
+                        bl_texture.wow_m2_texture.path,
+                        construct_bitfield(bl_texture.wow_m2_texture.flags),
+                        int(bl_texture.wow_m2_texture.texture_type)
+                    )
+                    ribbon_textures[bl_texture] = tex_id
+                m2_ribbon.texture_indices.append(tex_id)
+
+            for mat_slot in bl_ribbon.wow_m2_ribbon.materials:
+                bl_mat = mat_slot.pointer
+                if bl_mat in ribbon_materials:
+                    mat_id = ribbon_materials[bl_mat]
+                else:
+                    m2_mat = M2Material()
+                    mat_id = self.m2.root.materials.add(m2_mat)
+                    m2_mat.flags = construct_bitfield(bl_mat.wow_m2_material.flags)
+                    m2_mat.blending_mode = int(bl_mat.wow_m2_material.blending_mode)
+                    ribbon_materials[bl_mat] = mat_id
+                m2_ribbon.material_indices.append(mat_id)
+
+
     def save_animations(self):
         def bl_to_m2_time(bl):
             return int(round(bl/0.02666666))
@@ -1996,7 +2181,19 @@ class BlenderM2Scene:
             )
 
         def write_ribbon(cpd, pair):
-            pass
+            m2_ribbon = self.m2.root.ribbon_emitters[self.ribbon_ids[pair.object.name]]
+            cpd.write_track("wow_m2_ribbon.color",3,m2_ribbon.color_track,vec3D)
+            cpd.write_track("wow_m2_ribbon.alpha",1,m2_ribbon.alpha_track,float32,
+                lambda x: int(x*0x7fff)
+            )
+            cpd.write_track("wow_m2_ribbon.height_above",1,m2_ribbon.height_above_track,float32)
+            cpd.write_track("wow_m2_ribbon.height_below",1,m2_ribbon.height_below_track,float32)
+            cpd.write_track("wow_m2_ribbon.texture_slot",1,m2_ribbon.tex_slot_track,uint16,
+                lambda x: int(x)
+            )
+            cpd.write_track("wow_m2_ribbon.visibility",1,m2_ribbon.visibility_track,uint8,
+                lambda x: int(x)
+            )
 
         def write_particle(cpd, pair):
             pass
@@ -2070,6 +2267,8 @@ class BlenderM2Scene:
                         ObjectTracks(seq_id, global_seq_id, pair, write_camera_target)
                     elif pair.object.wow_m2_uv_transform.enabled:
                         ObjectTracks(seq_id, global_seq_id, pair, write_texture_transform)
+                    elif pair.object.wow_m2_ribbon.enabled:
+                        ObjectTracks(seq_id, global_seq_id, pair, write_ribbon)
 
             for global_seq_id,duration in global_seq_durations.items():
                 assert global_seq_id < len(self.m2.root.global_sequences)

@@ -104,3 +104,50 @@ class M2_UL_root_elements_template_list(bpy.types.UIList):
             flt_neworder = []
 
         return flt_flags, flt_neworder
+
+class M2_OT_object_list_change(bpy.types.Operator):
+    bl_idname = 'object.wow_m2_object_list_change'
+    bl_label = 'Add / Remove'
+    bl_description = 'Add / Remove'
+    bl_options = {'REGISTER','INTERNAL','UNDO'}
+
+    obj_name:  bpy.props.StringProperty(options={'HIDDEN'})
+    col_name:  bpy.props.StringProperty(options={'HIDDEN'})
+    idx_name:  bpy.props.StringProperty(options={'HIDDEN'})
+    action:  bpy.props.StringProperty(default='ADD', options={'HIDDEN'})
+    add_action:  bpy.props.EnumProperty(
+        items=[('EMPTY', 'Empty', ''),
+               ('NEW', 'New', '')],
+        default='EMPTY',
+        options={'HIDDEN'}
+    )
+
+    def execute(self, context):
+        obj = getattr(bpy.context.object,self.obj_name)
+        col = getattr(obj,self.col_name)
+        if self.action == 'ADD':
+            slot = col.add()
+            setattr(obj,self.idx_name,len(col)-1)
+        elif self.action == 'REMOVE':
+            idx = getattr(obj,self.idx_name)
+            col_len = len(col)
+            if idx >= col_len or idx < 0:
+                idx = col_len-1
+            col.remove(getattr(obj,self.idx_name))
+        else:
+            raise ValueError(f'Invalid object list action {self.action}')
+        return {'FINISHED'}
+
+def draw_object_list(obj,col,label,template,obj_name,col_name,sel_name):
+    col.label(text=label)
+    row = col.row()
+    sub_col1 = row.column()
+    sub_col1.template_list(template,'',obj,col_name,obj,sel_name)
+    sub_col_parent = row.column()
+    sub_col2 = sub_col_parent.column(align=True)
+
+    op1 = sub_col2.operator('object.wow_m2_object_list_change', text='', icon='ADD')
+    op1.action, op1.col_name, op1.idx_name, op1.obj_name = 'ADD', col_name, sel_name, obj_name
+
+    op2 = sub_col2.operator('object.wow_m2_object_list_change', text='', icon='REMOVE')
+    op2.action, op2.col_name, op2.idx_name, op2.obj_name = 'REMOVE', col_name, sel_name, obj_name

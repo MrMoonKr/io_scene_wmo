@@ -76,5 +76,6 @@ def import_m2(version, filepath, is_local_file=False):
     bl_m2.load_lights()
     bl_m2.load_events()
     bl_m2.load_cameras()
+    bl_m2.load_ribbons()
     return m2_file
 

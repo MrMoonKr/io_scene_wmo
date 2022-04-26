@@ -21,14 +21,19 @@ class M2_PT_particle_panel(bpy.types.Panel):
 
 
 class WowM2ParticlePropertyGroup(bpy.types.PropertyGroup):
+    enabled:  bpy.props.BoolProperty(
+        name='Enabled',
+        description='Enabled this object to be a WoW M2 Particle',
+        default=False
+    )
 
     type:  bpy.props.IntProperty()
 
 
 def register():
-    bpy.types.ParticleSettings.wow_m2_particle = bpy.props.PointerProperty(type=WowM2ParticlePropertyGroup)
+    bpy.types.Object.wow_m2_particle = bpy.props.PointerProperty(type=WowM2ParticlePropertyGroup)
 
 
 def unregister():
-    del bpy.types.ParticleSettings.wow_m2_particle
+    del bpy.Object.wow_m2_particle
 

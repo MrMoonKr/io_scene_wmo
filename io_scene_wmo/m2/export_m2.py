@@ -29,6 +29,8 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     bl_m2.save_events()
     print("\nExporting lights")
     bl_m2.save_lights()
+    print("\nExporting Ribbons")
+    bl_m2.save_ribbons()
     print("\nExporting animations")
     bl_m2.save_animations()
     print("\nExporting geosets")
