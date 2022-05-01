@@ -1733,6 +1733,16 @@ class BlenderM2Scene:
     def prepare_export_axis(self, forward_axis, scale):
         self.scale = scale
         self.forward_axis = forward_axis
+
+        armatures = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']
+        # check for > 1 is later
+        if len(armatures) > 0:
+            armature = armatures[0]
+            scale = armature.scale
+            if abs(scale[0]-scale[1])>0.0001 or abs(scale[0]-scale[2])>0.0001:
+                raise ValueError(f'Non-uniform object scaling in armature {armature.name}, WBS doesn\'t know how to do this yet :(')
+            self.scale *= scale[0]
+
         if forward_axis == 'X+':
             self.axis_order = [0,1]
             self.axis_polarity = [1,1]
