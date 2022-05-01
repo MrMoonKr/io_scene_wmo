@@ -20,7 +20,7 @@ from ..pywowlib.file_formats.wow_common_types import *
 from ..pywowlib.file_formats.m2_format import *
 from ..pywowlib.m2_file import M2File
 from ..pywowlib.io_utils.types import vec3D
-from .util import make_fcurve_compound
+from .util import make_fcurve_compound,get_bone_groups
 
 class BlenderM2Scene:
     """ This class is used for assembling a Blender scene from an M2 file or saving the scene back to it."""
@@ -1765,7 +1765,7 @@ class BlenderM2Scene:
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
 
         for obj in objects:
-            if obj.type != 'ARMATURE':
+            if obj.type != 'ARMATURE' or not obj.animation_data:
                 continue
             if obj.animation_data and obj.animation_data.action:
                 self.old_actions.append((obj,obj.animation_data.action))
@@ -2632,20 +2632,18 @@ class BlenderM2Scene:
             sort_pos = get_obj_boundbox_center(new_obj)
             sort_radius = get_obj_radius(new_obj, sort_pos)
 
-            # collect rig data
-            if new_obj.vertex_groups:
-                bpy.ops.object.vertex_group_limit_total()
-
             if self.rig:
 
                 bone_indices = []
                 bone_weights = []
 
+                bone_names = [bone.name for bone in self.rig.data.bones]
                 for vertex in mesh.vertices:
                     v_bone_indices = [0, 0, 0, 0]
                     v_bone_weights = [0, 0, 0, 0]
 
-                    for i, group_info in enumerate(vertex.groups):
+                    bone_groups = get_bone_groups(new_obj,vertex,bone_names)[:4]
+                    for i, group_info in enumerate(bone_groups):
                         bone_id = self.bone_ids.get(new_obj.vertex_groups[group_info.group].name)
                         weight = group_info.weight
 

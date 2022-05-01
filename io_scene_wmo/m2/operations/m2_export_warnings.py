@@ -1,7 +1,7 @@
 import bpy
 import re
 from mathutils import Vector
-from ..util import can_apply_scale, make_fcurve_compound
+from ..util import can_apply_scale, make_fcurve_compound,get_bone_groups
 
 def wrong_scene_type():
     name = "Wrong Scene Type"
@@ -221,6 +221,25 @@ def non_uniform_scale_tracks():
 
     return (name,description,items)
 
+def too_many_bone_groups():
+    name = "Too many bone groups"
+    description = [
+        "Issue: You have vertices with too many bone groups",
+        "Effect: Bones will be dropped from vertices influence table on export, causing vertices to move differently in-game",
+        "Fix: Either run 'Limit Bone Groups' to see the ingame effect in blender, or ignore this error and see results ingame.",
+    ]
+    items = []
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH' or obj.parent == None or obj.parent.type != 'ARMATURE':
+            continue
+        bone_names = [bone.name for bone in obj.parent.data.bones]
+        broken_vertices = 0
+        for vertex in obj.data.vertices:
+            if len(get_bone_groups(obj,vertex,bone_names)) > 4:
+                broken_vertices += 1
+        if broken_vertices > 0:
+            items.append(f'Object {obj.name} has {broken_vertices} vertices with too many bone groups')
+    return (name,description,items)
 
 def print_warnings():
     printed_warnings = False
@@ -251,6 +270,7 @@ def print_warnings():
     warning_section(missing_animation_items)
     warning_section(non_primary_sequences)
     warning_section(non_uniform_scale_tracks)
+    warning_section(too_many_bone_groups)
 
     if not printed_warnings:
         print("\nNo warnings found!")

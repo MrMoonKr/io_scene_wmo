@@ -1,7 +1,7 @@
 import bpy
 import re
 from mathutils import Matrix, Vector, Quaternion
-from ..util import can_apply_scale,make_fcurve_compound
+from ..util import can_apply_scale,make_fcurve_compound,get_bone_groups
 
 def convert_m2_bones():
     def fix_scale(matrix,curves,keyframe_count):
@@ -89,6 +89,20 @@ def convert_m2_bones():
 
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
+
+    fixed_vertices = 0
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH' or obj.parent is None or obj.parent.type != 'ARMATURE':
+            continue
+        
+        bone_names = [bone.name for bone in obj.parent.data.bones]
+        for vertex in obj.data.vertices:
+            groups = get_bone_groups(obj, vertex, bone_names)
+            for el in groups[4:]:
+                obj.vertex_groups[el.group].remove([vertex.index])
+            if len(groups) > 4:
+                fixed_vertices += 1
+    print(f'Removed overflowing groups for {fixed_vertices} vertices')
 
     changed_bones = {}
     changed_objects = []

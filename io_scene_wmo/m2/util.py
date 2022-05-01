@@ -16,3 +16,8 @@ def make_fcurve_compound(fcurves, accept = lambda path: True):
             compound[fcurve.data_path] = {}
         compound[fcurve.data_path][fcurve.array_index] = fcurve
     return compound
+
+def get_bone_groups(obj, vertex, bone_names):
+    groups = [el for el in vertex.groups if obj.vertex_groups[el.group].name in bone_names]
+    groups.sort(key=lambda x: -x.weight)
+    return groups
