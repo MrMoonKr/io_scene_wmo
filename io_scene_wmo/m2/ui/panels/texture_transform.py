@@ -23,7 +23,7 @@ class M2_PT_texture_transform_controller_panel(bpy.types.Panel):
                          or context.object.wow_m2_attachment.enabled
                          or context.object.wow_m2_camera.enabled
                          or context.object.wow_m2_ribbon.enabled
-                         or context.object.wow_m2_particles.enabled)
+                         or context.object.wow_m2_particle.enabled)
         )
 
 

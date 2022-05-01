@@ -39,6 +39,7 @@ class BlenderM2Scene:
         self.texture_transform_ids = {}
         self.light_ids = {}
         self.ribbon_ids = {}
+        self.particle_ids = {}
         self.uv_transforms = {}
         self.geosets = []
         self.animations = []
@@ -518,9 +519,9 @@ class BlenderM2Scene:
                 keyframe.co = frame, True
                 keyframe.interpolation = interp_type
 
+
     def _bl_create_sequences(self, m2_obj, m2_track_name, prefix, bl_obj, bl_obj_name, bl_track_name, track_count, conv):
         # Create tracks (and actions, as needed) for all sequences for a specific M2Track
-
         track = getattr(m2_obj,m2_track_name)
         seq_name_table = M2SequenceNames()
         n_global_sequences = len(self.global_sequences)
@@ -1578,20 +1579,130 @@ class BlenderM2Scene:
         else:
             print("\nImport particles.")
 
-        for particle in self.m2.root.particles_emitters:
-            if particle.emitter_type == 1:
-                bpy.ops.mesh.primitive_plane_add(radius=1, location=(0, 0, 0))
-                emitter = bpy.context.view_layer.objects.active
-                emitter.dimensions[0] = particle.emission_area_length
-                emitter.dimensions[1] = particle.emission_area_width
+        for i,m2_particle in enumerate(self.m2.root.particle_emitters):
+            bpy.ops.object.empty_add(type='SPHERE', location=(0,0,0))
+            obj = bpy.context.view_layer.objects.active
+            obj.empty_display_size = 0.07
+            bpy.ops.object.constraint_add(type='CHILD_OF')
+            constraint = obj.constraints[-1]
+            constraint.target = self.rig
+            obj.parent = self.rig
+            bone = self.m2.root.bones[m2_particle.bone]
+            constraint.subtarget = bone.name
+            obj.location = m2_particle.position
+            obj.name = f'Particle {i}'
+            obj.wow_m2_particle.enabled = True
+            obj.animation_data_create()
+            bl_particle = obj.wow_m2_particle
 
-            elif particle.emitter_type == 2:
-                bpy.ops.mesh.primitive_uv_sphere_add(size=particle.emission_area_length, location=(0, 0, 0))
-                emitter = bpy.context.view_layer.objects.active
-                # TODO: emission_area_with
+            # static fields
+            bl_particle.enabled = True
+            bl_particle.flags = parse_bitfield(m2_particle.flags, 0x80000)
+            bl_particle.texture = self.load_texture(m2_particle.texture)
+            bl_particle.geometry_model_filename = m2_particle.geometry_model_filename.value
+            bl_particle.recursion_model_filename = m2_particle.recursion_model_filename.value
+            bl_particle.blending_type = str(m2_particle.blending_type)
+            bl_particle.emitter_type = str(m2_particle.emitter_type)
+            bl_particle.particle_color_index = m2_particle.particle_color_index
+            bl_particle.particle_type = str(m2_particle.particle_type)
+            bl_particle.side = str(m2_particle.head_or_tail)
+            bl_particle.texture_tile_rotation = m2_particle.texture_tile_rotation
+            bl_particle.texture_dimensions_rows = m2_particle.texture_dimensions_rows
+            bl_particle.texture_dimensions_cols = m2_particle.texture_dimension_columns
+            bl_particle.lifespan_vary = m2_particle.life_span_vary
+            bl_particle.emission_rate_vary = m2_particle.emission_rate_vary
+            bl_particle.scale_vary = m2_particle.scale_vary
+            bl_particle.tail_length = m2_particle.tail_length
+            bl_particle.twinkle_speed = m2_particle.twinkle_speed
+            bl_particle.twinkle_percent = m2_particle.twinkle_percent
+            bl_particle.twinkle_scale = (m2_particle.twinkle_scale.min,m2_particle.twinkle_scale.max)
+            bl_particle.burst_multiplier = m2_particle.burst_multiplier
+            bl_particle.drag = m2_particle.drag
+            bl_particle.basespin = m2_particle.basespin
+            bl_particle.base_spin_vary = m2_particle.base_spin_vary
+            bl_particle.spin = m2_particle.spin
+            bl_particle.spin_vary = m2_particle.spin_vary
+            bl_particle.tumble_min = m2_particle.tumble.model_rotation_speed_min
+            bl_particle.tumble_max = m2_particle.tumble.model_rotation_speed_max
+            bl_particle.wind = m2_particle.wind_vector
+            bl_particle.wind_time = m2_particle.wind_time
+            bl_particle.follow_speed_1 = m2_particle.follow_speed1
+            bl_particle.follow_scale_1 = m2_particle.follow_scale1
+            bl_particle.follow_speed_2 = m2_particle.follow_speed2
+            bl_particle.follow_scale_2 = m2_particle.follow_scale2
 
-            elif particle.emitter_type == 3:
-                pass
+            # animations
+            self._bl_create_sequences(m2_particle,'emission_speed',
+                f'PT_{i}',obj,'wow_m2_particle','emission_speed',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'speed_variation',
+                f'PT_{i}',obj,'wow_m2_particle','speed_variation',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'vertical_range',
+                f'PT_{i}',obj,'wow_m2_particle','vertical_range',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'horizontal_range',
+                f'PT_{i}',obj,'wow_m2_particle','horizontal_range',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'gravity',
+                f'PT_{i}',obj,'wow_m2_particle','gravity',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'lifespan',
+                f'PT_{i}',obj,'wow_m2_particle','lifespan',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'emission_rate',
+                f'PT_{i}',obj,'wow_m2_particle','emission_rate',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'emission_area_length',
+                f'PT_{i}',obj,'wow_m2_particle','emission_area_length',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'emission_area_width',
+                f'PT_{i}',obj,'wow_m2_particle','emission_area_width',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'z_source',
+                f'PT_{i}',obj,'wow_m2_particle','z_source',1,self._bl_convert_track_value)
+
+            self._bl_create_sequences(m2_particle,'enabled_in',
+                f'PT_{i}',obj,'wow_m2_particle','active',1,self._bl_convert_track_value)
+
+            def create_fcurve_track(action, m2_track,bl_track_name, group_name, track_count, conv = lambda x: x):
+                fcurves = [action.fcurves.new(data_path="wow_m2_particle."+bl_track_name, index=k, action_group=group_name)
+                    for k in range(track_count)
+                ]
+
+                frame_count = len(m2_track.timestamps)
+
+                for fcurve in fcurves:
+                    fcurve.keyframe_points.add(frame_count)
+
+                for k in range(frame_count):
+                    time = m2_track.timestamps[k]*0.0266666
+                    value = conv(m2_track.keys[k])
+                    for j,fcurve in enumerate(fcurves):
+                        keyframe = fcurve.keyframe_points[k]
+                        keyframe.co = (time, value if track_count == 1 else value[j])
+                        keyframe.interpolation = 'LINEAR'
+
+            obj.animation_data_create()
+            obj.animation_data.action_blend_type = 'ADD'
+            particle_action = bpy.data.actions.new(name=f'PT_{obj.name}_particle_tracks')
+            particle_action.use_fake_user = True
+            obj.wow_m2_particle.action = particle_action
+            create_fcurve_track(particle_action, m2_particle.color_track,'color','Color',3, lambda x: (x[0]/255,x[1]/255,x[2]/255))
+            create_fcurve_track(particle_action, m2_particle.alpha_track,'alpha','',1,lambda x: x/0x7fff)
+            create_fcurve_track(particle_action, m2_particle.scale_track,'scale','Scale',2)
+            create_fcurve_track(particle_action, m2_particle.head_cell_track,'head_cell','',1)
+            create_fcurve_track(particle_action, m2_particle.tail_cell_track,'tail_cell','',1)
+
+            spline_action = bpy.data.actions.new(name=f'PT_{obj.name}_particle_spline')
+            spline_action.use_fake_user = True
+            obj.wow_m2_particle.spline_action = spline_action
+            fake_spline_fcurve = FBlock(vec3D)
+            fake_spline_fcurve.interpolation_type = 1
+            for i,spline in enumerate(m2_particle.spline_points):
+                fake_spline_fcurve.timestamps.append(i/0.026666)
+                fake_spline_fcurve.keys.append(spline)
+            create_fcurve_track(spline_action, fake_spline_fcurve, 'spline_point','Spline', 3)
 
     def load_collision(self):
 
@@ -1914,6 +2025,100 @@ class BlenderM2Scene:
                     ribbon_materials[bl_mat] = mat_id
                 m2_ribbon.material_indices.append(mat_id)
 
+    def save_particles(self):
+        particles = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_particle.enabled]
+        particle_textures = {}
+
+        for i, bl_obj in enumerate(particles):
+            self.particle_ids[bl_obj.name] = i
+            m2_particle = M2Particle()
+            self.m2.root.particle_emitters.append(m2_particle)
+            bl_particle = bl_obj.wow_m2_particle
+
+            m2_particle.particle_id = 4294967295
+            m2_particle.position = self._convert_vec(bl_obj.location)
+
+            if len(bl_obj.constraints) > 0:
+                m2_particle.bone = self.bone_ids[bl_obj.constraints[0].subtarget]
+
+            bl_texture = bl_particle.texture
+            if bl_texture:
+                if bl_texture in particle_textures:
+                    m2_particle.texture = particle_textures[bl_texture]
+                else:
+                    m2_particle.texture = self.m2.add_texture(
+                        bl_texture.wow_m2_texture.path,
+                        construct_bitfield(bl_texture.wow_m2_texture.flags),
+                        int(bl_texture.wow_m2_texture.texture_type)
+                    )
+            else:
+                m2_particle.texture = 0
+
+            m2_particle.flags = construct_bitfield(bl_particle.flags)
+            m2_particle.geometry_model_filename.value = bl_particle.geometry_model_filename
+            m2_particle.recursion_model_filename.value = bl_particle.recursion_model_filename
+            m2_particle.blending_type = int(bl_particle.blending_type)
+            m2_particle.emitter_type = int(bl_particle.emitter_type)
+            m2_particle.particle_color_index = bl_particle.particle_color_index
+            m2_particle.particle_type = int(bl_particle.particle_type)
+            m2_particle.head_or_tail = int(bl_particle.side)
+            m2_particle.texture_tile_rotation = bl_particle.texture_tile_rotation
+            m2_particle.texture_dimensions_rows = bl_particle.texture_dimensions_rows
+            m2_particle.texture_dimension_columns = bl_particle.texture_dimensions_cols
+            m2_particle.life_span_vary = bl_particle.lifespan_vary
+            m2_particle.emission_rate_vary = bl_particle.emission_rate_vary
+            m2_particle.scale_vary = tuple(bl_particle.scale_vary)
+            m2_particle.tail_length = bl_particle.tail_length
+            m2_particle.twinkle_speed = bl_particle.twinkle_speed
+            m2_particle.twinkle_percent = bl_particle.twinkle_percent
+            m2_particle.twinkle_scale.min = bl_particle.twinkle_scale[0]
+            m2_particle.twinkle_scale.max = bl_particle.twinkle_scale[1]
+            m2_particle.burst_multiplier = bl_particle.burst_multiplier
+            m2_particle.drag = bl_particle.drag
+            m2_particle.basespin = bl_particle.basespin
+            m2_particle.base_spin_vary = bl_particle.basespin_vary
+            m2_particle.spin = bl_particle.spin
+            m2_particle.spin_vary = bl_particle.spin_vary
+            m2_particle.tumble.model_rotation_speed_min = tuple(bl_particle.tumble_min)
+            m2_particle.tumble.model_rotation_speed_max = tuple(bl_particle.tumble_max)
+            m2_particle.wind_vector = tuple(bl_particle.wind)
+            m2_particle.wind_time = bl_particle.wind_time
+            m2_particle.follow_speed1 = bl_particle.follow_speed_1
+            m2_particle.follow_scale1 = bl_particle.follow_scale_1
+            m2_particle.follow_speed2 = bl_particle.follow_speed_2
+            m2_particle.follow_scale2 = bl_particle.follow_scale_2
+
+            def export_fcurve(m2_track,action,data_path,has_time,conv = lambda x: x):
+                fcurves = [fcurve for fcurve in action.fcurves if fcurve.data_path == 'wow_m2_particle.'+data_path]
+                if len(fcurves) == 0:
+                    # TODO: warning?
+                    return
+
+                keyframe_count = len(fcurves[0].keyframe_points)
+                for i,fcurve in enumerate(fcurves):
+                    cur_count = len(fcurve.keyframe_points)
+                    if cur_count != keyframe_count:
+                        raise ValueError(f'Track index {i} keyframe count ({cur_count}) is different from index 0 {keyframe_count}')
+
+                for i in range(keyframe_count):
+                    values = []
+                    for fcurve in fcurves:
+                        values.append(fcurve.keyframe_points[i].co[1])
+                    values = conv(tuple(values) if len(values)>1 else values[0])
+                    if has_time:
+                        time = int(round(fcurves[0].keyframe_points[i].co[0]/0.0266666))
+                        m2_track.timestamps.append(time)
+                        m2_track.keys.append(values)
+                    else:
+                        m2_track.append(values)
+
+            if bl_particle.action:
+                export_fcurve(m2_particle.color_track, bl_particle.action, 'color', True, lambda x: (x[0]*255,x[1]*255,x[2]*255))
+                export_fcurve(m2_particle.alpha_track, bl_particle.action, 'alpha', True, lambda x: int(x*0x7fff))
+                export_fcurve(m2_particle.scale_track, bl_particle.action, 'scale', True)
+
+            if bl_particle.spline_action:
+                export_fcurve(m2_particle.spline_points, bl_particle.spline_action, 'spline_point', False)
 
     def save_animations(self):
         def bl_to_m2_time(bl):
@@ -2085,6 +2290,10 @@ class BlenderM2Scene:
                 bone = re.search('"(.+?)"',path).group(1)
                 curve_type = re.search('([a-zA-Z_]+)$',path).group(0)
 
+                if not bone in self.bone_ids:
+                    print(f"Warning: FCurve {path} references non-existing bone {bone}")
+                    continue
+
                 m2_bone = self.m2.root.bones.values[self.bone_ids[bone]]
                 m2_bone.flags = m2_bone.flags | 512
 
@@ -2196,7 +2405,26 @@ class BlenderM2Scene:
             )
 
         def write_particle(cpd, pair):
-            pass
+            m2_particle = self.m2.root.particle_emitters[self.particle_ids[pair.object.name]]
+            cpd.write_track("wow_m2_particle.emission_speed",1,m2_particle.emission_speed,float32)
+            cpd.write_track("wow_m2_particle.speed_variation",1,m2_particle.speed_variation,float32)
+            cpd.write_track("wow_m2_particle.vertical_range",1,m2_particle.vertical_range,float32)
+            cpd.write_track("wow_m2_particle.horizontal_range",1,m2_particle.horizontal_range,float32)
+            cpd.write_track("wow_m2_particle.gravity",1,m2_particle.gravity,float32)
+            cpd.write_track("wow_m2_particle.lifespan",1,m2_particle.lifespan,float32)
+            cpd.write_track("wow_m2_particle.emission_rate",1,m2_particle.emission_rate,float32)
+            cpd.write_track("wow_m2_particle.emission_area_length",1,m2_particle.emission_area_length,float32)
+            cpd.write_track("wow_m2_particle.emission_area_width",1,m2_particle.emission_area_width,float32)
+            cpd.write_track("wow_m2_particle.z_source",1,m2_particle.z_source,float32)
+            cpd.write_track("wow_m2_particle.color_track",3,m2_particle.color_track,vec3D)
+            cpd.write_track("wow_m2_particle.alpha",1,m2_particle.alpha_track,float32)
+            cpd.write_track("wow_m2_particle.scale",2,m2_particle.scale_track,vec2D)
+            cpd.write_track("wow_m2_particle.head_cell_track",1,m2_particle.head_cell_track,uint16,
+                lambda x: int(x))
+            cpd.write_track("wow_m2_particle.tail_cell_track",1,m2_particle.tail_cell_track,uint16,
+                lambda x: int(x))
+            cpd.write_track("wow_m2_particle.active",1,m2_particle.enabled_in,uint8,
+                lambda x: int(x))
 
         def write_camera(cpd, pair):
             pass
@@ -2269,6 +2497,8 @@ class BlenderM2Scene:
                         ObjectTracks(seq_id, global_seq_id, pair, write_texture_transform)
                     elif pair.object.wow_m2_ribbon.enabled:
                         ObjectTracks(seq_id, global_seq_id, pair, write_ribbon)
+                    elif pair.object.wow_m2_particle.enabled:
+                        ObjectTracks(seq_id, global_seq_id, pair, write_particle)
 
             for global_seq_id,duration in global_seq_durations.items():
                 assert global_seq_id < len(self.m2.root.global_sequences)

@@ -69,6 +69,7 @@ class M2_PT_ribbon_panel(bpy.types.Panel):
                          or context.object.wow_m2_uv_transform.enabled
                          or context.object.wow_m2_camera.enabled
                          or context.object.wow_m2_attachment.enabled
+                         or context.object.wow_m2_particle.enabled
                          )
         )
 

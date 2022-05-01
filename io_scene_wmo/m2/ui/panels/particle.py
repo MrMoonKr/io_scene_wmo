@@ -1,24 +1,86 @@
 import bpy
-
+from ..enums import *
 
 class M2_PT_particle_panel(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "particle"
+    bl_context = "object"
     bl_label = "M2 Particle"
+
+    def draw_header(self, context):
+        self.layout.prop(context.object.wow_m2_particle, "enabled", text="")
 
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        col.prop(context.object.particle_systems.active.settings.wow_m2_particle, 'type')
+        particle = context.object.wow_m2_particle
+        col.prop(particle, 'action',text='Action')
+        col.prop(particle, 'texture',text='Texture')
+        col.prop(particle, 'geometry_model_filename', text='Geometry Model Filename')
+        col.prop(particle, 'recursion_model_filename', text='Recursion Model Filename')
+        col.prop(particle, 'blending_type',text="Blending Type")
+        col.prop(particle, 'emitter_type',text="Alpha")
+        col.prop(particle, 'particle_type',text="Particle Type")
+        col.prop(particle, 'side',text="Side")
+        col.label(text='Flags')
+        col.prop(particle, 'flags', text='Flags')
+        col.prop(particle, 'particle_color_index',text="Particle Color Index")
+        col.prop(particle, 'texture_tile_rotation',text="Texture Tile Rotation")
+        col.prop(particle, 'texture_dimensions_rows',text="Texture Dimension Rows")
+        col.prop(particle, 'texture_dimensions_cols',text="Texture Dimension Columns")
+        col.prop(particle, 'emission_speed',text="Emission Speed")
+        col.prop(particle, 'speed_variation',text="Speed Variation")
+        col.prop(particle, 'vertical_range',text="Vertical Range")
+        col.prop(particle, 'horizontal_range',text="Horizontal Range")
+        col.prop(particle, 'gravity',text="Gravity")
+        col.prop(particle, 'lifespan',text="Lifespan")
+        col.prop(particle, 'lifespan_vary',text="Lifespan Vary")
+        col.prop(particle, 'emission_rate',text="Emission Rate")
+        col.prop(particle, 'emission_rate_vary',text="Emission Rate Vary")
+        col.prop(particle, 'emission_area_length',text="Emission Area Length")
+        col.prop(particle, 'emission_area_width',text="Emission Area Width")
+        col.prop(particle, 'z_source',text="Z Source")
+        col.prop(particle, 'color',text="Color")
+        col.prop(particle, 'alpha',text="Alpha")
+        col.prop(particle, 'scale',text="Scale")
+        col.prop(particle, 'scale_vary',text="Scale Vary")
+        col.prop(particle, 'head_cell',text="Head Cell")
+        col.prop(particle, 'tail_cell',text="Tail Cell")
+        col.prop(particle, 'tail_length',text="Tail Length")
+        col.prop(particle, 'twinkle_speed',text="Twinkle Speed")
+        col.prop(particle, 'twinkle_percent',text="Twinkle Percent")
+        col.prop(particle, 'twinkle_scale',text="Twinkle Scale")
+        col.prop(particle, 'burst_multiplier',text="Burst Multiplier")
+        col.prop(particle, 'drag',text="Drag")
+        col.prop(particle, 'basespin',text="Base Spin")
+        col.prop(particle, 'basespin_vary',text="Base Spin Vary")
+        col.prop(particle, 'spin',text="Spin")
+        col.prop(particle, 'spin_vary',text="Spin Vary")
+        col.prop(particle, 'tumble_min',text="Tumble Min")
+        col.prop(particle, 'tumble_max',text="Tumble Max")
+        col.prop(particle, 'wind',text="Wind")
+        col.prop(particle, 'wind_time',text="Wind Time")
+        col.prop(particle, 'follow_speed_1',text="Follow Speed #1")
+        col.prop(particle, 'follow_scale_1',text="Follow Scale #1")
+        col.prop(particle, 'follow_speed_2',text="Follow Speed #2")
+        col.prop(particle, 'follow_scale_2',text="Follow Scale #2")
+        col.prop(particle, 'spline_action',text="Spline Action")
+        col.prop(particle, 'spline_point',text="Spline Point")
+        col.prop(particle, 'active',text="Active")
 
     @classmethod
     def poll(cls, context):
         return (context.scene is not None
                 and context.scene.wow_scene.type == 'M2'
                 and context.object is not None
-                and context.object.particle_systems.active)
-
+                and context.object.type == 'EMPTY'
+                and not (context.object.wow_m2_event.enabled
+                         or context.object.wow_m2_uv_transform.enabled
+                         or context.object.wow_m2_camera.enabled
+                         or context.object.wow_m2_attachment.enabled
+                         or context.object.wow_m2_ribbon.enabled
+                         )
+        )
 
 class WowM2ParticlePropertyGroup(bpy.types.PropertyGroup):
     enabled:  bpy.props.BoolProperty(
@@ -27,8 +89,350 @@ class WowM2ParticlePropertyGroup(bpy.types.PropertyGroup):
         default=False
     )
 
-    type:  bpy.props.IntProperty()
+    action: bpy.props.PointerProperty(
+        name='Action',
+        description='',
+        type=bpy.types.Action
+    )
 
+    flags:  bpy.props.EnumProperty(
+        name="Material flags",
+        description="",
+        items=PARTICLE_FLAGS,
+        options={"ENUM_FLAG"}
+    )
+
+    texture: bpy.props.PointerProperty (
+        type=bpy.types.Image
+    )
+
+    geometry_model_filename: bpy.props.StringProperty (
+        name = 'Geometry Model Filename',
+        description = '',
+        default = ''
+    )
+
+    recursion_model_filename: bpy.props.StringProperty (
+        name = 'Recursion Model Filename',
+        description = '',
+        default = ''
+    )
+
+    blending_type:  bpy.props.EnumProperty (
+        name='Blending Type',
+        description='',
+        items = [
+            ('0','Unknown',''),
+            ('1','Unknown',''),
+            ('2','Unknown',''),
+            ('4','Unknown',''),
+            ('5','Unknown',''),
+        ]
+    )
+
+    emitter_type: bpy.props.EnumProperty(
+        name='Emitter Type',
+        description='The shape of this emitter',
+        items = [
+            ('0','Rectangle',''),
+            ('1','Sphere',''),
+            ('2','Spline',''),
+            ('3','Bone',''),
+        ]
+    )
+
+    particle_color_index: bpy.props.IntProperty(
+        name='Particle Color Index',
+        description='An index into ParticleColor.dbc',
+        default = 0
+    )
+
+    particle_type: bpy.props.EnumProperty(
+        name='Particle Type',
+        description='',
+        items = [
+            ('0','Normal',''),
+            ('1','Large Quad',''),
+            ('2','Unknown',''),
+        ]
+    )
+
+    side: bpy.props.EnumProperty(
+        name='Side',
+        description='What sides of the particle emits',
+        items = [
+            ('0','Head',''),
+            ('1','Tail',''),
+            ('2','Both',''),
+        ]
+    )
+
+    texture_tile_rotation: bpy.props.IntProperty(
+        name='Texture Tile Rotation',
+        description='',
+        min=-1,
+        max=1,
+        default=0
+    )
+
+    texture_dimensions_rows: bpy.props.IntProperty(
+        name='Texture Dimensions Rows',
+        description='',
+        default=0
+    )
+
+    texture_dimensions_cols: bpy.props.IntProperty(
+        name='Texture Dimensions Columns',
+        description='',
+        default=0
+    )
+
+    emission_speed: bpy.props.FloatProperty(
+        name='Emission Speed',
+        description='',
+        default=0.0
+    )
+
+    speed_variation: bpy.props.FloatProperty(
+        name='Speed Variation',
+        description='',
+        default=0.0
+    )
+
+    vertical_range: bpy.props.FloatProperty(
+        name='Speed Variation',
+        description='',
+        default=0.0
+    )
+
+    horizontal_range: bpy.props.FloatProperty(
+        name='Horizontal Range',
+        description='',
+        default=0.0
+    )
+
+    gravity: bpy.props.FloatProperty(
+        name='Gravity',
+        description='',
+        default=0.0
+    )
+
+    lifespan: bpy.props.FloatProperty(
+        name='Lifespan',
+        description='',
+        default=0.0
+    )
+
+    lifespan_vary: bpy.props.FloatProperty(
+        name='Lifespan Vary',
+        description='',
+        default=0.0
+    )
+
+    emission_rate: bpy.props.FloatProperty(
+        name='Emission Rate',
+        description='',
+        default=0.0
+    )
+
+    emission_rate_vary: bpy.props.FloatProperty(
+        name='Emission Rate Vary',
+        description='',
+        default=0.0
+    )
+
+    emission_area_length: bpy.props.FloatProperty(
+        name='Emission Area Length',
+        description='',
+        default=0.0
+    )
+
+    emission_area_width: bpy.props.FloatProperty(
+        name='Emission Area Width',
+        description='',
+        default=0.0
+    )
+
+    z_source: bpy.props.FloatProperty(
+        name='Z Source',
+        description='',
+        default=0.0
+    )
+
+    color: bpy.props.FloatVectorProperty(
+        name = "Color",
+        description="",
+        subtype='COLOR',
+        size=3,
+        default=(1.0,1.0,1.0),
+        min=0.0,
+        max=1.0
+    )
+
+    alpha: bpy.props.FloatProperty(
+        name = "Alpha",
+        description="",
+        default=0,
+        min=0,
+        max=1
+    )
+
+    scale: bpy.props.FloatVectorProperty(
+        name = "Scale",
+        description="",
+        size=2,
+        default=(1.0,1.0),
+    )
+
+    scale_vary: bpy.props.FloatVectorProperty(
+        name = "Scale Vary",
+        description="",
+        size=2,
+        default=(1.0,1.0),
+    )
+
+    head_cell: bpy.props.IntProperty(
+        name = "Head Cell",
+        description = "",
+        default = 0
+    )
+
+    tail_cell: bpy.props.IntProperty(
+        name = "Tail Cell",
+        description = "",
+        default = 0
+    )
+
+    tail_length: bpy.props.FloatProperty(
+        name = "Tail Length",
+        description = "",
+        default = 0
+    )
+
+    twinkle_speed: bpy.props.FloatProperty(
+        name = "Twinkle Speed",
+        description = "",
+        default = 0
+    )
+
+    twinkle_percent: bpy.props.FloatProperty(
+        name = "Twinkle Percent",
+        description = "",
+        default = 0
+    )
+
+    twinkle_scale: bpy.props.FloatVectorProperty(
+        name = "Twinkle Scale",
+        description = "",
+        size=2,
+        default=(1.0,1.0)
+    )
+
+    burst_multiplier: bpy.props.FloatProperty(
+        name = "Burst Multiplier",
+        description = "",
+        default = 1
+    )
+
+    drag: bpy.props.FloatProperty(
+        name = "Drag",
+        description = "",
+        default = 1
+    )
+
+    basespin: bpy.props.FloatProperty(
+        name = "Base Spin",
+        description = "",
+        default = 0
+    )
+
+    basespin_vary: bpy.props.FloatProperty(
+        name = "Base Spin Vary",
+        description = "",
+        default = 0
+    )
+
+    spin: bpy.props.FloatProperty(
+        name = "Spin",
+        description = "",
+        default = 0
+    )
+
+    spin_vary: bpy.props.FloatProperty(
+        name = "Spin Vary",
+        description = "",
+        default = 0
+    )
+
+    tumble_min: bpy.props.FloatVectorProperty(
+        name = "Tumble Min",
+        description = "",
+        size=3,
+        default = (0.0,0.0,0.0),
+    )
+
+    tumble_max: bpy.props.FloatVectorProperty(
+        name = "Tumble Max",
+        description = "",
+        size=3,
+        default = (0.0,0.0,0.0),
+    )
+
+    wind: bpy.props.FloatVectorProperty(
+        name = "Wind",
+        description = "",
+        size=3,
+        default = (0.0,0.0,0.0)
+    )
+
+    wind_time: bpy.props.FloatProperty(
+        name = "Wind Time",
+        description = "",
+        default = 0
+    )
+
+    follow_speed_1: bpy.props.FloatProperty(
+        name = "Follow Speed #1",
+        description = "",
+        default = 0
+    )
+
+    follow_scale_1: bpy.props.FloatProperty(
+        name = "Follow Scale #1",
+        description = "",
+        default = 0
+    )
+
+    follow_speed_2: bpy.props.FloatProperty(
+        name = "Follow Speed #2",
+        description = "",
+        default = 0
+    )
+
+    follow_scale_2: bpy.props.FloatProperty(
+        name = "Follow Scale #2",
+        description = "",
+        default = 0
+    )
+
+    spline_action: bpy.props.PointerProperty(
+        name = 'Spline Action',
+        description = 'FCurve describing the spline point values in this particle. Important: timestamps are only used for ordering, time values are discarded on export.',
+        type = bpy.types.Action
+    )
+
+    spline_point: bpy.props.FloatVectorProperty(
+        name = 'Spline Point',
+        description = '',
+        size=3,
+        default = (0.0,0.0,0.0)
+    )
+
+    active: bpy.props.BoolProperty(
+        name = "Active",
+        description = "",
+        default = False
+    )
 
 def register():
     bpy.types.Object.wow_m2_particle = bpy.props.PointerProperty(type=WowM2ParticlePropertyGroup)

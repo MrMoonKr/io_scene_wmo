@@ -236,6 +236,35 @@ ANIMATION_FLAGS = [
     ("2048", "Unknown", "Seen in Legion 24500 models", 'QUESTION', 0x800)
 ]
 
+PARTICLE_FLAGS = [
+    ("1","Affected By Lighting", "Particles are affected by lighting", "PMARKER", 0x1),
+    ("2","Unknown", "", "QUESTION", 0x2),
+    ("4","Use Player Orientation", "On emission, particle orientation is affected by player orientation", "PMARKER", 0x4),
+    ("8","World Space Up", "Particles travel \"up\" in world space, rather than model space", "PMARKER", 0x8),
+    ("16","Do not trail", "", "PMARKER", 0x10),
+    ("32","Unlightning", "", "PMARKER", 0x20),
+    ("64","Use Burst Multiplier", "", "PMARKER", 0x40),
+    ("128","Use Model Space", "Causes animation of the particle emitter to be carried over to the particles", "PMARKER", 0x80),
+    ("256","Unknown", "", "QUESTION", 0x100),
+    ("512","Random Spawn Position", "Spawn position randomized in some way", "PMARKER", 0x200),
+    ("1024","Pinned Particles", "Particle quad enlarges from their creation position to where they expand", "PMARKER", 0x400),
+    ("2048","Unknown", "", "QUESTION", 0x800),
+    ("4096","XYQuad Particles", "Particles align to XY axis facing Z axis (causes particle to be a tail that orients to the XY grid)", "PMARKER", 0x1000),
+    ("8192","Clamp To Ground", "", "PMARKER", 0x2000),
+    ("16384","Unknown", "", "QUESTION", 0x4000),
+    ("32768","Unknown", "", "QUESTION", 0x8000),
+    ("65536","Random Texture", "", "PMARKER", 0x10000),
+    ("131072","Outwards", "Particles move away from the origin", "PMARKER", 0x20000),
+    ("262144","Inwards", "Particles move toward the origin (unclear flag, sometimes used together with 'Outward')", "QUESTION", 0x40000),
+    ("524288","Independent Scaling", "If set, Scale Vary affects x and y independently. If not set, Scale Vary X is used for both x and y, and Scale Vary Y is not used", "PMARKER", 0x80000),
+]
+
+PARTICLE_BLEND_MODES = [
+    ("1","Unknown","","QUESTION",0x1),
+    ("2","Unknown","","QUESTION",0x2),
+    ("4","Unknown","","QUESTION",0x4),
+    ("5","Unknown","","QUESTION",0x5),
+]
 
 def generate_enumerated_list(irange, name):
     return list([(str(i), "{}_{}".format(name, i), "") for i in irange])
