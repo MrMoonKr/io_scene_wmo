@@ -27,7 +27,9 @@ class M2_PT_attachment_panel(bpy.types.Panel):
                 and context.object.type == 'EMPTY'
                 and not (context.object.wow_m2_event.enabled
                          or context.object.wow_m2_uv_transform.enabled
-                         or context.object.wow_m2_camera.enabled)
+                         or context.object.wow_m2_camera.enabled
+                         or context.object.wow_m2_ribbon.enabled
+                         or context.object.wow_m2_particle.enabled)
         )
 
 

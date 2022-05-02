@@ -8,6 +8,16 @@ from ....pywowlib import WoWVersions
 ## User Interface
 ###############################
 
+# TODO: hacky way to display the right indices in the ui panel
+def resolve_alias_next(alias_next):
+    alias_ctr = -1
+    for i,anim in enumerate(bpy.context.scene.wow_m2_animations):
+        if not anim.is_global_sequence:
+            alias_ctr+=1
+        if alias_ctr == alias_next:
+            return i,anim
+    return -1,None
+
 #### Pop-up dialog ####
 
 class M2_OT_animation_editor_dialog(bpy.types.Operator):
@@ -183,7 +193,7 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
                          icon='VIEWZOOM')
             col.prop(cur_anim_track, 'move_speed', text="Move speed")
 
-            if context.scene.wow_scene.version >= WoWVersions.WOD:
+            if int(context.scene.wow_scene.version) >= WoWVersions.WOD:
                 col.prop(cur_anim_track, 'blend_time_in', text="Blend time in")
                 col.prop(cur_anim_track, 'blend_time_out', text="Blend time out")
             else:
@@ -198,10 +208,28 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
             col.label(text='Relations:')
             row = col.row(align=True)
             row.enabled = cur_anim_track.is_alias
-            row.label(text='', icon='FILE_TICK' if cur_anim_track.alias_next < len(context.scene.wow_m2_animations) else 'ERROR')
+            row.label(text='', icon='FILE_TICK' if resolve_alias_next(cur_anim_track.alias_next)[1] is not None else 'ERROR')
             row.prop(cur_anim_track, 'alias_next', text="Next alias")
             row.operator("scene.wow_m2_animation_editor_go_to_index", text="", icon='ZOOM_SELECTED').anim_index = \
-                cur_anim_track.alias_next
+                resolve_alias_next(cur_anim_track.alias_next)[0]
+
+            col.label(text='Bounds:')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence
+            row.prop(cur_anim_track, 'use_preset_bounds')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence and cur_anim_track.use_preset_bounds
+            row.prop(cur_anim_track, 'preset_bounds_min_x')
+            row.prop(cur_anim_track, 'preset_bounds_min_y')
+            row.prop(cur_anim_track, 'preset_bounds_min_z')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence and cur_anim_track.use_preset_bounds
+            row.prop(cur_anim_track, 'preset_bounds_max_x')
+            row.prop(cur_anim_track, 'preset_bounds_max_y')
+            row.prop(cur_anim_track, 'preset_bounds_max_z')
+            row = col.row(align=True)
+            row.enabled = not cur_anim_track.is_global_sequence and cur_anim_track.use_preset_bounds
+            row.prop(cur_anim_track, 'preset_bounds_radius')
 
             col = split.column()
             col.enabled = not cur_anim_track.is_global_sequence
@@ -265,7 +293,7 @@ def update_animation_collection(self, context):
                 anim.name = "#{} {} ({})".format(i, anim_ids[int(anim.animation_id)][1], anim.chain_index)
             else:
                 anim.name = "#{} {} ({}) -> #{}".format(i, anim_ids[int(anim.animation_id)][1],
-                                                        anim.chain_index, anim.alias_next)
+                                                        anim.chain_index, resolve_alias_next(anim.alias_next)[0])
         else:
             anim.name = "#{} Global Sequence ({})".format(i, anim.chain_index)
 
@@ -422,7 +450,7 @@ class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
                 if item.object.type == 'ARMATURE':
                     icon = 'OUTLINER_OB_ARMATURE'
                 elif item.object.type == 'LIGHT':
-                    icon = 'LAMP_SUN'
+                    icon = 'LIGHT_SUN'
                 elif item.object.type == 'CAMERA':
                     icon = 'RESTRICT_RENDER_OFF'
                 elif item.object.type == 'EMPTY':
@@ -431,7 +459,7 @@ class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
                     elif item.object.wow_m2_event.enabled:
                         icon = 'PLUGIN'
                     elif item.object.wow_m2_camera.enabled:
-                        icon = 'BBOX'
+                        icon = 'OUTLINER_DATA_EMPTY'
                     elif item.object.wow_m2_uv_transform.enabled:
                         icon = 'ASSET_MANAGER'
 
@@ -820,7 +848,6 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
     move_speed:  bpy.props.FloatProperty(
         name="Move speed",
         description="The speed the character moves with in this animation",
-        min=0.0,
         default=1.0
     )
 
@@ -874,6 +901,55 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
     blend_time_out:  bpy.props.IntProperty(
         name="Blend time",
         description="",
+        min=0
+    )
+
+    use_preset_bounds: bpy.props.BoolProperty(
+        name="Use Preset Bounds",
+        description="Use preset bounds data instead of calculating on export",
+        default=False
+    )
+
+    preset_bounds_min_x: bpy.props.FloatProperty(
+        name="Min X",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_min_y: bpy.props.FloatProperty(
+        name="Min Y",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_min_z: bpy.props.FloatProperty(
+        name="Min Z",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_max_x: bpy.props.FloatProperty(
+        name="Max X",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_max_y: bpy.props.FloatProperty(
+        name="Max Y",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_max_z: bpy.props.FloatProperty(
+        name="Max Z",
+        description="",
+        default=0,
+    )
+
+    preset_bounds_radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="",
+        default=0,
         min=0
     )
 

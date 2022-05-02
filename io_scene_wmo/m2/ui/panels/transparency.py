@@ -69,7 +69,7 @@ class M2_OT_transparency_value_remove(bpy.types.Operator):
 
 def update_transparency_change(self, context):
     for mat in bpy.data.materials:
-        if mat.use_nodes and mat.texture_slots[mat.active_texture_index].texture.wow_m2_texture.transparency == self.name:
+        if mat.use_nodes and len(mat.texture_paint_slots) > mat.paint_active_slot and mat.texture_paint_slots[mat.paint_active_slot].texture.wow_m2_texture.transparency == self.name:
             mat.node_tree.nodes['Math'].inputs[1].default_value = self.value
             mat.invert_z = mat.invert_z
 

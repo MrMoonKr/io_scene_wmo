@@ -57,11 +57,10 @@ def _add_col_items(scene):
             for prop, col_name in _obj_props:
                 if prop == 'wow_m2_light' and obj.type != 'LIGHT':
                     continue
-                prop_group = getattr(obj, prop)
+                prop_group = getattr(obj, prop) if prop != 'wow_m2_light' else obj.data.wow_m2_light
                 if prop_group.enabled:
                     col = getattr(scene.wow_m2_root_elements, col_name)
                     if col.find(obj.name) < 0:
-                        prop_group.enabled = False
                         slot = col.add()
                         slot.pointer = obj
 

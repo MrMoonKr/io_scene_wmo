@@ -1,7 +1,8 @@
 import os
 
 from ..utils.misc import load_game_data
-from .m2_scene import BlenderM2Scene
+import importlib
+from . import m2_scene
 from ..pywowlib.m2_file import M2File, M2Versions
 from ..ui import get_addon_prefs
 
@@ -62,7 +63,8 @@ def import_m2(version, filepath, is_local_file=False):
 
     print("\n\n### Importing M2 model ###")
 
-    bl_m2 = BlenderM2Scene(m2_file, addon_preferences)
+    importlib.reload(m2_scene)
+    bl_m2 = m2_scene.BlenderM2Scene(m2_file, addon_preferences)
 
     bl_m2.load_armature()
     bl_m2.load_animations()
@@ -75,6 +77,8 @@ def import_m2(version, filepath, is_local_file=False):
     bl_m2.load_attachments()
     bl_m2.load_lights()
     bl_m2.load_events()
-    #bl_m2.load_cameras()
-
+    bl_m2.load_cameras()
+    bl_m2.load_ribbons()
+    bl_m2.load_particles()
+    return m2_file
 
