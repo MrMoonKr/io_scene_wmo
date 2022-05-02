@@ -9,7 +9,8 @@
         ],
         "extra_compile_args": [
             "-std=c++17",
-            "-O3"
+            "-O0",
+            "-g"
         ],
         "include_dirs": [
             "src",
@@ -27,9 +28,11 @@
         "sources": [
             "src/wmo_utils.pyx",
             "src/bl_utils/math_utils.cpp",
+            "src/bl_utils/color_utils.cpp",
             "src/bl_utils/mesh/custom_data.cpp",
             "src/bl_utils/mesh/wmo/batch_geometry.cpp",
-            "src/bl_utils/mesh/wmo/bsp_tree.cpp"
+            "src/bl_utils/mesh/wmo/bsp_tree.cpp",
+            "src/bl_utils/mesh/wmo/wmo_liquid_exporter.cpp"
         ]
     },
     "module_name": "wmo_utils"
@@ -740,6 +743,8 @@ static CYTHON_INLINE float __PYX_NAN() {
 #include <vector>
 #include "bl_utils/mesh/wmo/batch_geometry.hpp"
 #include "bl_utils/math_utils.hpp"
+#include <string.h>
+#include <stdlib.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif /* _OPENMP */
@@ -964,24 +969,30 @@ static const char *__pyx_f[] = {
 struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher;
 struct __pyx_t_9wmo_utils_CWMOGeometryBatcherMeshParams;
 
-/* "wmo_utils.pyx":57
- *         self.material_mapping = material_mapping
+/* "wmo_utils.pyx":83
+ *         self.liquid_params = liquid_params
  * 
  * cdef struct CWMOGeometryBatcherMeshParams:             # <<<<<<<<<<<<<<
  *     uintptr_t mesh_pointer
- *     bool use_large_material_id
+ *     const float* mesh_matrix_world
  */
 struct __pyx_t_9wmo_utils_CWMOGeometryBatcherMeshParams {
   uintptr_t mesh_pointer;
+  float const *mesh_matrix_world;
+  uintptr_t collision_mesh_pointer;
+  float const *collision_mesh_matrix_world;
   bool use_large_material_id;
   bool use_vertex_color;
+  bool use_custom_normals;
   int vg_collision_index;
   int node_size;
   std::vector<int>  material_mapping;
+  bool has_liquid;
+  struct wbs_kernel::bl_utils::mesh::wmo::LiquidParams liquid_params;
 };
 
-/* "wmo_utils.pyx":65
- *     vector[int] material_mapping
+/* "wmo_utils.pyx":98
+ *     LiquidParams liquid_params
  * 
  * cdef class CWMOGeometryBatcher:             # <<<<<<<<<<<<<<
  *     cdef vector[WMOGeometryBatcher*] _c_batchers
@@ -1096,6 +1107,28 @@ static PyObject* __Pyx_PyInt_AddObjC(PyObject *op1, PyObject *op2, long intval, 
 #define __Pyx_PyInt_AddObjC(op1, op2, intval, inplace, zerodivision_check)\
     (inplace ? PyNumber_InPlaceAdd(op1, op2) : PyNumber_Add(op1, op2))
 #endif
+
+/* GetItemInt.proto */
+#define __Pyx_GetItemInt(o, i, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
+    (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
+    __Pyx_GetItemInt_Fast(o, (Py_ssize_t)i, is_list, wraparound, boundscheck) :\
+    (is_list ? (PyErr_SetString(PyExc_IndexError, "list index out of range"), (PyObject*)NULL) :\
+               __Pyx_GetItemInt_Generic(o, to_py_func(i))))
+#define __Pyx_GetItemInt_List(o, i, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
+    (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
+    __Pyx_GetItemInt_List_Fast(o, (Py_ssize_t)i, wraparound, boundscheck) :\
+    (PyErr_SetString(PyExc_IndexError, "list index out of range"), (PyObject*)NULL))
+static CYTHON_INLINE PyObject *__Pyx_GetItemInt_List_Fast(PyObject *o, Py_ssize_t i,
+                                                              int wraparound, int boundscheck);
+#define __Pyx_GetItemInt_Tuple(o, i, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
+    (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
+    __Pyx_GetItemInt_Tuple_Fast(o, (Py_ssize_t)i, wraparound, boundscheck) :\
+    (PyErr_SetString(PyExc_IndexError, "tuple index out of range"), (PyObject*)NULL))
+static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Tuple_Fast(PyObject *o, Py_ssize_t i,
+                                                              int wraparound, int boundscheck);
+static PyObject *__Pyx_GetItemInt_Generic(PyObject *o, PyObject* j);
+static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Fast(PyObject *o, Py_ssize_t i,
+                                                     int is_list, int wraparound, int boundscheck);
 
 /* PyFunctionFastCall.proto */
 #if CYTHON_FAST_PYCALL
@@ -1354,28 +1387,6 @@ static PyObject *__Pyx_Py3MetaclassPrepare(PyObject *metaclass, PyObject *bases,
 static PyObject *__Pyx_Py3ClassCreate(PyObject *metaclass, PyObject *name, PyObject *bases, PyObject *dict,
                                       PyObject *mkw, int calculate_metaclass, int allow_py2_metaclass);
 
-/* GetItemInt.proto */
-#define __Pyx_GetItemInt(o, i, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
-    (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
-    __Pyx_GetItemInt_Fast(o, (Py_ssize_t)i, is_list, wraparound, boundscheck) :\
-    (is_list ? (PyErr_SetString(PyExc_IndexError, "list index out of range"), (PyObject*)NULL) :\
-               __Pyx_GetItemInt_Generic(o, to_py_func(i))))
-#define __Pyx_GetItemInt_List(o, i, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
-    (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
-    __Pyx_GetItemInt_List_Fast(o, (Py_ssize_t)i, wraparound, boundscheck) :\
-    (PyErr_SetString(PyExc_IndexError, "list index out of range"), (PyObject*)NULL))
-static CYTHON_INLINE PyObject *__Pyx_GetItemInt_List_Fast(PyObject *o, Py_ssize_t i,
-                                                              int wraparound, int boundscheck);
-#define __Pyx_GetItemInt_Tuple(o, i, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
-    (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
-    __Pyx_GetItemInt_Tuple_Fast(o, (Py_ssize_t)i, wraparound, boundscheck) :\
-    (PyErr_SetString(PyExc_IndexError, "tuple index out of range"), (PyObject*)NULL))
-static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Tuple_Fast(PyObject *o, Py_ssize_t i,
-                                                              int wraparound, int boundscheck);
-static PyObject *__Pyx_GetItemInt_Generic(PyObject *o, PyObject* j);
-static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Fast(PyObject *o, Py_ssize_t i,
-                                                     int is_list, int wraparound, int boundscheck);
-
 /* ObjectGetItem.proto */
 #if CYTHON_USE_TYPE_SLOTS
 static CYTHON_INLINE PyObject *__Pyx_PyObject_GetItem(PyObject *obj, PyObject* key);
@@ -1460,10 +1471,16 @@ static void __Pyx_CppExn2PyErr() {
 #endif
 
 /* CIntFromPy.proto */
-static CYTHON_INLINE size_t __Pyx_PyInt_As_size_t(PyObject *);
+static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *);
 
 /* CIntFromPy.proto */
-static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *);
+static CYTHON_INLINE size_t __Pyx_PyInt_As_size_t(PyObject *);
+
+/* CIntToPy.proto */
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value);
+
+/* CIntFromPy.proto */
+static CYTHON_INLINE unsigned int __Pyx_PyInt_As_unsigned_int(PyObject *);
 
 /* CIntToPy.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_uint16_t(uint16_t value);
@@ -1507,6 +1524,10 @@ static int __Pyx_InitStrings(__Pyx_StringTabEntry *t);
 
 /* Module declarations from 'cpython.buffer' */
 
+/* Module declarations from 'libc.string' */
+
+/* Module declarations from 'libc.stdlib' */
+
 /* Module declarations from 'wmo_utils' */
 static PyTypeObject *__pyx_ptype_9wmo_utils_CWMOGeometryBatcher = 0;
 static std::vector<int>  __pyx_convert_vector_from_py_int(PyObject *); /*proto*/
@@ -1516,6 +1537,7 @@ int __pyx_module_is_main_wmo_utils = 0;
 
 /* Implementation of 'wmo_utils' */
 static PyObject *__pyx_builtin_enumerate;
+static PyObject *__pyx_builtin_range;
 static PyObject *__pyx_builtin_TypeError;
 static const char __pyx_k_doc[] = "__doc__";
 static const char __pyx_k_int[] = "int";
@@ -1531,25 +1553,33 @@ static const char __pyx_k_name[] = "__name__";
 static const char __pyx_k_self[] = "self";
 static const char __pyx_k_test[] = "__test__";
 static const char __pyx_k_Tuple[] = "Tuple";
+static const char __pyx_k_range[] = "range";
+static const char __pyx_k_Matrix[] = "Matrix";
 static const char __pyx_k_import[] = "__import__";
+static const char __pyx_k_mat_id[] = "mat_id";
 static const char __pyx_k_module[] = "__module__";
 static const char __pyx_k_reduce[] = "__reduce__";
 static const char __pyx_k_typing[] = "typing";
 static const char __pyx_k_prepare[] = "__prepare__";
 static const char __pyx_k_tobytes[] = "tobytes";
+static const char __pyx_k_x_tiles[] = "x_tiles";
+static const char __pyx_k_y_tiles[] = "y_tiles";
 static const char __pyx_k_NO_ERROR[] = "NO_ERROR";
 static const char __pyx_k_Optional[] = "Optional";
 static const char __pyx_k_getstate[] = "__getstate__";
+static const char __pyx_k_is_water[] = "is_water";
 static const char __pyx_k_qualname[] = "__qualname__";
 static const char __pyx_k_setstate[] = "__setstate__";
 static const char __pyx_k_TypeError[] = "TypeError";
 static const char __pyx_k_enumerate[] = "enumerate";
+static const char __pyx_k_mathutils[] = "mathutils";
 static const char __pyx_k_metaclass[] = "__metaclass__";
 static const char __pyx_k_node_size[] = "node_size";
 static const char __pyx_k_reduce_ex[] = "__reduce_ex__";
 static const char __pyx_k_wmo_utils[] = "wmo_utils";
 static const char __pyx_k_CBoundingBox[] = "CBoundingBox";
 static const char __pyx_k_mesh_pointer[] = "mesh_pointer";
+static const char __pyx_k_liquid_params[] = "liquid_params";
 static const char __pyx_k_n_batches_ext[] = "n_batches_ext";
 static const char __pyx_k_n_batches_int[] = "n_batches_int";
 static const char __pyx_k_param_entries[] = "param_entries";
@@ -1560,14 +1590,21 @@ static const char __pyx_k_setstate_cython[] = "__setstate_cython__";
 static const char __pyx_k_material_mapping[] = "material_mapping";
 static const char __pyx_k_use_vertex_color[] = "use_vertex_color";
 static const char __pyx_k_LOOSE_MATERIAL_ID[] = "LOOSE_MATERIAL_ID";
+static const char __pyx_k_mesh_matrix_world[] = "mesh_matrix_world";
 static const char __pyx_k_src_wmo_utils_pyx[] = "src/wmo_utils.pyx";
+static const char __pyx_k_LiquidExportParams[] = "LiquidExportParams";
 static const char __pyx_k_cline_in_traceback[] = "cline_in_traceback";
+static const char __pyx_k_use_custom_normals[] = "use_custom_normals";
 static const char __pyx_k_vg_collision_index[] = "vg_collision_index";
 static const char __pyx_k_CBoundingBox___init[] = "CBoundingBox.__init__";
 static const char __pyx_k_CWMOGeometryBatcher[] = "CWMOGeometryBatcher";
+static const char __pyx_k_liquid_mesh_pointer[] = "liquid_mesh_pointer";
 static const char __pyx_k_use_large_material_id[] = "use_large_material_id";
 static const char __pyx_k_CBatchCountInfo___init[] = "CBatchCountInfo.__init__";
+static const char __pyx_k_collision_mesh_pointer[] = "collision_mesh_pointer";
 static const char __pyx_k_CWMOGeometryBatcherError[] = "CWMOGeometryBatcherError";
+static const char __pyx_k_liquid_mesh_matrix_world[] = "liquid_mesh_matrix_world";
+static const char __pyx_k_collision_mesh_matrix_world[] = "collision_mesh_matrix_world";
 static const char __pyx_k_WMOGeometryBatcherMeshParams[] = "WMOGeometryBatcherMeshParams";
 static const char __pyx_k_WMOGeometryBatcherMeshParams___i[] = "WMOGeometryBatcherMeshParams.__init__";
 static const char __pyx_k_no_default___reduce___due_to_non[] = "no default __reduce__ due to non-trivial __cinit__";
@@ -1579,7 +1616,9 @@ static PyObject *__pyx_n_s_CWMOGeometryBatcher;
 static PyObject *__pyx_n_s_CWMOGeometryBatcherError;
 static PyObject *__pyx_n_s_Enum;
 static PyObject *__pyx_n_s_LOOSE_MATERIAL_ID;
+static PyObject *__pyx_n_s_LiquidExportParams;
 static PyObject *__pyx_n_s_List;
+static PyObject *__pyx_n_s_Matrix;
 static PyObject *__pyx_n_s_NO_ERROR;
 static PyObject *__pyx_n_s_Optional;
 static PyObject *__pyx_n_s_Tuple;
@@ -1588,6 +1627,8 @@ static PyObject *__pyx_n_s_WMOGeometryBatcherMeshParams;
 static PyObject *__pyx_n_s_WMOGeometryBatcherMeshParams___i;
 static PyObject *__pyx_n_u_bool;
 static PyObject *__pyx_n_s_cline_in_traceback;
+static PyObject *__pyx_n_s_collision_mesh_matrix_world;
+static PyObject *__pyx_n_s_collision_mesh_pointer;
 static PyObject *__pyx_n_s_doc;
 static PyObject *__pyx_n_s_enum;
 static PyObject *__pyx_n_s_enumerate;
@@ -1595,9 +1636,16 @@ static PyObject *__pyx_n_s_getstate;
 static PyObject *__pyx_n_s_import;
 static PyObject *__pyx_n_s_init;
 static PyObject *__pyx_n_u_int;
+static PyObject *__pyx_n_s_is_water;
+static PyObject *__pyx_n_s_liquid_mesh_matrix_world;
+static PyObject *__pyx_n_s_liquid_mesh_pointer;
+static PyObject *__pyx_n_s_liquid_params;
 static PyObject *__pyx_n_s_main;
+static PyObject *__pyx_n_s_mat_id;
 static PyObject *__pyx_n_s_material_mapping;
+static PyObject *__pyx_n_s_mathutils;
 static PyObject *__pyx_n_s_max;
+static PyObject *__pyx_n_s_mesh_matrix_world;
 static PyObject *__pyx_n_s_mesh_pointer;
 static PyObject *__pyx_n_s_metaclass;
 static PyObject *__pyx_n_s_min;
@@ -1611,6 +1659,7 @@ static PyObject *__pyx_n_s_node_size;
 static PyObject *__pyx_n_s_param_entries;
 static PyObject *__pyx_n_s_prepare;
 static PyObject *__pyx_n_s_qualname;
+static PyObject *__pyx_n_s_range;
 static PyObject *__pyx_n_s_reduce;
 static PyObject *__pyx_n_s_reduce_cython;
 static PyObject *__pyx_n_s_reduce_ex;
@@ -1621,13 +1670,16 @@ static PyObject *__pyx_kp_s_src_wmo_utils_pyx;
 static PyObject *__pyx_n_s_test;
 static PyObject *__pyx_n_s_tobytes;
 static PyObject *__pyx_n_s_typing;
+static PyObject *__pyx_n_s_use_custom_normals;
 static PyObject *__pyx_n_s_use_large_material_id;
 static PyObject *__pyx_n_s_use_vertex_color;
 static PyObject *__pyx_n_s_vg_collision_index;
 static PyObject *__pyx_n_s_wmo_utils;
+static PyObject *__pyx_n_s_x_tiles;
+static PyObject *__pyx_n_s_y_tiles;
 static PyObject *__pyx_pf_9wmo_utils_15CBatchCountInfo___init__(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_self, PyObject *__pyx_v_n_batches_trans, PyObject *__pyx_v_n_batches_int, PyObject *__pyx_v_n_batches_ext); /* proto */
 static PyObject *__pyx_pf_9wmo_utils_12CBoundingBox___init__(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_self, PyObject *__pyx_v_min, PyObject *__pyx_v_max); /* proto */
-static PyObject *__pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_self, PyObject *__pyx_v_mesh_pointer, bool __pyx_v_use_large_material_id, bool __pyx_v_use_vertex_color, PyObject *__pyx_v_vg_collision_index, PyObject *__pyx_v_node_size, PyObject *__pyx_v_material_mapping); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_self, PyObject *__pyx_v_mesh_pointer, PyObject *__pyx_v_mesh_matrix_world, PyObject *__pyx_v_collision_mesh_pointer, PyObject *__pyx_v_collision_mesh_matrix_world, bool __pyx_v_use_large_material_id, bool __pyx_v_use_vertex_color, bool __pyx_v_use_custom_normals, PyObject *__pyx_v_vg_collision_index, PyObject *__pyx_v_node_size, PyObject *__pyx_v_material_mapping, PyObject *__pyx_v_liquid_params); /* proto */
 static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_param_entries); /* proto */
 static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
 static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
@@ -1640,12 +1692,13 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
 static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
 static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
 static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
-static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_34__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24liquid(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26batch_count_info(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28bounding_box(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30get_last_error(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index); /* proto */
+static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__dealloc__(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_34__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_36__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static PyObject *__pyx_tp_new_9wmo_utils_CWMOGeometryBatcher(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_int_0;
 static PyObject *__pyx_int_1;
@@ -1659,7 +1712,7 @@ static PyObject *__pyx_codeobj__6;
 static PyObject *__pyx_codeobj__8;
 /* Late includes */
 
-/* "wmo_utils.pyx":17
+/* "wmo_utils.pyx":20
  *     n_batches_ext: int
  * 
  *     def __init__(self, n_batches_trans: int, n_batches_int: int, n_batches_ext: int):             # <<<<<<<<<<<<<<
@@ -1708,23 +1761,23 @@ static PyObject *__pyx_pw_9wmo_utils_15CBatchCountInfo_1__init__(PyObject *__pyx
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_n_batches_trans)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, 1); __PYX_ERR(0, 17, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, 1); __PYX_ERR(0, 20, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_n_batches_int)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, 2); __PYX_ERR(0, 17, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, 2); __PYX_ERR(0, 20, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_n_batches_ext)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, 3); __PYX_ERR(0, 17, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, 3); __PYX_ERR(0, 20, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 17, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 20, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
       goto __pyx_L5_argtuple_error;
@@ -1741,7 +1794,7 @@ static PyObject *__pyx_pw_9wmo_utils_15CBatchCountInfo_1__init__(PyObject *__pyx
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 17, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 20, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("wmo_utils.CBatchCountInfo.__init__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -1762,34 +1815,34 @@ static PyObject *__pyx_pf_9wmo_utils_15CBatchCountInfo___init__(CYTHON_UNUSED Py
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "wmo_utils.pyx":18
+  /* "wmo_utils.pyx":21
  * 
  *     def __init__(self, n_batches_trans: int, n_batches_int: int, n_batches_ext: int):
  *         self.n_batches_trans = n_batches_trans             # <<<<<<<<<<<<<<
  *         self.n_batches_int = n_batches_int
  *         self.n_batches_ext = n_batches_ext
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_n_batches_trans, __pyx_v_n_batches_trans) < 0) __PYX_ERR(0, 18, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_n_batches_trans, __pyx_v_n_batches_trans) < 0) __PYX_ERR(0, 21, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":19
+  /* "wmo_utils.pyx":22
  *     def __init__(self, n_batches_trans: int, n_batches_int: int, n_batches_ext: int):
  *         self.n_batches_trans = n_batches_trans
  *         self.n_batches_int = n_batches_int             # <<<<<<<<<<<<<<
  *         self.n_batches_ext = n_batches_ext
  * 
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_n_batches_int, __pyx_v_n_batches_int) < 0) __PYX_ERR(0, 19, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_n_batches_int, __pyx_v_n_batches_int) < 0) __PYX_ERR(0, 22, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":20
+  /* "wmo_utils.pyx":23
  *         self.n_batches_trans = n_batches_trans
  *         self.n_batches_int = n_batches_int
  *         self.n_batches_ext = n_batches_ext             # <<<<<<<<<<<<<<
  * 
  * class CBoundingBox:
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_n_batches_ext, __pyx_v_n_batches_ext) < 0) __PYX_ERR(0, 20, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_n_batches_ext, __pyx_v_n_batches_ext) < 0) __PYX_ERR(0, 23, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":17
+  /* "wmo_utils.pyx":20
  *     n_batches_ext: int
  * 
  *     def __init__(self, n_batches_trans: int, n_batches_int: int, n_batches_ext: int):             # <<<<<<<<<<<<<<
@@ -1809,7 +1862,7 @@ static PyObject *__pyx_pf_9wmo_utils_15CBatchCountInfo___init__(CYTHON_UNUSED Py
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":26
+/* "wmo_utils.pyx":29
  *     max: Tuple[float, float, float]
  * 
  *     def __init__(self, min: Tuple[float, float, float], max: Tuple[float, float, float]):             # <<<<<<<<<<<<<<
@@ -1855,17 +1908,17 @@ static PyObject *__pyx_pw_9wmo_utils_12CBoundingBox_1__init__(PyObject *__pyx_se
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_min)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, 1); __PYX_ERR(0, 26, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, 1); __PYX_ERR(0, 29, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_max)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, 2); __PYX_ERR(0, 26, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, 2); __PYX_ERR(0, 29, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 26, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 29, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
       goto __pyx_L5_argtuple_error;
@@ -1880,7 +1933,7 @@ static PyObject *__pyx_pw_9wmo_utils_12CBoundingBox_1__init__(PyObject *__pyx_se
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 26, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 29, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("wmo_utils.CBoundingBox.__init__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -1901,25 +1954,25 @@ static PyObject *__pyx_pf_9wmo_utils_12CBoundingBox___init__(CYTHON_UNUSED PyObj
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "wmo_utils.pyx":27
+  /* "wmo_utils.pyx":30
  * 
  *     def __init__(self, min: Tuple[float, float, float], max: Tuple[float, float, float]):
  *         self.min = min             # <<<<<<<<<<<<<<
  *         self.max = max
  * 
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_min, __pyx_v_min) < 0) __PYX_ERR(0, 27, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_min, __pyx_v_min) < 0) __PYX_ERR(0, 30, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":28
+  /* "wmo_utils.pyx":31
  *     def __init__(self, min: Tuple[float, float, float], max: Tuple[float, float, float]):
  *         self.min = min
  *         self.max = max             # <<<<<<<<<<<<<<
  * 
  * class CWMOGeometryBatcherError(Enum):
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_max, __pyx_v_max) < 0) __PYX_ERR(0, 28, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_max, __pyx_v_max) < 0) __PYX_ERR(0, 31, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":26
+  /* "wmo_utils.pyx":29
  *     max: Tuple[float, float, float]
  * 
  *     def __init__(self, min: Tuple[float, float, float], max: Tuple[float, float, float]):             # <<<<<<<<<<<<<<
@@ -1939,12 +1992,12 @@ static PyObject *__pyx_pf_9wmo_utils_12CBoundingBox___init__(CYTHON_UNUSED PyObj
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":43
- *     material_mapping: List[int]
+/* "wmo_utils.pyx":59
+ *     liquid_params: Optional[LiquidExportParams]
  * 
  *     def __init__(self             # <<<<<<<<<<<<<<
  *                 , mesh_pointer: int
- *                 , use_large_material_id: bool
+ *                 , mesh_matrix_world: mathutils.Matrix
  */
 
 /* Python wrapper */
@@ -1953,11 +2006,16 @@ static PyMethodDef __pyx_mdef_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init_
 static PyObject *__pyx_pw_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init__(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyObject *__pyx_v_self = 0;
   PyObject *__pyx_v_mesh_pointer = 0;
+  PyObject *__pyx_v_mesh_matrix_world = 0;
+  PyObject *__pyx_v_collision_mesh_pointer = 0;
+  PyObject *__pyx_v_collision_mesh_matrix_world = 0;
   bool __pyx_v_use_large_material_id;
   bool __pyx_v_use_vertex_color;
+  bool __pyx_v_use_custom_normals;
   PyObject *__pyx_v_vg_collision_index = 0;
   PyObject *__pyx_v_node_size = 0;
   PyObject *__pyx_v_material_mapping = 0;
+  PyObject *__pyx_v_liquid_params = 0;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -1965,12 +2023,22 @@ static PyObject *__pyx_pw_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init__(Py
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__init__ (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_self,&__pyx_n_s_mesh_pointer,&__pyx_n_s_use_large_material_id,&__pyx_n_s_use_vertex_color,&__pyx_n_s_vg_collision_index,&__pyx_n_s_node_size,&__pyx_n_s_material_mapping,0};
-    PyObject* values[7] = {0,0,0,0,0,0,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_self,&__pyx_n_s_mesh_pointer,&__pyx_n_s_mesh_matrix_world,&__pyx_n_s_collision_mesh_pointer,&__pyx_n_s_collision_mesh_matrix_world,&__pyx_n_s_use_large_material_id,&__pyx_n_s_use_vertex_color,&__pyx_n_s_use_custom_normals,&__pyx_n_s_vg_collision_index,&__pyx_n_s_node_size,&__pyx_n_s_material_mapping,&__pyx_n_s_liquid_params,0};
+    PyObject* values[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
       const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
       switch (pos_args) {
+        case 12: values[11] = PyTuple_GET_ITEM(__pyx_args, 11);
+        CYTHON_FALLTHROUGH;
+        case 11: values[10] = PyTuple_GET_ITEM(__pyx_args, 10);
+        CYTHON_FALLTHROUGH;
+        case 10: values[9] = PyTuple_GET_ITEM(__pyx_args, 9);
+        CYTHON_FALLTHROUGH;
+        case  9: values[8] = PyTuple_GET_ITEM(__pyx_args, 8);
+        CYTHON_FALLTHROUGH;
+        case  8: values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
+        CYTHON_FALLTHROUGH;
         case  7: values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
         CYTHON_FALLTHROUGH;
         case  6: values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
@@ -1997,43 +2065,73 @@ static PyObject *__pyx_pw_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init__(Py
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_mesh_pointer)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, 1); __PYX_ERR(0, 43, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 1); __PYX_ERR(0, 59, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
-        if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_use_large_material_id)) != 0)) kw_args--;
+        if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_mesh_matrix_world)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, 2); __PYX_ERR(0, 43, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 2); __PYX_ERR(0, 59, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
-        if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_use_vertex_color)) != 0)) kw_args--;
+        if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_collision_mesh_pointer)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, 3); __PYX_ERR(0, 43, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 3); __PYX_ERR(0, 59, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  4:
-        if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_vg_collision_index)) != 0)) kw_args--;
+        if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_collision_mesh_matrix_world)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, 4); __PYX_ERR(0, 43, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 4); __PYX_ERR(0, 59, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  5:
-        if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_node_size)) != 0)) kw_args--;
+        if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_use_large_material_id)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, 5); __PYX_ERR(0, 43, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 5); __PYX_ERR(0, 59, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  6:
-        if (likely((values[6] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_material_mapping)) != 0)) kw_args--;
+        if (likely((values[6] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_use_vertex_color)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, 6); __PYX_ERR(0, 43, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 6); __PYX_ERR(0, 59, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  7:
+        if (likely((values[7] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_use_custom_normals)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 7); __PYX_ERR(0, 59, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  8:
+        if (likely((values[8] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_vg_collision_index)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 8); __PYX_ERR(0, 59, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  9:
+        if (likely((values[9] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_node_size)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 9); __PYX_ERR(0, 59, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case 10:
+        if (likely((values[10] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_material_mapping)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 10); __PYX_ERR(0, 59, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case 11:
+        if (likely((values[11] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_liquid_params)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, 11); __PYX_ERR(0, 59, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 43, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 59, __pyx_L3_error)
       }
-    } else if (PyTuple_GET_SIZE(__pyx_args) != 7) {
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 12) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
@@ -2043,31 +2141,41 @@ static PyObject *__pyx_pw_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init__(Py
       values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
       values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
       values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
+      values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
+      values[8] = PyTuple_GET_ITEM(__pyx_args, 8);
+      values[9] = PyTuple_GET_ITEM(__pyx_args, 9);
+      values[10] = PyTuple_GET_ITEM(__pyx_args, 10);
+      values[11] = PyTuple_GET_ITEM(__pyx_args, 11);
     }
     __pyx_v_self = values[0];
     __pyx_v_mesh_pointer = values[1];
-    __pyx_v_use_large_material_id = __Pyx_PyObject_IsTrue(values[2]); if (unlikely((__pyx_v_use_large_material_id == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
-    __pyx_v_use_vertex_color = __Pyx_PyObject_IsTrue(values[3]); if (unlikely((__pyx_v_use_vertex_color == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
-    __pyx_v_vg_collision_index = values[4];
-    __pyx_v_node_size = values[5];
-    __pyx_v_material_mapping = values[6];
+    __pyx_v_mesh_matrix_world = values[2];
+    __pyx_v_collision_mesh_pointer = values[3];
+    __pyx_v_collision_mesh_matrix_world = values[4];
+    __pyx_v_use_large_material_id = __Pyx_PyObject_IsTrue(values[5]); if (unlikely((__pyx_v_use_large_material_id == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 64, __pyx_L3_error)
+    __pyx_v_use_vertex_color = __Pyx_PyObject_IsTrue(values[6]); if (unlikely((__pyx_v_use_vertex_color == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 65, __pyx_L3_error)
+    __pyx_v_use_custom_normals = __Pyx_PyObject_IsTrue(values[7]); if (unlikely((__pyx_v_use_custom_normals == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 66, __pyx_L3_error)
+    __pyx_v_vg_collision_index = values[8];
+    __pyx_v_node_size = values[9];
+    __pyx_v_material_mapping = values[10];
+    __pyx_v_liquid_params = values[11];
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 7, 7, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 43, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 12, 12, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 59, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("wmo_utils.WMOGeometryBatcherMeshParams.__init__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(__pyx_self, __pyx_v_self, __pyx_v_mesh_pointer, __pyx_v_use_large_material_id, __pyx_v_use_vertex_color, __pyx_v_vg_collision_index, __pyx_v_node_size, __pyx_v_material_mapping);
+  __pyx_r = __pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(__pyx_self, __pyx_v_self, __pyx_v_mesh_pointer, __pyx_v_mesh_matrix_world, __pyx_v_collision_mesh_pointer, __pyx_v_collision_mesh_matrix_world, __pyx_v_use_large_material_id, __pyx_v_use_vertex_color, __pyx_v_use_custom_normals, __pyx_v_vg_collision_index, __pyx_v_node_size, __pyx_v_material_mapping, __pyx_v_liquid_params);
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_self, PyObject *__pyx_v_mesh_pointer, bool __pyx_v_use_large_material_id, bool __pyx_v_use_vertex_color, PyObject *__pyx_v_vg_collision_index, PyObject *__pyx_v_node_size, PyObject *__pyx_v_material_mapping) {
+static PyObject *__pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_self, PyObject *__pyx_v_mesh_pointer, PyObject *__pyx_v_mesh_matrix_world, PyObject *__pyx_v_collision_mesh_pointer, PyObject *__pyx_v_collision_mesh_matrix_world, bool __pyx_v_use_large_material_id, bool __pyx_v_use_vertex_color, bool __pyx_v_use_custom_normals, PyObject *__pyx_v_vg_collision_index, PyObject *__pyx_v_node_size, PyObject *__pyx_v_material_mapping, PyObject *__pyx_v_liquid_params) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -2076,72 +2184,120 @@ static PyObject *__pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(CYT
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "wmo_utils.pyx":50
- *                 , node_size: int
- *                 , material_mapping: List[int]):
+  /* "wmo_utils.pyx":71
+ *                 , material_mapping: List[int]
+ *                 , liquid_params: LiquidExportParams):
  *         self.mesh_pointer = mesh_pointer             # <<<<<<<<<<<<<<
+ *         self.mesh_matrix_world = mesh_matrix_world
+ *         self.collision_mesh_pointer = collision_mesh_pointer
+ */
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_mesh_pointer, __pyx_v_mesh_pointer) < 0) __PYX_ERR(0, 71, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":72
+ *                 , liquid_params: LiquidExportParams):
+ *         self.mesh_pointer = mesh_pointer
+ *         self.mesh_matrix_world = mesh_matrix_world             # <<<<<<<<<<<<<<
+ *         self.collision_mesh_pointer = collision_mesh_pointer
+ *         self.collision_mesh_matrix_world = collision_mesh_matrix_world
+ */
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_mesh_matrix_world, __pyx_v_mesh_matrix_world) < 0) __PYX_ERR(0, 72, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":73
+ *         self.mesh_pointer = mesh_pointer
+ *         self.mesh_matrix_world = mesh_matrix_world
+ *         self.collision_mesh_pointer = collision_mesh_pointer             # <<<<<<<<<<<<<<
+ *         self.collision_mesh_matrix_world = collision_mesh_matrix_world
+ *         self.use_large_material_id = use_large_material_id
+ */
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_collision_mesh_pointer, __pyx_v_collision_mesh_pointer) < 0) __PYX_ERR(0, 73, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":74
+ *         self.mesh_matrix_world = mesh_matrix_world
+ *         self.collision_mesh_pointer = collision_mesh_pointer
+ *         self.collision_mesh_matrix_world = collision_mesh_matrix_world             # <<<<<<<<<<<<<<
  *         self.use_large_material_id = use_large_material_id
  *         self.use_vertex_color = use_vertex_color
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_mesh_pointer, __pyx_v_mesh_pointer) < 0) __PYX_ERR(0, 50, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_collision_mesh_matrix_world, __pyx_v_collision_mesh_matrix_world) < 0) __PYX_ERR(0, 74, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":51
- *                 , material_mapping: List[int]):
- *         self.mesh_pointer = mesh_pointer
+  /* "wmo_utils.pyx":75
+ *         self.collision_mesh_pointer = collision_mesh_pointer
+ *         self.collision_mesh_matrix_world = collision_mesh_matrix_world
  *         self.use_large_material_id = use_large_material_id             # <<<<<<<<<<<<<<
  *         self.use_vertex_color = use_vertex_color
- *         self.vg_collision_index = vg_collision_index
+ *         self.use_custom_normals = use_custom_normals
  */
-  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_use_large_material_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 51, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_use_large_material_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 75, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_use_large_material_id, __pyx_t_1) < 0) __PYX_ERR(0, 51, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_use_large_material_id, __pyx_t_1) < 0) __PYX_ERR(0, 75, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "wmo_utils.pyx":52
- *         self.mesh_pointer = mesh_pointer
+  /* "wmo_utils.pyx":76
+ *         self.collision_mesh_matrix_world = collision_mesh_matrix_world
  *         self.use_large_material_id = use_large_material_id
  *         self.use_vertex_color = use_vertex_color             # <<<<<<<<<<<<<<
+ *         self.use_custom_normals = use_custom_normals
+ *         self.vg_collision_index = vg_collision_index
+ */
+  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_use_vertex_color); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 76, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_use_vertex_color, __pyx_t_1) < 0) __PYX_ERR(0, 76, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "wmo_utils.pyx":77
+ *         self.use_large_material_id = use_large_material_id
+ *         self.use_vertex_color = use_vertex_color
+ *         self.use_custom_normals = use_custom_normals             # <<<<<<<<<<<<<<
  *         self.vg_collision_index = vg_collision_index
  *         self.node_size = node_size
  */
-  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_use_vertex_color); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 52, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_use_custom_normals); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 77, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_use_vertex_color, __pyx_t_1) < 0) __PYX_ERR(0, 52, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_use_custom_normals, __pyx_t_1) < 0) __PYX_ERR(0, 77, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "wmo_utils.pyx":53
- *         self.use_large_material_id = use_large_material_id
+  /* "wmo_utils.pyx":78
  *         self.use_vertex_color = use_vertex_color
+ *         self.use_custom_normals = use_custom_normals
  *         self.vg_collision_index = vg_collision_index             # <<<<<<<<<<<<<<
  *         self.node_size = node_size
  *         self.material_mapping = material_mapping
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_vg_collision_index, __pyx_v_vg_collision_index) < 0) __PYX_ERR(0, 53, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_vg_collision_index, __pyx_v_vg_collision_index) < 0) __PYX_ERR(0, 78, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":54
- *         self.use_vertex_color = use_vertex_color
+  /* "wmo_utils.pyx":79
+ *         self.use_custom_normals = use_custom_normals
  *         self.vg_collision_index = vg_collision_index
  *         self.node_size = node_size             # <<<<<<<<<<<<<<
  *         self.material_mapping = material_mapping
- * 
+ *         self.liquid_params = liquid_params
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_node_size, __pyx_v_node_size) < 0) __PYX_ERR(0, 54, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_node_size, __pyx_v_node_size) < 0) __PYX_ERR(0, 79, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":55
+  /* "wmo_utils.pyx":80
  *         self.vg_collision_index = vg_collision_index
  *         self.node_size = node_size
  *         self.material_mapping = material_mapping             # <<<<<<<<<<<<<<
+ *         self.liquid_params = liquid_params
+ * 
+ */
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_material_mapping, __pyx_v_material_mapping) < 0) __PYX_ERR(0, 80, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":81
+ *         self.node_size = node_size
+ *         self.material_mapping = material_mapping
+ *         self.liquid_params = liquid_params             # <<<<<<<<<<<<<<
  * 
  * cdef struct CWMOGeometryBatcherMeshParams:
  */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_material_mapping, __pyx_v_material_mapping) < 0) __PYX_ERR(0, 55, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_n_s_liquid_params, __pyx_v_liquid_params) < 0) __PYX_ERR(0, 81, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":43
- *     material_mapping: List[int]
+  /* "wmo_utils.pyx":59
+ *     liquid_params: Optional[LiquidExportParams]
  * 
  *     def __init__(self             # <<<<<<<<<<<<<<
  *                 , mesh_pointer: int
- *                 , use_large_material_id: bool
+ *                 , mesh_matrix_world: mathutils.Matrix
  */
 
   /* function exit code */
@@ -2157,12 +2313,12 @@ static PyObject *__pyx_pf_9wmo_utils_28WMOGeometryBatcherMeshParams___init__(CYT
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":69
+/* "wmo_utils.pyx":102
  *     cdef vector[CWMOGeometryBatcherMeshParams] _c_params
  * 
  *     def __cinit__(self, param_entries: List[WMOGeometryBatcherMeshParams]):             # <<<<<<<<<<<<<<
  *         cdef int n_groups = len(param_entries)
- *         cdef int i
+ *         cdef int i, j, k
  */
 
 /* Python wrapper */
@@ -2194,7 +2350,7 @@ static int __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_1__cinit__(PyObject *__pyx_
         else goto __pyx_L5_argtuple_error;
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(0, 69, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(0, 102, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 1) {
       goto __pyx_L5_argtuple_error;
@@ -2205,7 +2361,7 @@ static int __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_1__cinit__(PyObject *__pyx_
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 1, 1, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 69, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 1, 1, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 102, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("wmo_utils.CWMOGeometryBatcher.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -2221,9 +2377,16 @@ static int __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_1__cinit__(PyObject *__pyx_
 static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_param_entries) {
   int __pyx_v_n_groups;
   int __pyx_v_i;
+  int __pyx_v_j;
+  int __pyx_v_k;
+  float *__pyx_v_group_matrix_world;
+  float *__pyx_v_collision_matrix_world;
+  float *__pyx_v_liquid_matrix_world;
+  std::vector<float *>  __pyx_v_matrices_temp;
   PyObject *__pyx_v_x = NULL;
   PyObject *__pyx_v_py_param = NULL;
   struct __pyx_t_9wmo_utils_CWMOGeometryBatcherMeshParams *__pyx_v_param;
+  std::vector<float *> ::iterator __pyx_v_it;
   int __pyx_r;
   __Pyx_RefNannyDeclarations
   Py_ssize_t __pyx_t_1;
@@ -2231,30 +2394,35 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
   PyObject *__pyx_t_3 = NULL;
   PyObject *(*__pyx_t_4)(PyObject *);
   PyObject *__pyx_t_5 = NULL;
-  uintptr_t __pyx_t_6;
-  std::vector<struct __pyx_t_9wmo_utils_CWMOGeometryBatcherMeshParams> ::size_type __pyx_t_7;
-  bool __pyx_t_8;
-  int __pyx_t_9;
-  std::vector<int>  __pyx_t_10;
+  int __pyx_t_6;
+  int __pyx_t_7;
+  PyObject *__pyx_t_8 = NULL;
+  float __pyx_t_9;
+  std::vector<struct __pyx_t_9wmo_utils_CWMOGeometryBatcherMeshParams> ::size_type __pyx_t_10;
   int __pyx_t_11;
-  int __pyx_t_12;
+  uintptr_t __pyx_t_12;
+  bool __pyx_t_13;
+  std::vector<int>  __pyx_t_14;
+  unsigned int __pyx_t_15;
+  int __pyx_t_16;
+  struct wbs_kernel::bl_utils::mesh::wmo::LiquidParams *__pyx_t_17;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__cinit__", 0);
 
-  /* "wmo_utils.pyx":70
+  /* "wmo_utils.pyx":103
  * 
  *     def __cinit__(self, param_entries: List[WMOGeometryBatcherMeshParams]):
  *         cdef int n_groups = len(param_entries)             # <<<<<<<<<<<<<<
- *         cdef int i
- * 
+ *         cdef int i, j, k
+ *         cdef float* group_matrix_world
  */
-  __pyx_t_1 = PyObject_Length(__pyx_v_param_entries); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 70, __pyx_L1_error)
+  __pyx_t_1 = PyObject_Length(__pyx_v_param_entries); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 103, __pyx_L1_error)
   __pyx_v_n_groups = __pyx_t_1;
 
-  /* "wmo_utils.pyx":73
- *         cdef int i
+  /* "wmo_utils.pyx":109
+ *         cdef float* liquid_matrix_world
  * 
  *         self._c_params.resize(n_groups)             # <<<<<<<<<<<<<<
  *         self._c_batchers.resize(n_groups)
@@ -2264,29 +2432,29 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
     __pyx_v_self->_c_params.resize(__pyx_v_n_groups);
   } catch(...) {
     __Pyx_CppExn2PyErr();
-    __PYX_ERR(0, 73, __pyx_L1_error)
+    __PYX_ERR(0, 109, __pyx_L1_error)
   }
 
-  /* "wmo_utils.pyx":74
+  /* "wmo_utils.pyx":110
  * 
  *         self._c_params.resize(n_groups)
  *         self._c_batchers.resize(n_groups)             # <<<<<<<<<<<<<<
  * 
- *         for x, py_param in enumerate(param_entries):
+ *         cdef vector[float*] matrices_temp
  */
   try {
     __pyx_v_self->_c_batchers.resize(__pyx_v_n_groups);
   } catch(...) {
     __Pyx_CppExn2PyErr();
-    __PYX_ERR(0, 74, __pyx_L1_error)
+    __PYX_ERR(0, 110, __pyx_L1_error)
   }
 
-  /* "wmo_utils.pyx":76
- *         self._c_batchers.resize(n_groups)
+  /* "wmo_utils.pyx":114
+ *         cdef vector[float*] matrices_temp
  * 
  *         for x, py_param in enumerate(param_entries):             # <<<<<<<<<<<<<<
- *             self._c_params[x].mesh_pointer = py_param.mesh_pointer
- *             self._c_params[x].use_large_material_id = py_param.use_large_material_id
+ *             group_matrix_world = <float*>malloc(16 * sizeof(float))
+ *             matrices_temp.push_back(group_matrix_world)
  */
   __Pyx_INCREF(__pyx_int_0);
   __pyx_t_2 = __pyx_int_0;
@@ -2294,26 +2462,26 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
     __pyx_t_3 = __pyx_v_param_entries; __Pyx_INCREF(__pyx_t_3); __pyx_t_1 = 0;
     __pyx_t_4 = NULL;
   } else {
-    __pyx_t_1 = -1; __pyx_t_3 = PyObject_GetIter(__pyx_v_param_entries); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __pyx_t_1 = -1; __pyx_t_3 = PyObject_GetIter(__pyx_v_param_entries); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 114, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __pyx_t_4 = Py_TYPE(__pyx_t_3)->tp_iternext; if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __pyx_t_4 = Py_TYPE(__pyx_t_3)->tp_iternext; if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 114, __pyx_L1_error)
   }
   for (;;) {
     if (likely(!__pyx_t_4)) {
       if (likely(PyList_CheckExact(__pyx_t_3))) {
         if (__pyx_t_1 >= PyList_GET_SIZE(__pyx_t_3)) break;
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-        __pyx_t_5 = PyList_GET_ITEM(__pyx_t_3, __pyx_t_1); __Pyx_INCREF(__pyx_t_5); __pyx_t_1++; if (unlikely(0 < 0)) __PYX_ERR(0, 76, __pyx_L1_error)
+        __pyx_t_5 = PyList_GET_ITEM(__pyx_t_3, __pyx_t_1); __Pyx_INCREF(__pyx_t_5); __pyx_t_1++; if (unlikely(0 < 0)) __PYX_ERR(0, 114, __pyx_L1_error)
         #else
-        __pyx_t_5 = PySequence_ITEM(__pyx_t_3, __pyx_t_1); __pyx_t_1++; if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L1_error)
+        __pyx_t_5 = PySequence_ITEM(__pyx_t_3, __pyx_t_1); __pyx_t_1++; if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 114, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_5);
         #endif
       } else {
         if (__pyx_t_1 >= PyTuple_GET_SIZE(__pyx_t_3)) break;
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-        __pyx_t_5 = PyTuple_GET_ITEM(__pyx_t_3, __pyx_t_1); __Pyx_INCREF(__pyx_t_5); __pyx_t_1++; if (unlikely(0 < 0)) __PYX_ERR(0, 76, __pyx_L1_error)
+        __pyx_t_5 = PyTuple_GET_ITEM(__pyx_t_3, __pyx_t_1); __Pyx_INCREF(__pyx_t_5); __pyx_t_1++; if (unlikely(0 < 0)) __PYX_ERR(0, 114, __pyx_L1_error)
         #else
-        __pyx_t_5 = PySequence_ITEM(__pyx_t_3, __pyx_t_1); __pyx_t_1++; if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L1_error)
+        __pyx_t_5 = PySequence_ITEM(__pyx_t_3, __pyx_t_1); __pyx_t_1++; if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 114, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_5);
         #endif
       }
@@ -2323,7 +2491,7 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
         PyObject* exc_type = PyErr_Occurred();
         if (exc_type) {
           if (likely(__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) PyErr_Clear();
-          else __PYX_ERR(0, 76, __pyx_L1_error)
+          else __PYX_ERR(0, 114, __pyx_L1_error)
         }
         break;
       }
@@ -2333,108 +2501,538 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
     __pyx_t_5 = 0;
     __Pyx_INCREF(__pyx_t_2);
     __Pyx_XDECREF_SET(__pyx_v_x, __pyx_t_2);
-    __pyx_t_5 = __Pyx_PyInt_AddObjC(__pyx_t_2, __pyx_int_1, 1, 0, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyInt_AddObjC(__pyx_t_2, __pyx_int_1, 1, 0, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 114, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_2);
     __pyx_t_2 = __pyx_t_5;
     __pyx_t_5 = 0;
 
-    /* "wmo_utils.pyx":77
+    /* "wmo_utils.pyx":115
  * 
  *         for x, py_param in enumerate(param_entries):
+ *             group_matrix_world = <float*>malloc(16 * sizeof(float))             # <<<<<<<<<<<<<<
+ *             matrices_temp.push_back(group_matrix_world)
+ * 
+ */
+    __pyx_v_group_matrix_world = ((float *)malloc((16 * (sizeof(float)))));
+
+    /* "wmo_utils.pyx":116
+ *         for x, py_param in enumerate(param_entries):
+ *             group_matrix_world = <float*>malloc(16 * sizeof(float))
+ *             matrices_temp.push_back(group_matrix_world)             # <<<<<<<<<<<<<<
+ * 
+ *             for j in range(4):
+ */
+    try {
+      __pyx_v_matrices_temp.push_back(__pyx_v_group_matrix_world);
+    } catch(...) {
+      __Pyx_CppExn2PyErr();
+      __PYX_ERR(0, 116, __pyx_L1_error)
+    }
+
+    /* "wmo_utils.pyx":118
+ *             matrices_temp.push_back(group_matrix_world)
+ * 
+ *             for j in range(4):             # <<<<<<<<<<<<<<
+ *                 for k in range(4):
+ *                     group_matrix_world[k * 4 + j] = py_param.mesh_matrix_world[j][k]
+ */
+    for (__pyx_t_6 = 0; __pyx_t_6 < 4; __pyx_t_6+=1) {
+      __pyx_v_j = __pyx_t_6;
+
+      /* "wmo_utils.pyx":119
+ * 
+ *             for j in range(4):
+ *                 for k in range(4):             # <<<<<<<<<<<<<<
+ *                     group_matrix_world[k * 4 + j] = py_param.mesh_matrix_world[j][k]
+ * 
+ */
+      for (__pyx_t_7 = 0; __pyx_t_7 < 4; __pyx_t_7+=1) {
+        __pyx_v_k = __pyx_t_7;
+
+        /* "wmo_utils.pyx":120
+ *             for j in range(4):
+ *                 for k in range(4):
+ *                     group_matrix_world[k * 4 + j] = py_param.mesh_matrix_world[j][k]             # <<<<<<<<<<<<<<
+ * 
+ *             self._c_params[x].mesh_matrix_world = group_matrix_world
+ */
+        __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_mesh_matrix_world); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 120, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
+        __pyx_t_8 = __Pyx_GetItemInt(__pyx_t_5, __pyx_v_j, int, 1, __Pyx_PyInt_From_int, 0, 1, 1); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 120, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_8);
+        __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+        __pyx_t_5 = __Pyx_GetItemInt(__pyx_t_8, __pyx_v_k, int, 1, __Pyx_PyInt_From_int, 0, 1, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 120, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
+        __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+        __pyx_t_9 = __pyx_PyFloat_AsFloat(__pyx_t_5); if (unlikely((__pyx_t_9 == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 120, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+        (__pyx_v_group_matrix_world[((__pyx_v_k * 4) + __pyx_v_j)]) = __pyx_t_9;
+      }
+    }
+
+    /* "wmo_utils.pyx":122
+ *                     group_matrix_world[k * 4 + j] = py_param.mesh_matrix_world[j][k]
+ * 
+ *             self._c_params[x].mesh_matrix_world = group_matrix_world             # <<<<<<<<<<<<<<
+ * 
+ *             if py_param.collision_mesh_pointer:
+ */
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 122, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).mesh_matrix_world = __pyx_v_group_matrix_world;
+
+    /* "wmo_utils.pyx":124
+ *             self._c_params[x].mesh_matrix_world = group_matrix_world
+ * 
+ *             if py_param.collision_mesh_pointer:             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
+ * 
+ */
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_collision_mesh_pointer); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 124, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely(__pyx_t_11 < 0)) __PYX_ERR(0, 124, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    if (__pyx_t_11) {
+
+      /* "wmo_utils.pyx":125
+ * 
+ *             if py_param.collision_mesh_pointer:
+ *                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer             # <<<<<<<<<<<<<<
+ * 
+ *                 collision_matrix_world = <float*>malloc(16 * sizeof(float))
+ */
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_collision_mesh_pointer); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 125, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_12 = __Pyx_PyInt_As_size_t(__pyx_t_5); if (unlikely((__pyx_t_12 == ((uintptr_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 125, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 125, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).collision_mesh_pointer = __pyx_t_12;
+
+      /* "wmo_utils.pyx":127
+ *                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
+ * 
+ *                 collision_matrix_world = <float*>malloc(16 * sizeof(float))             # <<<<<<<<<<<<<<
+ *                 matrices_temp.push_back(collision_matrix_world)
+ * 
+ */
+      __pyx_v_collision_matrix_world = ((float *)malloc((16 * (sizeof(float)))));
+
+      /* "wmo_utils.pyx":128
+ * 
+ *                 collision_matrix_world = <float*>malloc(16 * sizeof(float))
+ *                 matrices_temp.push_back(collision_matrix_world)             # <<<<<<<<<<<<<<
+ * 
+ *                 for j in range(4):
+ */
+      try {
+        __pyx_v_matrices_temp.push_back(__pyx_v_collision_matrix_world);
+      } catch(...) {
+        __Pyx_CppExn2PyErr();
+        __PYX_ERR(0, 128, __pyx_L1_error)
+      }
+
+      /* "wmo_utils.pyx":130
+ *                 matrices_temp.push_back(collision_matrix_world)
+ * 
+ *                 for j in range(4):             # <<<<<<<<<<<<<<
+ *                     for k in range(4):
+ *                         collision_matrix_world[k * 4 + j] = py_param.collision_mesh_matrix_world[j][k]
+ */
+      for (__pyx_t_6 = 0; __pyx_t_6 < 4; __pyx_t_6+=1) {
+        __pyx_v_j = __pyx_t_6;
+
+        /* "wmo_utils.pyx":131
+ * 
+ *                 for j in range(4):
+ *                     for k in range(4):             # <<<<<<<<<<<<<<
+ *                         collision_matrix_world[k * 4 + j] = py_param.collision_mesh_matrix_world[j][k]
+ * 
+ */
+        for (__pyx_t_7 = 0; __pyx_t_7 < 4; __pyx_t_7+=1) {
+          __pyx_v_k = __pyx_t_7;
+
+          /* "wmo_utils.pyx":132
+ *                 for j in range(4):
+ *                     for k in range(4):
+ *                         collision_matrix_world[k * 4 + j] = py_param.collision_mesh_matrix_world[j][k]             # <<<<<<<<<<<<<<
+ * 
+ *                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
+ */
+          __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_collision_mesh_matrix_world); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 132, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_5);
+          __pyx_t_8 = __Pyx_GetItemInt(__pyx_t_5, __pyx_v_j, int, 1, __Pyx_PyInt_From_int, 0, 1, 1); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 132, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_8);
+          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+          __pyx_t_5 = __Pyx_GetItemInt(__pyx_t_8, __pyx_v_k, int, 1, __Pyx_PyInt_From_int, 0, 1, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 132, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_5);
+          __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+          __pyx_t_9 = __pyx_PyFloat_AsFloat(__pyx_t_5); if (unlikely((__pyx_t_9 == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 132, __pyx_L1_error)
+          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+          (__pyx_v_collision_matrix_world[((__pyx_v_k * 4) + __pyx_v_j)]) = __pyx_t_9;
+        }
+      }
+
+      /* "wmo_utils.pyx":134
+ *                         collision_matrix_world[k * 4 + j] = py_param.collision_mesh_matrix_world[j][k]
+ * 
+ *                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world             # <<<<<<<<<<<<<<
+ *             else:
+ *                 self._c_params[x].collision_mesh_pointer = 0
+ */
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 134, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).collision_mesh_matrix_world = __pyx_v_collision_matrix_world;
+
+      /* "wmo_utils.pyx":124
+ *             self._c_params[x].mesh_matrix_world = group_matrix_world
+ * 
+ *             if py_param.collision_mesh_pointer:             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].collision_mesh_pointer = py_param.collision_mesh_pointer
+ * 
+ */
+      goto __pyx_L9;
+    }
+
+    /* "wmo_utils.pyx":136
+ *                 self._c_params[x].collision_mesh_matrix_world = collision_matrix_world
+ *             else:
+ *                 self._c_params[x].collision_mesh_pointer = 0             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].collision_mesh_matrix_world = NULL
+ * 
+ */
+    /*else*/ {
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 136, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).collision_mesh_pointer = 0;
+
+      /* "wmo_utils.pyx":137
+ *             else:
+ *                 self._c_params[x].collision_mesh_pointer = 0
+ *                 self._c_params[x].collision_mesh_matrix_world = NULL             # <<<<<<<<<<<<<<
+ * 
+ *             self._c_params[x].mesh_pointer = py_param.mesh_pointer
+ */
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 137, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).collision_mesh_matrix_world = NULL;
+    }
+    __pyx_L9:;
+
+    /* "wmo_utils.pyx":139
+ *                 self._c_params[x].collision_mesh_matrix_world = NULL
+ * 
  *             self._c_params[x].mesh_pointer = py_param.mesh_pointer             # <<<<<<<<<<<<<<
  *             self._c_params[x].use_large_material_id = py_param.use_large_material_id
  *             self._c_params[x].use_vertex_color = py_param.use_vertex_color
  */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_mesh_pointer); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 77, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_mesh_pointer); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 139, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = __Pyx_PyInt_As_size_t(__pyx_t_5); if (unlikely((__pyx_t_6 == ((uintptr_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 77, __pyx_L1_error)
+    __pyx_t_12 = __Pyx_PyInt_As_size_t(__pyx_t_5); if (unlikely((__pyx_t_12 == ((uintptr_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 139, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_7 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 77, __pyx_L1_error)
-    (__pyx_v_self->_c_params[__pyx_t_7]).mesh_pointer = __pyx_t_6;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 139, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).mesh_pointer = __pyx_t_12;
 
-    /* "wmo_utils.pyx":78
- *         for x, py_param in enumerate(param_entries):
+    /* "wmo_utils.pyx":140
+ * 
  *             self._c_params[x].mesh_pointer = py_param.mesh_pointer
  *             self._c_params[x].use_large_material_id = py_param.use_large_material_id             # <<<<<<<<<<<<<<
  *             self._c_params[x].use_vertex_color = py_param.use_vertex_color
- *             self._c_params[x].vg_collision_index = py_param.vg_collision_index
+ *             self._c_params[x].use_custom_normals = py_param.use_custom_normals
  */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_use_large_material_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 78, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_use_large_material_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_8 == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 78, __pyx_L1_error)
+    __pyx_t_13 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_13 == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_7 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 78, __pyx_L1_error)
-    (__pyx_v_self->_c_params[__pyx_t_7]).use_large_material_id = __pyx_t_8;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).use_large_material_id = __pyx_t_13;
 
-    /* "wmo_utils.pyx":79
+    /* "wmo_utils.pyx":141
  *             self._c_params[x].mesh_pointer = py_param.mesh_pointer
  *             self._c_params[x].use_large_material_id = py_param.use_large_material_id
  *             self._c_params[x].use_vertex_color = py_param.use_vertex_color             # <<<<<<<<<<<<<<
+ *             self._c_params[x].use_custom_normals = py_param.use_custom_normals
+ *             self._c_params[x].vg_collision_index = py_param.vg_collision_index
+ */
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_use_vertex_color); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 141, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_13 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_13 == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 141, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 141, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).use_vertex_color = __pyx_t_13;
+
+    /* "wmo_utils.pyx":142
+ *             self._c_params[x].use_large_material_id = py_param.use_large_material_id
+ *             self._c_params[x].use_vertex_color = py_param.use_vertex_color
+ *             self._c_params[x].use_custom_normals = py_param.use_custom_normals             # <<<<<<<<<<<<<<
  *             self._c_params[x].vg_collision_index = py_param.vg_collision_index
  *             self._c_params[x].node_size = py_param.node_size
  */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_use_vertex_color); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 79, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_use_custom_normals); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 142, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_8 == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 79, __pyx_L1_error)
+    __pyx_t_13 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_13 == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 142, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_7 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 79, __pyx_L1_error)
-    (__pyx_v_self->_c_params[__pyx_t_7]).use_vertex_color = __pyx_t_8;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 142, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).use_custom_normals = __pyx_t_13;
 
-    /* "wmo_utils.pyx":80
- *             self._c_params[x].use_large_material_id = py_param.use_large_material_id
+    /* "wmo_utils.pyx":143
  *             self._c_params[x].use_vertex_color = py_param.use_vertex_color
+ *             self._c_params[x].use_custom_normals = py_param.use_custom_normals
  *             self._c_params[x].vg_collision_index = py_param.vg_collision_index             # <<<<<<<<<<<<<<
  *             self._c_params[x].node_size = py_param.node_size
  *             self._c_params[x].material_mapping = py_param.material_mapping
  */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_vg_collision_index); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 80, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_vg_collision_index); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 143, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_9 = __Pyx_PyInt_As_int(__pyx_t_5); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 80, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyInt_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 143, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_7 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 80, __pyx_L1_error)
-    (__pyx_v_self->_c_params[__pyx_t_7]).vg_collision_index = __pyx_t_9;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 143, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).vg_collision_index = __pyx_t_6;
 
-    /* "wmo_utils.pyx":81
- *             self._c_params[x].use_vertex_color = py_param.use_vertex_color
+    /* "wmo_utils.pyx":144
+ *             self._c_params[x].use_custom_normals = py_param.use_custom_normals
  *             self._c_params[x].vg_collision_index = py_param.vg_collision_index
  *             self._c_params[x].node_size = py_param.node_size             # <<<<<<<<<<<<<<
  *             self._c_params[x].material_mapping = py_param.material_mapping
  * 
  */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_node_size); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 81, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_node_size); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 144, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_9 = __Pyx_PyInt_As_int(__pyx_t_5); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 81, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyInt_As_int(__pyx_t_5); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 144, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_7 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 81, __pyx_L1_error)
-    (__pyx_v_self->_c_params[__pyx_t_7]).node_size = __pyx_t_9;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 144, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).node_size = __pyx_t_6;
 
-    /* "wmo_utils.pyx":82
+    /* "wmo_utils.pyx":145
  *             self._c_params[x].vg_collision_index = py_param.vg_collision_index
  *             self._c_params[x].node_size = py_param.node_size
  *             self._c_params[x].material_mapping = py_param.material_mapping             # <<<<<<<<<<<<<<
  * 
+ *             if py_param.liquid_params:
+ */
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_material_mapping); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 145, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_14 = __pyx_convert_vector_from_py_int(__pyx_t_5); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 145, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 145, __pyx_L1_error)
+    (__pyx_v_self->_c_params[__pyx_t_10]).material_mapping = __pyx_t_14;
+
+    /* "wmo_utils.pyx":147
+ *             self._c_params[x].material_mapping = py_param.material_mapping
+ * 
+ *             if py_param.liquid_params:             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].has_liquid = True
+ *                 self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer
+ */
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 147, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely(__pyx_t_11 < 0)) __PYX_ERR(0, 147, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    if (__pyx_t_11) {
+
+      /* "wmo_utils.pyx":148
+ * 
+ *             if py_param.liquid_params:
+ *                 self._c_params[x].has_liquid = True             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer
+ *                 self._c_params[x].liquid_params.x_tiles = py_param.liquid_params.x_tiles
+ */
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 148, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).has_liquid = 1;
+
+      /* "wmo_utils.pyx":149
+ *             if py_param.liquid_params:
+ *                 self._c_params[x].has_liquid = True
+ *                 self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].liquid_params.x_tiles = py_param.liquid_params.x_tiles
+ *                 self._c_params[x].liquid_params.y_tiles = py_param.liquid_params.y_tiles
+ */
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 149, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_liquid_mesh_pointer); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 149, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_12 = __Pyx_PyInt_As_size_t(__pyx_t_8); if (unlikely((__pyx_t_12 == ((uintptr_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 149, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 149, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).liquid_params.liquid_mesh = __pyx_t_12;
+
+      /* "wmo_utils.pyx":150
+ *                 self._c_params[x].has_liquid = True
+ *                 self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer
+ *                 self._c_params[x].liquid_params.x_tiles = py_param.liquid_params.x_tiles             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].liquid_params.y_tiles = py_param.liquid_params.y_tiles
+ *                 self._c_params[x].liquid_params.mat_id = py_param.liquid_params.mat_id
+ */
+      __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 150, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_8, __pyx_n_s_x_tiles); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 150, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_15 = __Pyx_PyInt_As_unsigned_int(__pyx_t_5); if (unlikely((__pyx_t_15 == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 150, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 150, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).liquid_params.x_tiles = __pyx_t_15;
+
+      /* "wmo_utils.pyx":151
+ *                 self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer
+ *                 self._c_params[x].liquid_params.x_tiles = py_param.liquid_params.x_tiles
+ *                 self._c_params[x].liquid_params.y_tiles = py_param.liquid_params.y_tiles             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].liquid_params.mat_id = py_param.liquid_params.mat_id
+ *                 self._c_params[x].liquid_params.is_water = py_param.liquid_params.is_water
+ */
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 151, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_y_tiles); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 151, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_15 = __Pyx_PyInt_As_unsigned_int(__pyx_t_8); if (unlikely((__pyx_t_15 == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 151, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 151, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).liquid_params.y_tiles = __pyx_t_15;
+
+      /* "wmo_utils.pyx":152
+ *                 self._c_params[x].liquid_params.x_tiles = py_param.liquid_params.x_tiles
+ *                 self._c_params[x].liquid_params.y_tiles = py_param.liquid_params.y_tiles
+ *                 self._c_params[x].liquid_params.mat_id = py_param.liquid_params.mat_id             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].liquid_params.is_water = py_param.liquid_params.is_water
+ * 
+ */
+      __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 152, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_8, __pyx_n_s_mat_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 152, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_15 = __Pyx_PyInt_As_unsigned_int(__pyx_t_5); if (unlikely((__pyx_t_15 == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 152, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 152, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).liquid_params.mat_id = __pyx_t_15;
+
+      /* "wmo_utils.pyx":153
+ *                 self._c_params[x].liquid_params.y_tiles = py_param.liquid_params.y_tiles
+ *                 self._c_params[x].liquid_params.mat_id = py_param.liquid_params.mat_id
+ *                 self._c_params[x].liquid_params.is_water = py_param.liquid_params.is_water             # <<<<<<<<<<<<<<
+ * 
+ *                 liquid_matrix_world = <float*>malloc(16 * sizeof(float))
+ */
+      __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 153, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_is_water); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 153, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_8);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_13 = __Pyx_PyObject_IsTrue(__pyx_t_8); if (unlikely((__pyx_t_13 == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 153, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 153, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).liquid_params.is_water = __pyx_t_13;
+
+      /* "wmo_utils.pyx":155
+ *                 self._c_params[x].liquid_params.is_water = py_param.liquid_params.is_water
+ * 
+ *                 liquid_matrix_world = <float*>malloc(16 * sizeof(float))             # <<<<<<<<<<<<<<
+ *                 matrices_temp.push_back(liquid_matrix_world)
+ * 
+ */
+      __pyx_v_liquid_matrix_world = ((float *)malloc((16 * (sizeof(float)))));
+
+      /* "wmo_utils.pyx":156
+ * 
+ *                 liquid_matrix_world = <float*>malloc(16 * sizeof(float))
+ *                 matrices_temp.push_back(liquid_matrix_world)             # <<<<<<<<<<<<<<
+ * 
+ *                 for j in range(4):
+ */
+      try {
+        __pyx_v_matrices_temp.push_back(__pyx_v_liquid_matrix_world);
+      } catch(...) {
+        __Pyx_CppExn2PyErr();
+        __PYX_ERR(0, 156, __pyx_L1_error)
+      }
+
+      /* "wmo_utils.pyx":158
+ *                 matrices_temp.push_back(liquid_matrix_world)
+ * 
+ *                 for j in range(4):             # <<<<<<<<<<<<<<
+ *                     for k in range(4):
+ *                         liquid_matrix_world[k * 4 + j] = py_param.liquid_params.liquid_mesh_matrix_world[j][k]
+ */
+      for (__pyx_t_6 = 0; __pyx_t_6 < 4; __pyx_t_6+=1) {
+        __pyx_v_j = __pyx_t_6;
+
+        /* "wmo_utils.pyx":159
+ * 
+ *                 for j in range(4):
+ *                     for k in range(4):             # <<<<<<<<<<<<<<
+ *                         liquid_matrix_world[k * 4 + j] = py_param.liquid_params.liquid_mesh_matrix_world[j][k]
+ * 
+ */
+        for (__pyx_t_7 = 0; __pyx_t_7 < 4; __pyx_t_7+=1) {
+          __pyx_v_k = __pyx_t_7;
+
+          /* "wmo_utils.pyx":160
+ *                 for j in range(4):
+ *                     for k in range(4):
+ *                         liquid_matrix_world[k * 4 + j] = py_param.liquid_params.liquid_mesh_matrix_world[j][k]             # <<<<<<<<<<<<<<
+ * 
+ *                 self._c_params[x].liquid_params.liquid_mesh_matrix_world = liquid_matrix_world
+ */
+          __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_liquid_params); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 160, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_8);
+          __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_8, __pyx_n_s_liquid_mesh_matrix_world); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 160, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_5);
+          __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+          __pyx_t_8 = __Pyx_GetItemInt(__pyx_t_5, __pyx_v_j, int, 1, __Pyx_PyInt_From_int, 0, 1, 1); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 160, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_8);
+          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+          __pyx_t_5 = __Pyx_GetItemInt(__pyx_t_8, __pyx_v_k, int, 1, __Pyx_PyInt_From_int, 0, 1, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 160, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_5);
+          __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+          __pyx_t_9 = __pyx_PyFloat_AsFloat(__pyx_t_5); if (unlikely((__pyx_t_9 == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 160, __pyx_L1_error)
+          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+          (__pyx_v_liquid_matrix_world[((__pyx_v_k * 4) + __pyx_v_j)]) = __pyx_t_9;
+        }
+      }
+
+      /* "wmo_utils.pyx":162
+ *                         liquid_matrix_world[k * 4 + j] = py_param.liquid_params.liquid_mesh_matrix_world[j][k]
+ * 
+ *                 self._c_params[x].liquid_params.liquid_mesh_matrix_world = liquid_matrix_world             # <<<<<<<<<<<<<<
+ *             else:
+ *                 self._c_params[x].has_liquid = False
+ */
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 162, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).liquid_params.liquid_mesh_matrix_world = __pyx_v_liquid_matrix_world;
+
+      /* "wmo_utils.pyx":147
+ *             self._c_params[x].material_mapping = py_param.material_mapping
+ * 
+ *             if py_param.liquid_params:             # <<<<<<<<<<<<<<
+ *                 self._c_params[x].has_liquid = True
+ *                 self._c_params[x].liquid_params.liquid_mesh = py_param.liquid_params.liquid_mesh_pointer
+ */
+      goto __pyx_L14;
+    }
+
+    /* "wmo_utils.pyx":164
+ *                 self._c_params[x].liquid_params.liquid_mesh_matrix_world = liquid_matrix_world
+ *             else:
+ *                 self._c_params[x].has_liquid = False             # <<<<<<<<<<<<<<
+ * 
  *         cdef CWMOGeometryBatcherMeshParams* param
  */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_py_param, __pyx_n_s_material_mapping); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 82, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_10 = __pyx_convert_vector_from_py_int(__pyx_t_5); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 82, __pyx_L1_error)
-    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_7 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 82, __pyx_L1_error)
-    (__pyx_v_self->_c_params[__pyx_t_7]).material_mapping = __pyx_t_10;
+    /*else*/ {
+      __pyx_t_10 = __Pyx_PyInt_As_size_t(__pyx_v_x); if (unlikely((__pyx_t_10 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 164, __pyx_L1_error)
+      (__pyx_v_self->_c_params[__pyx_t_10]).has_liquid = 0;
+    }
+    __pyx_L14:;
 
-    /* "wmo_utils.pyx":76
- *         self._c_batchers.resize(n_groups)
+    /* "wmo_utils.pyx":114
+ *         cdef vector[float*] matrices_temp
  * 
  *         for x, py_param in enumerate(param_entries):             # <<<<<<<<<<<<<<
- *             self._c_params[x].mesh_pointer = py_param.mesh_pointer
- *             self._c_params[x].use_large_material_id = py_param.use_large_material_id
+ *             group_matrix_world = <float*>malloc(16 * sizeof(float))
+ *             matrices_temp.push_back(group_matrix_world)
  */
   }
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "wmo_utils.pyx":85
+  /* "wmo_utils.pyx":167
  * 
  *         cdef CWMOGeometryBatcherMeshParams* param
  *         for i in prange(n_groups, nogil=True):             # <<<<<<<<<<<<<<
@@ -2448,7 +3046,7 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
       __Pyx_FastGIL_Remember();
       #endif
       /*try:*/ {
-        __pyx_t_9 = __pyx_v_n_groups;
+        __pyx_t_6 = __pyx_v_n_groups;
         if ((1 == 0)) abort();
         {
             #if ((defined(__APPLE__) || defined(__OSX__)) && (defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && (__GNUC_MINOR__ > 95)))))
@@ -2457,39 +3055,52 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
                 #define likely(x)   (x)
                 #define unlikely(x) (x)
             #endif
-            __pyx_t_12 = (__pyx_t_9 - 0 + 1 - 1/abs(1)) / 1;
-            if (__pyx_t_12 > 0)
+            __pyx_t_16 = (__pyx_t_6 - 0 + 1 - 1/abs(1)) / 1;
+            if (__pyx_t_16 > 0)
             {
                 #ifdef _OPENMP
-                #pragma omp parallel
+                #pragma omp parallel private(__pyx_t_17)
                 #endif /* _OPENMP */
                 {
                     #ifdef _OPENMP
                     #pragma omp for firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) lastprivate(__pyx_v_param)
                     #endif /* _OPENMP */
-                    for (__pyx_t_11 = 0; __pyx_t_11 < __pyx_t_12; __pyx_t_11++){
+                    for (__pyx_t_7 = 0; __pyx_t_7 < __pyx_t_16; __pyx_t_7++){
                         {
-                            __pyx_v_i = (int)(0 + 1 * __pyx_t_11);
+                            __pyx_v_i = (int)(0 + 1 * __pyx_t_7);
                             /* Initialize private variables to invalid values */
                             __pyx_v_param = ((struct __pyx_t_9wmo_utils_CWMOGeometryBatcherMeshParams *)1);
 
-                            /* "wmo_utils.pyx":86
+                            /* "wmo_utils.pyx":168
  *         cdef CWMOGeometryBatcherMeshParams* param
  *         for i in prange(n_groups, nogil=True):
  *             param = &self._c_params[i]             # <<<<<<<<<<<<<<
  *             self._c_batchers[i] = new WMOGeometryBatcher(param.mesh_pointer
- *                                                          , param.use_large_material_id
+ *                                                          , param.mesh_matrix_world
  */
                             __pyx_v_param = (&(__pyx_v_self->_c_params[__pyx_v_i]));
 
-                            /* "wmo_utils.pyx":87
+                            /* "wmo_utils.pyx":179
+ *                                                          , param.node_size
+ *                                                          , param.material_mapping
+ *                                                          , (&param.liquid_params) if param.has_liquid else NULL)             # <<<<<<<<<<<<<<
+ * 
+ *         cdef vector[float*].iterator it = matrices_temp.begin()
+ */
+                            if ((__pyx_v_param->has_liquid != 0)) {
+                              __pyx_t_17 = (&__pyx_v_param->liquid_params);
+                            } else {
+                              __pyx_t_17 = NULL;
+                            }
+
+                            /* "wmo_utils.pyx":169
  *         for i in prange(n_groups, nogil=True):
  *             param = &self._c_params[i]
  *             self._c_batchers[i] = new WMOGeometryBatcher(param.mesh_pointer             # <<<<<<<<<<<<<<
- *                                                          , param.use_large_material_id
- *                                                          , param.use_vertex_color
+ *                                                          , param.mesh_matrix_world
+ *                                                          , param.collision_mesh_pointer
  */
-                            (__pyx_v_self->_c_batchers[__pyx_v_i]) = new wbs_kernel::bl_utils::mesh::wmo::WMOGeometryBatcher(__pyx_v_param->mesh_pointer, __pyx_v_param->use_large_material_id, __pyx_v_param->use_vertex_color, __pyx_v_param->vg_collision_index, __pyx_v_param->node_size, __pyx_v_param->material_mapping);
+                            (__pyx_v_self->_c_batchers[__pyx_v_i]) = new wbs_kernel::bl_utils::mesh::wmo::WMOGeometryBatcher(__pyx_v_param->mesh_pointer, __pyx_v_param->mesh_matrix_world, __pyx_v_param->collision_mesh_pointer, __pyx_v_param->collision_mesh_matrix_world, __pyx_v_param->use_large_material_id, __pyx_v_param->use_vertex_color, __pyx_v_param->use_custom_normals, __pyx_v_param->vg_collision_index, __pyx_v_param->node_size, __pyx_v_param->material_mapping, __pyx_t_17);
                         }
                     }
                 }
@@ -2503,7 +3114,7 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
         #endif
       }
 
-      /* "wmo_utils.pyx":85
+      /* "wmo_utils.pyx":167
  * 
  *         cdef CWMOGeometryBatcherMeshParams* param
  *         for i in prange(n_groups, nogil=True):             # <<<<<<<<<<<<<<
@@ -2516,18 +3127,57 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
           __Pyx_FastGIL_Forget();
           Py_BLOCK_THREADS
           #endif
-          goto __pyx_L7;
+          goto __pyx_L21;
         }
-        __pyx_L7:;
+        __pyx_L21:;
       }
   }
 
-  /* "wmo_utils.pyx":69
+  /* "wmo_utils.pyx":181
+ *                                                          , (&param.liquid_params) if param.has_liquid else NULL)
+ * 
+ *         cdef vector[float*].iterator it = matrices_temp.begin()             # <<<<<<<<<<<<<<
+ *         cdef WMOGeometryBatcher * ptr
+ * 
+ */
+  __pyx_v_it = __pyx_v_matrices_temp.begin();
+
+  /* "wmo_utils.pyx":185
+ * 
+ *         # free temporary matrices
+ *         while it != matrices_temp.end():             # <<<<<<<<<<<<<<
+ *             free(deref(it))
+ *             inc(it)
+ */
+  while (1) {
+    __pyx_t_11 = ((__pyx_v_it != __pyx_v_matrices_temp.end()) != 0);
+    if (!__pyx_t_11) break;
+
+    /* "wmo_utils.pyx":186
+ *         # free temporary matrices
+ *         while it != matrices_temp.end():
+ *             free(deref(it))             # <<<<<<<<<<<<<<
+ *             inc(it)
+ * 
+ */
+    free((*__pyx_v_it));
+
+    /* "wmo_utils.pyx":187
+ *         while it != matrices_temp.end():
+ *             free(deref(it))
+ *             inc(it)             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+    (void)((++__pyx_v_it));
+  }
+
+  /* "wmo_utils.pyx":102
  *     cdef vector[CWMOGeometryBatcherMeshParams] _c_params
  * 
  *     def __cinit__(self, param_entries: List[WMOGeometryBatcherMeshParams]):             # <<<<<<<<<<<<<<
  *         cdef int n_groups = len(param_entries)
- *         cdef int i
+ *         cdef int i, j, k
  */
 
   /* function exit code */
@@ -2537,6 +3187,7 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
   __Pyx_XDECREF(__pyx_t_2);
   __Pyx_XDECREF(__pyx_t_3);
   __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_8);
   __Pyx_AddTraceback("wmo_utils.CWMOGeometryBatcher.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = -1;
   __pyx_L0:;
@@ -2546,7 +3197,7 @@ static int __pyx_pf_9wmo_utils_19CWMOGeometryBatcher___cinit__(struct __pyx_obj_
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":95
+/* "wmo_utils.pyx":190
  * 
  * 
  *     def batches(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2582,17 +3233,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("batches", 0);
 
-  /* "wmo_utils.pyx":96
+  /* "wmo_utils.pyx":191
  * 
  *     def batches(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].batches()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 96, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 191, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->batches();
 
-  /* "wmo_utils.pyx":98
+  /* "wmo_utils.pyx":193
  *         cdef BufferKey c_key = self._c_batchers[group_index].batches()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -2610,7 +3261,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":99
+    /* "wmo_utils.pyx":194
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -2621,7 +3272,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":98
+    /* "wmo_utils.pyx":193
  *         cdef BufferKey c_key = self._c_batchers[group_index].batches()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -2630,7 +3281,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
  */
   }
 
-  /* "wmo_utils.pyx":101
+  /* "wmo_utils.pyx":196
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -2638,9 +3289,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
  *     def normals(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 101, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 196, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 101, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 196, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -2655,14 +3306,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 101, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 196, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":95
+  /* "wmo_utils.pyx":190
  * 
  * 
  *     def batches(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2683,7 +3334,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_2batches(struct __pyx
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":103
+/* "wmo_utils.pyx":198
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def normals(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2719,17 +3370,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("normals", 0);
 
-  /* "wmo_utils.pyx":104
+  /* "wmo_utils.pyx":199
  * 
  *     def normals(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].normals()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 104, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 199, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->normals();
 
-  /* "wmo_utils.pyx":106
+  /* "wmo_utils.pyx":201
  *         cdef BufferKey c_key = self._c_batchers[group_index].normals()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -2747,7 +3398,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":107
+    /* "wmo_utils.pyx":202
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -2758,7 +3409,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":106
+    /* "wmo_utils.pyx":201
  *         cdef BufferKey c_key = self._c_batchers[group_index].normals()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -2767,7 +3418,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
  */
   }
 
-  /* "wmo_utils.pyx":109
+  /* "wmo_utils.pyx":204
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -2775,9 +3426,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
  *     def vertices(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 109, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 204, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 109, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 204, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -2792,14 +3443,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 109, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 204, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":103
+  /* "wmo_utils.pyx":198
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def normals(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2820,7 +3471,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_4normals(struct __pyx
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":111
+/* "wmo_utils.pyx":206
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def vertices(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2856,17 +3507,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("vertices", 0);
 
-  /* "wmo_utils.pyx":112
+  /* "wmo_utils.pyx":207
  * 
  *     def vertices(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertices()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 112, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 207, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->vertices();
 
-  /* "wmo_utils.pyx":114
+  /* "wmo_utils.pyx":209
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertices()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -2884,7 +3535,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":115
+    /* "wmo_utils.pyx":210
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -2895,7 +3546,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":114
+    /* "wmo_utils.pyx":209
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertices()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -2904,7 +3555,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
  */
   }
 
-  /* "wmo_utils.pyx":117
+  /* "wmo_utils.pyx":212
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -2912,9 +3563,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
  *     def triangle_indices(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 117, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 212, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 117, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 212, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -2929,14 +3580,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 117, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 212, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":111
+  /* "wmo_utils.pyx":206
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def vertices(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2957,7 +3608,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_6vertices(struct __py
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":119
+/* "wmo_utils.pyx":214
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def triangle_indices(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -2993,17 +3644,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("triangle_indices", 0);
 
-  /* "wmo_utils.pyx":120
+  /* "wmo_utils.pyx":215
  * 
  *     def triangle_indices(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].triangle_indices()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 120, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 215, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->triangle_indices();
 
-  /* "wmo_utils.pyx":122
+  /* "wmo_utils.pyx":217
  *         cdef BufferKey c_key = self._c_batchers[group_index].triangle_indices()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3021,7 +3672,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":123
+    /* "wmo_utils.pyx":218
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3032,7 +3683,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":122
+    /* "wmo_utils.pyx":217
  *         cdef BufferKey c_key = self._c_batchers[group_index].triangle_indices()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3041,7 +3692,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
  */
   }
 
-  /* "wmo_utils.pyx":125
+  /* "wmo_utils.pyx":220
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3049,9 +3700,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
  *     def triangle_materials(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 125, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 220, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 125, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 220, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3066,14 +3717,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 125, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 220, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":119
+  /* "wmo_utils.pyx":214
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def triangle_indices(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3094,7 +3745,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_8triangle_indices(str
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":127
+/* "wmo_utils.pyx":222
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def triangle_materials(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3130,17 +3781,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("triangle_materials", 0);
 
-  /* "wmo_utils.pyx":128
+  /* "wmo_utils.pyx":223
  * 
  *     def triangle_materials(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].triangle_materials()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 128, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 223, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->triangle_materials();
 
-  /* "wmo_utils.pyx":130
+  /* "wmo_utils.pyx":225
  *         cdef BufferKey c_key = self._c_batchers[group_index].triangle_materials()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3158,7 +3809,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":131
+    /* "wmo_utils.pyx":226
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3169,7 +3820,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":130
+    /* "wmo_utils.pyx":225
  *         cdef BufferKey c_key = self._c_batchers[group_index].triangle_materials()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3178,7 +3829,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
  */
   }
 
-  /* "wmo_utils.pyx":133
+  /* "wmo_utils.pyx":228
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3186,9 +3837,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
  *     def tex_coords(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 133, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 228, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 133, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 228, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3203,14 +3854,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 133, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 228, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":127
+  /* "wmo_utils.pyx":222
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def triangle_materials(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3231,7 +3882,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_10triangle_materials(
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":135
+/* "wmo_utils.pyx":230
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def tex_coords(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3267,17 +3918,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("tex_coords", 0);
 
-  /* "wmo_utils.pyx":136
+  /* "wmo_utils.pyx":231
  * 
  *     def tex_coords(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].tex_coords()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 136, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 231, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->tex_coords();
 
-  /* "wmo_utils.pyx":138
+  /* "wmo_utils.pyx":233
  *         cdef BufferKey c_key = self._c_batchers[group_index].tex_coords()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3295,7 +3946,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":139
+    /* "wmo_utils.pyx":234
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3306,7 +3957,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":138
+    /* "wmo_utils.pyx":233
  *         cdef BufferKey c_key = self._c_batchers[group_index].tex_coords()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3315,7 +3966,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
  */
   }
 
-  /* "wmo_utils.pyx":141
+  /* "wmo_utils.pyx":236
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3323,9 +3974,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
  *     def tex_coords2(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 141, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 236, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 141, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 236, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3340,14 +3991,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 141, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 236, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":135
+  /* "wmo_utils.pyx":230
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def tex_coords(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3368,7 +4019,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_12tex_coords(struct _
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":143
+/* "wmo_utils.pyx":238
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def tex_coords2(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3404,17 +4055,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("tex_coords2", 0);
 
-  /* "wmo_utils.pyx":144
+  /* "wmo_utils.pyx":239
  * 
  *     def tex_coords2(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].tex_coords2()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 144, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 239, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->tex_coords2();
 
-  /* "wmo_utils.pyx":146
+  /* "wmo_utils.pyx":241
  *         cdef BufferKey c_key = self._c_batchers[group_index].tex_coords2()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3432,7 +4083,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":147
+    /* "wmo_utils.pyx":242
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3443,7 +4094,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":146
+    /* "wmo_utils.pyx":241
  *         cdef BufferKey c_key = self._c_batchers[group_index].tex_coords2()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3452,7 +4103,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
  */
   }
 
-  /* "wmo_utils.pyx":149
+  /* "wmo_utils.pyx":244
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3460,9 +4111,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
  *     def vertex_colors(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 149, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 244, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 149, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 244, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3477,14 +4128,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 149, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 244, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":143
+  /* "wmo_utils.pyx":238
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def tex_coords2(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3505,7 +4156,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_14tex_coords2(struct 
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":151
+/* "wmo_utils.pyx":246
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def vertex_colors(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3541,17 +4192,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("vertex_colors", 0);
 
-  /* "wmo_utils.pyx":152
+  /* "wmo_utils.pyx":247
  * 
  *     def vertex_colors(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertex_colors()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 152, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 247, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->vertex_colors();
 
-  /* "wmo_utils.pyx":154
+  /* "wmo_utils.pyx":249
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertex_colors()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3569,7 +4220,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":155
+    /* "wmo_utils.pyx":250
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3580,7 +4231,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":154
+    /* "wmo_utils.pyx":249
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertex_colors()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3589,7 +4240,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
  */
   }
 
-  /* "wmo_utils.pyx":157
+  /* "wmo_utils.pyx":252
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3597,9 +4248,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
  *     def vertex_colors2(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 157, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 252, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 157, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 252, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3614,14 +4265,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 157, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 252, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":151
+  /* "wmo_utils.pyx":246
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def vertex_colors(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3642,7 +4293,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_16vertex_colors(struc
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":159
+/* "wmo_utils.pyx":254
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def vertex_colors2(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3678,17 +4329,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("vertex_colors2", 0);
 
-  /* "wmo_utils.pyx":160
+  /* "wmo_utils.pyx":255
  * 
  *     def vertex_colors2(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertex_colors2()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 160, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 255, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->vertex_colors2();
 
-  /* "wmo_utils.pyx":162
+  /* "wmo_utils.pyx":257
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertex_colors2()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3706,7 +4357,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":163
+    /* "wmo_utils.pyx":258
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3717,7 +4368,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":162
+    /* "wmo_utils.pyx":257
  *         cdef BufferKey c_key = self._c_batchers[group_index].vertex_colors2()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3726,7 +4377,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
  */
   }
 
-  /* "wmo_utils.pyx":165
+  /* "wmo_utils.pyx":260
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3734,9 +4385,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
  *     def bsp_nodes(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 165, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 260, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 165, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 260, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3751,14 +4402,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 165, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 260, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":159
+  /* "wmo_utils.pyx":254
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def vertex_colors2(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3779,7 +4430,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_18vertex_colors2(stru
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":167
+/* "wmo_utils.pyx":262
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def bsp_nodes(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3815,17 +4466,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("bsp_nodes", 0);
 
-  /* "wmo_utils.pyx":168
+  /* "wmo_utils.pyx":263
  * 
  *     def bsp_nodes(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].bsp_nodes()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 168, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 263, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->bsp_nodes();
 
-  /* "wmo_utils.pyx":170
+  /* "wmo_utils.pyx":265
  *         cdef BufferKey c_key = self._c_batchers[group_index].bsp_nodes()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3843,7 +4494,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":171
+    /* "wmo_utils.pyx":266
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3854,7 +4505,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":170
+    /* "wmo_utils.pyx":265
  *         cdef BufferKey c_key = self._c_batchers[group_index].bsp_nodes()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3863,7 +4514,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
  */
   }
 
-  /* "wmo_utils.pyx":173
+  /* "wmo_utils.pyx":268
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
@@ -3871,9 +4522,9 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
  *     def bsp_faces(self, group_index: int) -> Optional[bytes]:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 173, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 268, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 173, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 268, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -3888,14 +4539,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 173, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 268, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":167
+  /* "wmo_utils.pyx":262
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def bsp_nodes(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3916,7 +4567,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_20bsp_nodes(struct __
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":175
+/* "wmo_utils.pyx":270
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def bsp_faces(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -3952,17 +4603,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("bsp_faces", 0);
 
-  /* "wmo_utils.pyx":176
+  /* "wmo_utils.pyx":271
  * 
  *     def bsp_faces(self, group_index: int) -> Optional[bytes]:
  *         cdef BufferKey c_key = self._c_batchers[group_index].bsp_faces()             # <<<<<<<<<<<<<<
  * 
  *         if c_key.data == NULL or not c_key.size:
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 176, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 271, __pyx_L1_error)
   __pyx_v_c_key = (__pyx_v_self->_c_batchers[__pyx_t_1])->bsp_faces();
 
-  /* "wmo_utils.pyx":178
+  /* "wmo_utils.pyx":273
  *         cdef BufferKey c_key = self._c_batchers[group_index].bsp_faces()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -3980,7 +4631,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_2) {
 
-    /* "wmo_utils.pyx":179
+    /* "wmo_utils.pyx":274
  * 
  *         if c_key.data == NULL or not c_key.size:
  *             return None             # <<<<<<<<<<<<<<
@@ -3991,7 +4642,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "wmo_utils.pyx":178
+    /* "wmo_utils.pyx":273
  *         cdef BufferKey c_key = self._c_batchers[group_index].bsp_faces()
  * 
  *         if c_key.data == NULL or not c_key.size:             # <<<<<<<<<<<<<<
@@ -4000,17 +4651,17 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
  */
   }
 
-  /* "wmo_utils.pyx":181
+  /* "wmo_utils.pyx":276
  *             return None
  * 
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
  * 
- *     def batch_count_info(self, group_index: int) -> CBatchCountInfo:
+ *     def liquid(self, group_index: int) -> bytes:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 181, __pyx_L1_error)
+  __pyx_t_5 = PyMemoryView_FromMemory(__pyx_v_c_key.data, __pyx_v_c_key.size, PyBUF_READ); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 276, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 181, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_t_5, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 276, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_5 = NULL;
@@ -4025,14 +4676,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
   }
   __pyx_t_4 = (__pyx_t_5) ? __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_5) : __Pyx_PyObject_CallNoArg(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 181, __pyx_L1_error)
+  if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 276, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __pyx_r = __pyx_t_4;
   __pyx_t_4 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":175
+  /* "wmo_utils.pyx":270
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
  * 
  *     def bsp_faces(self, group_index: int) -> Optional[bytes]:             # <<<<<<<<<<<<<<
@@ -4053,8 +4704,209 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":183
+/* "wmo_utils.pyx":278
  *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
+ * 
+ *     def liquid(self, group_index: int) -> bytes:             # <<<<<<<<<<<<<<
+ *         cdef BufferKey c_key_header = self._c_batchers[group_index].liquid_header()
+ *         header = PyMemoryView_FromMemory(c_key_header.data, c_key_header.size, PyBUF_READ).tobytes()
+ */
+
+/* Python wrapper */
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_25liquid(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_25liquid(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("liquid (wrapper)", 0);
+  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24liquid(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
+
+  /* function exit code */
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24liquid(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
+  struct wbs_kernel::bl_utils::mesh::wmo::BufferKey __pyx_v_c_key_header;
+  PyObject *__pyx_v_header = NULL;
+  struct wbs_kernel::bl_utils::mesh::wmo::BufferKey __pyx_v_c_key_vertices;
+  PyObject *__pyx_v_vertices = NULL;
+  struct wbs_kernel::bl_utils::mesh::wmo::BufferKey __pyx_v_c_key_tiles;
+  PyObject *__pyx_v_tiles = NULL;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  std::vector<wbs_kernel::bl_utils::mesh::wmo::WMOGeometryBatcher *> ::size_type __pyx_t_1;
+  PyObject *__pyx_t_2 = NULL;
+  PyObject *__pyx_t_3 = NULL;
+  PyObject *__pyx_t_4 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("liquid", 0);
+
+  /* "wmo_utils.pyx":279
+ * 
+ *     def liquid(self, group_index: int) -> bytes:
+ *         cdef BufferKey c_key_header = self._c_batchers[group_index].liquid_header()             # <<<<<<<<<<<<<<
+ *         header = PyMemoryView_FromMemory(c_key_header.data, c_key_header.size, PyBUF_READ).tobytes()
+ * 
+ */
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 279, __pyx_L1_error)
+  __pyx_v_c_key_header = (__pyx_v_self->_c_batchers[__pyx_t_1])->liquid_header();
+
+  /* "wmo_utils.pyx":280
+ *     def liquid(self, group_index: int) -> bytes:
+ *         cdef BufferKey c_key_header = self._c_batchers[group_index].liquid_header()
+ *         header = PyMemoryView_FromMemory(c_key_header.data, c_key_header.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
+ * 
+ *         cdef BufferKey c_key_vertices = self._c_batchers[group_index].liquid_vertices()
+ */
+  __pyx_t_3 = PyMemoryView_FromMemory(__pyx_v_c_key_header.data, __pyx_v_c_key_header.size, PyBUF_READ); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 280, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_t_3, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 280, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  __pyx_t_3 = NULL;
+  if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_4))) {
+    __pyx_t_3 = PyMethod_GET_SELF(__pyx_t_4);
+    if (likely(__pyx_t_3)) {
+      PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_4);
+      __Pyx_INCREF(__pyx_t_3);
+      __Pyx_INCREF(function);
+      __Pyx_DECREF_SET(__pyx_t_4, function);
+    }
+  }
+  __pyx_t_2 = (__pyx_t_3) ? __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_t_3) : __Pyx_PyObject_CallNoArg(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 280, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __pyx_v_header = __pyx_t_2;
+  __pyx_t_2 = 0;
+
+  /* "wmo_utils.pyx":282
+ *         header = PyMemoryView_FromMemory(c_key_header.data, c_key_header.size, PyBUF_READ).tobytes()
+ * 
+ *         cdef BufferKey c_key_vertices = self._c_batchers[group_index].liquid_vertices()             # <<<<<<<<<<<<<<
+ *         vertices = PyMemoryView_FromMemory(c_key_vertices.data, c_key_vertices.size, PyBUF_READ).tobytes()
+ * 
+ */
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 282, __pyx_L1_error)
+  __pyx_v_c_key_vertices = (__pyx_v_self->_c_batchers[__pyx_t_1])->liquid_vertices();
+
+  /* "wmo_utils.pyx":283
+ * 
+ *         cdef BufferKey c_key_vertices = self._c_batchers[group_index].liquid_vertices()
+ *         vertices = PyMemoryView_FromMemory(c_key_vertices.data, c_key_vertices.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
+ * 
+ *         cdef BufferKey c_key_tiles = self._c_batchers[group_index].liquid_tiles()
+ */
+  __pyx_t_4 = PyMemoryView_FromMemory(__pyx_v_c_key_vertices.data, __pyx_v_c_key_vertices.size, PyBUF_READ); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 283, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 283, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __pyx_t_4 = NULL;
+  if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_3))) {
+    __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_3);
+    if (likely(__pyx_t_4)) {
+      PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_3);
+      __Pyx_INCREF(__pyx_t_4);
+      __Pyx_INCREF(function);
+      __Pyx_DECREF_SET(__pyx_t_3, function);
+    }
+  }
+  __pyx_t_2 = (__pyx_t_4) ? __Pyx_PyObject_CallOneArg(__pyx_t_3, __pyx_t_4) : __Pyx_PyObject_CallNoArg(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+  if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 283, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  __pyx_v_vertices = __pyx_t_2;
+  __pyx_t_2 = 0;
+
+  /* "wmo_utils.pyx":285
+ *         vertices = PyMemoryView_FromMemory(c_key_vertices.data, c_key_vertices.size, PyBUF_READ).tobytes()
+ * 
+ *         cdef BufferKey c_key_tiles = self._c_batchers[group_index].liquid_tiles()             # <<<<<<<<<<<<<<
+ *         tiles = PyMemoryView_FromMemory(c_key_tiles.data, c_key_tiles.size, PyBUF_READ).tobytes()
+ * 
+ */
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 285, __pyx_L1_error)
+  __pyx_v_c_key_tiles = (__pyx_v_self->_c_batchers[__pyx_t_1])->liquid_tiles();
+
+  /* "wmo_utils.pyx":286
+ * 
+ *         cdef BufferKey c_key_tiles = self._c_batchers[group_index].liquid_tiles()
+ *         tiles = PyMemoryView_FromMemory(c_key_tiles.data, c_key_tiles.size, PyBUF_READ).tobytes()             # <<<<<<<<<<<<<<
+ * 
+ *         return header + vertices + tiles
+ */
+  __pyx_t_3 = PyMemoryView_FromMemory(__pyx_v_c_key_tiles.data, __pyx_v_c_key_tiles.size, PyBUF_READ); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 286, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_t_3, __pyx_n_s_tobytes); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 286, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  __pyx_t_3 = NULL;
+  if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_4))) {
+    __pyx_t_3 = PyMethod_GET_SELF(__pyx_t_4);
+    if (likely(__pyx_t_3)) {
+      PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_4);
+      __Pyx_INCREF(__pyx_t_3);
+      __Pyx_INCREF(function);
+      __Pyx_DECREF_SET(__pyx_t_4, function);
+    }
+  }
+  __pyx_t_2 = (__pyx_t_3) ? __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_t_3) : __Pyx_PyObject_CallNoArg(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 286, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __pyx_v_tiles = __pyx_t_2;
+  __pyx_t_2 = 0;
+
+  /* "wmo_utils.pyx":288
+ *         tiles = PyMemoryView_FromMemory(c_key_tiles.data, c_key_tiles.size, PyBUF_READ).tobytes()
+ * 
+ *         return header + vertices + tiles             # <<<<<<<<<<<<<<
+ * 
+ *     def batch_count_info(self, group_index: int) -> CBatchCountInfo:
+ */
+  __Pyx_XDECREF(__pyx_r);
+  __pyx_t_2 = PyNumber_Add(__pyx_v_header, __pyx_v_vertices); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 288, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __pyx_t_4 = PyNumber_Add(__pyx_t_2, __pyx_v_tiles); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 288, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  if (!(likely(PyBytes_CheckExact(__pyx_t_4))||((__pyx_t_4) == Py_None)||(PyErr_Format(PyExc_TypeError, "Expected %.16s, got %.200s", "bytes", Py_TYPE(__pyx_t_4)->tp_name), 0))) __PYX_ERR(0, 288, __pyx_L1_error)
+  __pyx_r = ((PyObject*)__pyx_t_4);
+  __pyx_t_4 = 0;
+  goto __pyx_L0;
+
+  /* "wmo_utils.pyx":278
+ *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
+ * 
+ *     def liquid(self, group_index: int) -> bytes:             # <<<<<<<<<<<<<<
+ *         cdef BufferKey c_key_header = self._c_batchers[group_index].liquid_header()
+ *         header = PyMemoryView_FromMemory(c_key_header.data, c_key_header.size, PyBUF_READ).tobytes()
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_AddTraceback("wmo_utils.CWMOGeometryBatcher.liquid", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_header);
+  __Pyx_XDECREF(__pyx_v_vertices);
+  __Pyx_XDECREF(__pyx_v_tiles);
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "wmo_utils.pyx":290
+ *         return header + vertices + tiles
  * 
  *     def batch_count_info(self, group_index: int) -> CBatchCountInfo:             # <<<<<<<<<<<<<<
  *         return CBatchCountInfo(self._c_batchers[group_index].trans_batch_count()
@@ -4062,19 +4914,19 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_22bsp_faces(struct __
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_25batch_count_info(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_25batch_count_info(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_27batch_count_info(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_27batch_count_info(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("batch_count_info (wrapper)", 0);
-  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
+  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26batch_count_info(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26batch_count_info(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -4091,7 +4943,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("batch_count_info", 0);
 
-  /* "wmo_utils.pyx":184
+  /* "wmo_utils.pyx":291
  * 
  *     def batch_count_info(self, group_index: int) -> CBatchCountInfo:
  *         return CBatchCountInfo(self._c_batchers[group_index].trans_batch_count()             # <<<<<<<<<<<<<<
@@ -4099,32 +4951,32 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
  *                               , self._c_batchers[group_index].ext_batch_count())
  */
   __Pyx_XDECREF(__pyx_r);
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_CBatchCountInfo); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 184, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_CBatchCountInfo); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 291, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_3 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_3 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 184, __pyx_L1_error)
-  __pyx_t_4 = __Pyx_PyInt_From_uint16_t((__pyx_v_self->_c_batchers[__pyx_t_3])->trans_batch_count()); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 184, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_3 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 291, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyInt_From_uint16_t((__pyx_v_self->_c_batchers[__pyx_t_3])->trans_batch_count()); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 291, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
 
-  /* "wmo_utils.pyx":185
+  /* "wmo_utils.pyx":292
  *     def batch_count_info(self, group_index: int) -> CBatchCountInfo:
  *         return CBatchCountInfo(self._c_batchers[group_index].trans_batch_count()
  *                               , self._c_batchers[group_index].int_batch_count()             # <<<<<<<<<<<<<<
  *                               , self._c_batchers[group_index].ext_batch_count())
  * 
  */
-  __pyx_t_3 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_3 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 185, __pyx_L1_error)
-  __pyx_t_5 = __Pyx_PyInt_From_uint16_t((__pyx_v_self->_c_batchers[__pyx_t_3])->int_batch_count()); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 185, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_3 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 292, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyInt_From_uint16_t((__pyx_v_self->_c_batchers[__pyx_t_3])->int_batch_count()); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 292, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
 
-  /* "wmo_utils.pyx":186
+  /* "wmo_utils.pyx":293
  *         return CBatchCountInfo(self._c_batchers[group_index].trans_batch_count()
  *                               , self._c_batchers[group_index].int_batch_count()
  *                               , self._c_batchers[group_index].ext_batch_count())             # <<<<<<<<<<<<<<
  * 
  * 
  */
-  __pyx_t_3 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_3 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 186, __pyx_L1_error)
-  __pyx_t_6 = __Pyx_PyInt_From_uint16_t((__pyx_v_self->_c_batchers[__pyx_t_3])->ext_batch_count()); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 186, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_3 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 293, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyInt_From_uint16_t((__pyx_v_self->_c_batchers[__pyx_t_3])->ext_batch_count()); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 293, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __pyx_t_7 = NULL;
   __pyx_t_8 = 0;
@@ -4141,7 +4993,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
   #if CYTHON_FAST_PYCALL
   if (PyFunction_Check(__pyx_t_2)) {
     PyObject *__pyx_temp[4] = {__pyx_t_7, __pyx_t_4, __pyx_t_5, __pyx_t_6};
-    __pyx_t_1 = __Pyx_PyFunction_FastCall(__pyx_t_2, __pyx_temp+1-__pyx_t_8, 3+__pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 184, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyFunction_FastCall(__pyx_t_2, __pyx_temp+1-__pyx_t_8, 3+__pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 291, __pyx_L1_error)
     __Pyx_XDECREF(__pyx_t_7); __pyx_t_7 = 0;
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
@@ -4152,7 +5004,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
   #if CYTHON_FAST_PYCCALL
   if (__Pyx_PyFastCFunction_Check(__pyx_t_2)) {
     PyObject *__pyx_temp[4] = {__pyx_t_7, __pyx_t_4, __pyx_t_5, __pyx_t_6};
-    __pyx_t_1 = __Pyx_PyCFunction_FastCall(__pyx_t_2, __pyx_temp+1-__pyx_t_8, 3+__pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 184, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyCFunction_FastCall(__pyx_t_2, __pyx_temp+1-__pyx_t_8, 3+__pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 291, __pyx_L1_error)
     __Pyx_XDECREF(__pyx_t_7); __pyx_t_7 = 0;
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
@@ -4161,7 +5013,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
   } else
   #endif
   {
-    __pyx_t_9 = PyTuple_New(3+__pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 184, __pyx_L1_error)
+    __pyx_t_9 = PyTuple_New(3+__pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 291, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     if (__pyx_t_7) {
       __Pyx_GIVEREF(__pyx_t_7); PyTuple_SET_ITEM(__pyx_t_9, 0, __pyx_t_7); __pyx_t_7 = NULL;
@@ -4175,7 +5027,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
     __pyx_t_4 = 0;
     __pyx_t_5 = 0;
     __pyx_t_6 = 0;
-    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_t_2, __pyx_t_9, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 184, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_t_2, __pyx_t_9, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 291, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
   }
@@ -4184,8 +5036,8 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":183
- *         return PyMemoryView_FromMemory(c_key.data, c_key.size, PyBUF_READ).tobytes()
+  /* "wmo_utils.pyx":290
+ *         return header + vertices + tiles
  * 
  *     def batch_count_info(self, group_index: int) -> CBatchCountInfo:             # <<<<<<<<<<<<<<
  *         return CBatchCountInfo(self._c_batchers[group_index].trans_batch_count()
@@ -4209,7 +5061,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":189
+/* "wmo_utils.pyx":296
  * 
  * 
  *     def bounding_box(self, group_index: int) -> CBoundingBox:             # <<<<<<<<<<<<<<
@@ -4218,19 +5070,19 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_24batch_count_info(st
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_27bounding_box(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_27bounding_box(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_29bounding_box(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_29bounding_box(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("bounding_box (wrapper)", 0);
-  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
+  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28bounding_box(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28bounding_box(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
   struct wbs_kernel::bl_utils::math_utils::Vector3D const *__pyx_v_bb_min;
   struct wbs_kernel::bl_utils::math_utils::Vector3D const *__pyx_v_bb_max;
   PyObject *__pyx_r = NULL;
@@ -4249,27 +5101,27 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("bounding_box", 0);
 
-  /* "wmo_utils.pyx":190
+  /* "wmo_utils.pyx":297
  * 
  *     def bounding_box(self, group_index: int) -> CBoundingBox:
  *         cdef const Vector3D* bb_min = self._c_batchers[group_index].bb_min()             # <<<<<<<<<<<<<<
  *         cdef const Vector3D* bb_max = self._c_batchers[group_index].bb_max()
  *         return CBoundingBox((bb_min.x, bb_min.y, bb_min.z), (bb_max.x, bb_max.y, bb_max.z))
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 190, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 297, __pyx_L1_error)
   __pyx_v_bb_min = (__pyx_v_self->_c_batchers[__pyx_t_1])->bb_min();
 
-  /* "wmo_utils.pyx":191
+  /* "wmo_utils.pyx":298
  *     def bounding_box(self, group_index: int) -> CBoundingBox:
  *         cdef const Vector3D* bb_min = self._c_batchers[group_index].bb_min()
  *         cdef const Vector3D* bb_max = self._c_batchers[group_index].bb_max()             # <<<<<<<<<<<<<<
  *         return CBoundingBox((bb_min.x, bb_min.y, bb_min.z), (bb_max.x, bb_max.y, bb_max.z))
  * 
  */
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 191, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 298, __pyx_L1_error)
   __pyx_v_bb_max = (__pyx_v_self->_c_batchers[__pyx_t_1])->bb_max();
 
-  /* "wmo_utils.pyx":192
+  /* "wmo_utils.pyx":299
  *         cdef const Vector3D* bb_min = self._c_batchers[group_index].bb_min()
  *         cdef const Vector3D* bb_max = self._c_batchers[group_index].bb_max()
  *         return CBoundingBox((bb_min.x, bb_min.y, bb_min.z), (bb_max.x, bb_max.y, bb_max.z))             # <<<<<<<<<<<<<<
@@ -4277,15 +5129,15 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
  *     def get_last_error(self, group_index: int) -> CWMOGeometryBatcherError:
  */
   __Pyx_XDECREF(__pyx_r);
-  __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_CBoundingBox); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_CBoundingBox); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_bb_min->x); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_bb_min->x); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_5 = PyFloat_FromDouble(__pyx_v_bb_min->y); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_5 = PyFloat_FromDouble(__pyx_v_bb_min->y); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = PyFloat_FromDouble(__pyx_v_bb_min->z); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_6 = PyFloat_FromDouble(__pyx_v_bb_min->z); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
-  __pyx_t_7 = PyTuple_New(3); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_7 = PyTuple_New(3); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_7);
   __Pyx_GIVEREF(__pyx_t_4);
   PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_4);
@@ -4296,13 +5148,13 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   __pyx_t_4 = 0;
   __pyx_t_5 = 0;
   __pyx_t_6 = 0;
-  __pyx_t_6 = PyFloat_FromDouble(__pyx_v_bb_max->x); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_6 = PyFloat_FromDouble(__pyx_v_bb_max->x); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
-  __pyx_t_5 = PyFloat_FromDouble(__pyx_v_bb_max->y); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_5 = PyFloat_FromDouble(__pyx_v_bb_max->y); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_bb_max->z); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_4 = PyFloat_FromDouble(__pyx_v_bb_max->z); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_8 = PyTuple_New(3); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 192, __pyx_L1_error)
+  __pyx_t_8 = PyTuple_New(3); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 299, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_8);
   __Pyx_GIVEREF(__pyx_t_6);
   PyTuple_SET_ITEM(__pyx_t_8, 0, __pyx_t_6);
@@ -4328,7 +5180,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   #if CYTHON_FAST_PYCALL
   if (PyFunction_Check(__pyx_t_3)) {
     PyObject *__pyx_temp[3] = {__pyx_t_4, __pyx_t_7, __pyx_t_8};
-    __pyx_t_2 = __Pyx_PyFunction_FastCall(__pyx_t_3, __pyx_temp+1-__pyx_t_9, 2+__pyx_t_9); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 192, __pyx_L1_error)
+    __pyx_t_2 = __Pyx_PyFunction_FastCall(__pyx_t_3, __pyx_temp+1-__pyx_t_9, 2+__pyx_t_9); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 299, __pyx_L1_error)
     __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_GOTREF(__pyx_t_2);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
@@ -4338,7 +5190,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   #if CYTHON_FAST_PYCCALL
   if (__Pyx_PyFastCFunction_Check(__pyx_t_3)) {
     PyObject *__pyx_temp[3] = {__pyx_t_4, __pyx_t_7, __pyx_t_8};
-    __pyx_t_2 = __Pyx_PyCFunction_FastCall(__pyx_t_3, __pyx_temp+1-__pyx_t_9, 2+__pyx_t_9); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 192, __pyx_L1_error)
+    __pyx_t_2 = __Pyx_PyCFunction_FastCall(__pyx_t_3, __pyx_temp+1-__pyx_t_9, 2+__pyx_t_9); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 299, __pyx_L1_error)
     __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_GOTREF(__pyx_t_2);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
@@ -4346,7 +5198,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   } else
   #endif
   {
-    __pyx_t_5 = PyTuple_New(2+__pyx_t_9); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 192, __pyx_L1_error)
+    __pyx_t_5 = PyTuple_New(2+__pyx_t_9); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 299, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     if (__pyx_t_4) {
       __Pyx_GIVEREF(__pyx_t_4); PyTuple_SET_ITEM(__pyx_t_5, 0, __pyx_t_4); __pyx_t_4 = NULL;
@@ -4357,7 +5209,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
     PyTuple_SET_ITEM(__pyx_t_5, 1+__pyx_t_9, __pyx_t_8);
     __pyx_t_7 = 0;
     __pyx_t_8 = 0;
-    __pyx_t_2 = __Pyx_PyObject_Call(__pyx_t_3, __pyx_t_5, NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 192, __pyx_L1_error)
+    __pyx_t_2 = __Pyx_PyObject_Call(__pyx_t_3, __pyx_t_5, NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 299, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   }
@@ -4366,7 +5218,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   __pyx_t_2 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":189
+  /* "wmo_utils.pyx":296
  * 
  * 
  *     def bounding_box(self, group_index: int) -> CBoundingBox:             # <<<<<<<<<<<<<<
@@ -4391,7 +5243,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":194
+/* "wmo_utils.pyx":301
  *         return CBoundingBox((bb_min.x, bb_min.y, bb_min.z), (bb_max.x, bb_max.y, bb_max.z))
  * 
  *     def get_last_error(self, group_index: int) -> CWMOGeometryBatcherError:             # <<<<<<<<<<<<<<
@@ -4400,19 +5252,19 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_26bounding_box(struct
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_29get_last_error(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_29get_last_error(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_31get_last_error(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index); /*proto*/
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_31get_last_error(PyObject *__pyx_v_self, PyObject *__pyx_v_group_index) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("get_last_error (wrapper)", 0);
-  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
+  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30get_last_error(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v_group_index));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30get_last_error(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, PyObject *__pyx_v_group_index) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   std::vector<wbs_kernel::bl_utils::mesh::wmo::WMOGeometryBatcher *> ::size_type __pyx_t_1;
@@ -4422,7 +5274,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(stru
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_last_error", 0);
 
-  /* "wmo_utils.pyx":195
+  /* "wmo_utils.pyx":302
  * 
  *     def get_last_error(self, group_index: int) -> CWMOGeometryBatcherError:
  *         return self._c_batchers[group_index].get_last_error()             # <<<<<<<<<<<<<<
@@ -4430,14 +5282,14 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(stru
  *     def __dealloc__(self):
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 195, __pyx_L1_error)
-  __pyx_t_2 = __Pyx_PyInt_From_enum__wbs_kernel_3a__3a_bl_utils_3a__3a_mesh_3a__3a_wmo_3a__3a_WMOGeometryBatcherError((__pyx_v_self->_c_batchers[__pyx_t_1])->get_last_error()); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 195, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_size_t(__pyx_v_group_index); if (unlikely((__pyx_t_1 == (size_t)-1) && PyErr_Occurred())) __PYX_ERR(0, 302, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_From_enum__wbs_kernel_3a__3a_bl_utils_3a__3a_mesh_3a__3a_wmo_3a__3a_WMOGeometryBatcherError((__pyx_v_self->_c_batchers[__pyx_t_1])->get_last_error()); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 302, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_r = __pyx_t_2;
   __pyx_t_2 = 0;
   goto __pyx_L0;
 
-  /* "wmo_utils.pyx":194
+  /* "wmo_utils.pyx":301
  *         return CBoundingBox((bb_min.x, bb_min.y, bb_min.z), (bb_max.x, bb_max.y, bb_max.z))
  * 
  *     def get_last_error(self, group_index: int) -> CWMOGeometryBatcherError:             # <<<<<<<<<<<<<<
@@ -4456,7 +5308,7 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(stru
   return __pyx_r;
 }
 
-/* "wmo_utils.pyx":197
+/* "wmo_utils.pyx":304
  *         return self._c_batchers[group_index].get_last_error()
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
@@ -4465,24 +5317,24 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_28get_last_error(stru
  */
 
 /* Python wrapper */
-static void __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_31__dealloc__(PyObject *__pyx_v_self); /*proto*/
-static void __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_31__dealloc__(PyObject *__pyx_v_self) {
+static void __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_33__dealloc__(PyObject *__pyx_v_self); /*proto*/
+static void __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_33__dealloc__(PyObject *__pyx_v_self) {
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__dealloc__ (wrapper)", 0);
-  __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self));
+  __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__dealloc__(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
 }
 
-static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self) {
+static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__dealloc__(struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self) {
   std::vector<wbs_kernel::bl_utils::mesh::wmo::WMOGeometryBatcher *> ::iterator __pyx_v_it;
   wbs_kernel::bl_utils::mesh::wmo::WMOGeometryBatcher *__pyx_v_ptr;
   __Pyx_RefNannyDeclarations
   int __pyx_t_1;
   __Pyx_RefNannySetupContext("__dealloc__", 0);
 
-  /* "wmo_utils.pyx":198
+  /* "wmo_utils.pyx":305
  * 
  *     def __dealloc__(self):
  *        cdef vector[WMOGeometryBatcher*].iterator it = self._c_batchers.begin()             # <<<<<<<<<<<<<<
@@ -4491,7 +5343,7 @@ static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx
  */
   __pyx_v_it = __pyx_v_self->_c_batchers.begin();
 
-  /* "wmo_utils.pyx":201
+  /* "wmo_utils.pyx":308
  *        cdef WMOGeometryBatcher * ptr
  * 
  *        while it != self._c_batchers.end():             # <<<<<<<<<<<<<<
@@ -4502,7 +5354,7 @@ static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx
     __pyx_t_1 = ((__pyx_v_it != __pyx_v_self->_c_batchers.end()) != 0);
     if (!__pyx_t_1) break;
 
-    /* "wmo_utils.pyx":202
+    /* "wmo_utils.pyx":309
  * 
  *        while it != self._c_batchers.end():
  *            ptr = deref(it)             # <<<<<<<<<<<<<<
@@ -4511,7 +5363,7 @@ static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx
  */
     __pyx_v_ptr = (*__pyx_v_it);
 
-    /* "wmo_utils.pyx":203
+    /* "wmo_utils.pyx":310
  *        while it != self._c_batchers.end():
  *            ptr = deref(it)
  *            del ptr             # <<<<<<<<<<<<<<
@@ -4519,7 +5371,7 @@ static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx
  */
     delete __pyx_v_ptr;
 
-    /* "wmo_utils.pyx":204
+    /* "wmo_utils.pyx":311
  *            ptr = deref(it)
  *            del ptr
  *            inc(it)             # <<<<<<<<<<<<<<
@@ -4527,7 +5379,7 @@ static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx
     (void)((++__pyx_v_it));
   }
 
-  /* "wmo_utils.pyx":197
+  /* "wmo_utils.pyx":304
  *         return self._c_batchers[group_index].get_last_error()
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
@@ -4546,19 +5398,19 @@ static void __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_30__dealloc__(struct __pyx
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_33__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_33__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_35__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_35__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__reduce_cython__ (wrapper)", 0);
-  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__reduce_cython__(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self));
+  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_34__reduce_cython__(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self) {
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_34__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -4603,19 +5455,19 @@ static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_32__reduce_cython__(C
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_35__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state); /*proto*/
-static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_35__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_37__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state); /*proto*/
+static PyObject *__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_37__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__setstate_cython__ (wrapper)", 0);
-  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_34__setstate_cython__(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v___pyx_state));
+  __pyx_r = __pyx_pf_9wmo_utils_19CWMOGeometryBatcher_36__setstate_cython__(((struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *)__pyx_v_self), ((PyObject *)__pyx_v___pyx_state));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_34__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pf_9wmo_utils_19CWMOGeometryBatcher_36__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_9wmo_utils_CWMOGeometryBatcher *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -4804,7 +5656,7 @@ static void __pyx_tp_dealloc_9wmo_utils_CWMOGeometryBatcher(PyObject *o) {
     PyObject *etype, *eval, *etb;
     PyErr_Fetch(&etype, &eval, &etb);
     __Pyx_SET_REFCNT(o, Py_REFCNT(o) + 1);
-    __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_31__dealloc__(o);
+    __pyx_pw_9wmo_utils_19CWMOGeometryBatcher_33__dealloc__(o);
     __Pyx_SET_REFCNT(o, Py_REFCNT(o) - 1);
     PyErr_Restore(etype, eval, etb);
   }
@@ -4825,11 +5677,12 @@ static PyMethodDef __pyx_methods_9wmo_utils_CWMOGeometryBatcher[] = {
   {"vertex_colors2", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_19vertex_colors2, METH_O, 0},
   {"bsp_nodes", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_21bsp_nodes, METH_O, 0},
   {"bsp_faces", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_23bsp_faces, METH_O, 0},
-  {"batch_count_info", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_25batch_count_info, METH_O, 0},
-  {"bounding_box", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_27bounding_box, METH_O, 0},
-  {"get_last_error", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_29get_last_error, METH_O, 0},
-  {"__reduce_cython__", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_33__reduce_cython__, METH_NOARGS, 0},
-  {"__setstate_cython__", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_35__setstate_cython__, METH_O, 0},
+  {"liquid", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_25liquid, METH_O, 0},
+  {"batch_count_info", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_27batch_count_info, METH_O, 0},
+  {"bounding_box", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_29bounding_box, METH_O, 0},
+  {"get_last_error", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_31get_last_error, METH_O, 0},
+  {"__reduce_cython__", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_35__reduce_cython__, METH_NOARGS, 0},
+  {"__setstate_cython__", (PyCFunction)__pyx_pw_9wmo_utils_19CWMOGeometryBatcher_37__setstate_cython__, METH_O, 0},
   {0, 0, 0, 0}
 };
 
@@ -4959,7 +5812,9 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_CWMOGeometryBatcherError, __pyx_k_CWMOGeometryBatcherError, sizeof(__pyx_k_CWMOGeometryBatcherError), 0, 0, 1, 1},
   {&__pyx_n_s_Enum, __pyx_k_Enum, sizeof(__pyx_k_Enum), 0, 0, 1, 1},
   {&__pyx_n_s_LOOSE_MATERIAL_ID, __pyx_k_LOOSE_MATERIAL_ID, sizeof(__pyx_k_LOOSE_MATERIAL_ID), 0, 0, 1, 1},
+  {&__pyx_n_s_LiquidExportParams, __pyx_k_LiquidExportParams, sizeof(__pyx_k_LiquidExportParams), 0, 0, 1, 1},
   {&__pyx_n_s_List, __pyx_k_List, sizeof(__pyx_k_List), 0, 0, 1, 1},
+  {&__pyx_n_s_Matrix, __pyx_k_Matrix, sizeof(__pyx_k_Matrix), 0, 0, 1, 1},
   {&__pyx_n_s_NO_ERROR, __pyx_k_NO_ERROR, sizeof(__pyx_k_NO_ERROR), 0, 0, 1, 1},
   {&__pyx_n_s_Optional, __pyx_k_Optional, sizeof(__pyx_k_Optional), 0, 0, 1, 1},
   {&__pyx_n_s_Tuple, __pyx_k_Tuple, sizeof(__pyx_k_Tuple), 0, 0, 1, 1},
@@ -4968,6 +5823,8 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_WMOGeometryBatcherMeshParams___i, __pyx_k_WMOGeometryBatcherMeshParams___i, sizeof(__pyx_k_WMOGeometryBatcherMeshParams___i), 0, 0, 1, 1},
   {&__pyx_n_u_bool, __pyx_k_bool, sizeof(__pyx_k_bool), 0, 1, 0, 1},
   {&__pyx_n_s_cline_in_traceback, __pyx_k_cline_in_traceback, sizeof(__pyx_k_cline_in_traceback), 0, 0, 1, 1},
+  {&__pyx_n_s_collision_mesh_matrix_world, __pyx_k_collision_mesh_matrix_world, sizeof(__pyx_k_collision_mesh_matrix_world), 0, 0, 1, 1},
+  {&__pyx_n_s_collision_mesh_pointer, __pyx_k_collision_mesh_pointer, sizeof(__pyx_k_collision_mesh_pointer), 0, 0, 1, 1},
   {&__pyx_n_s_doc, __pyx_k_doc, sizeof(__pyx_k_doc), 0, 0, 1, 1},
   {&__pyx_n_s_enum, __pyx_k_enum, sizeof(__pyx_k_enum), 0, 0, 1, 1},
   {&__pyx_n_s_enumerate, __pyx_k_enumerate, sizeof(__pyx_k_enumerate), 0, 0, 1, 1},
@@ -4975,9 +5832,16 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_import, __pyx_k_import, sizeof(__pyx_k_import), 0, 0, 1, 1},
   {&__pyx_n_s_init, __pyx_k_init, sizeof(__pyx_k_init), 0, 0, 1, 1},
   {&__pyx_n_u_int, __pyx_k_int, sizeof(__pyx_k_int), 0, 1, 0, 1},
+  {&__pyx_n_s_is_water, __pyx_k_is_water, sizeof(__pyx_k_is_water), 0, 0, 1, 1},
+  {&__pyx_n_s_liquid_mesh_matrix_world, __pyx_k_liquid_mesh_matrix_world, sizeof(__pyx_k_liquid_mesh_matrix_world), 0, 0, 1, 1},
+  {&__pyx_n_s_liquid_mesh_pointer, __pyx_k_liquid_mesh_pointer, sizeof(__pyx_k_liquid_mesh_pointer), 0, 0, 1, 1},
+  {&__pyx_n_s_liquid_params, __pyx_k_liquid_params, sizeof(__pyx_k_liquid_params), 0, 0, 1, 1},
   {&__pyx_n_s_main, __pyx_k_main, sizeof(__pyx_k_main), 0, 0, 1, 1},
+  {&__pyx_n_s_mat_id, __pyx_k_mat_id, sizeof(__pyx_k_mat_id), 0, 0, 1, 1},
   {&__pyx_n_s_material_mapping, __pyx_k_material_mapping, sizeof(__pyx_k_material_mapping), 0, 0, 1, 1},
+  {&__pyx_n_s_mathutils, __pyx_k_mathutils, sizeof(__pyx_k_mathutils), 0, 0, 1, 1},
   {&__pyx_n_s_max, __pyx_k_max, sizeof(__pyx_k_max), 0, 0, 1, 1},
+  {&__pyx_n_s_mesh_matrix_world, __pyx_k_mesh_matrix_world, sizeof(__pyx_k_mesh_matrix_world), 0, 0, 1, 1},
   {&__pyx_n_s_mesh_pointer, __pyx_k_mesh_pointer, sizeof(__pyx_k_mesh_pointer), 0, 0, 1, 1},
   {&__pyx_n_s_metaclass, __pyx_k_metaclass, sizeof(__pyx_k_metaclass), 0, 0, 1, 1},
   {&__pyx_n_s_min, __pyx_k_min, sizeof(__pyx_k_min), 0, 0, 1, 1},
@@ -4991,6 +5855,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_param_entries, __pyx_k_param_entries, sizeof(__pyx_k_param_entries), 0, 0, 1, 1},
   {&__pyx_n_s_prepare, __pyx_k_prepare, sizeof(__pyx_k_prepare), 0, 0, 1, 1},
   {&__pyx_n_s_qualname, __pyx_k_qualname, sizeof(__pyx_k_qualname), 0, 0, 1, 1},
+  {&__pyx_n_s_range, __pyx_k_range, sizeof(__pyx_k_range), 0, 0, 1, 1},
   {&__pyx_n_s_reduce, __pyx_k_reduce, sizeof(__pyx_k_reduce), 0, 0, 1, 1},
   {&__pyx_n_s_reduce_cython, __pyx_k_reduce_cython, sizeof(__pyx_k_reduce_cython), 0, 0, 1, 1},
   {&__pyx_n_s_reduce_ex, __pyx_k_reduce_ex, sizeof(__pyx_k_reduce_ex), 0, 0, 1, 1},
@@ -5001,14 +5866,18 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_test, __pyx_k_test, sizeof(__pyx_k_test), 0, 0, 1, 1},
   {&__pyx_n_s_tobytes, __pyx_k_tobytes, sizeof(__pyx_k_tobytes), 0, 0, 1, 1},
   {&__pyx_n_s_typing, __pyx_k_typing, sizeof(__pyx_k_typing), 0, 0, 1, 1},
+  {&__pyx_n_s_use_custom_normals, __pyx_k_use_custom_normals, sizeof(__pyx_k_use_custom_normals), 0, 0, 1, 1},
   {&__pyx_n_s_use_large_material_id, __pyx_k_use_large_material_id, sizeof(__pyx_k_use_large_material_id), 0, 0, 1, 1},
   {&__pyx_n_s_use_vertex_color, __pyx_k_use_vertex_color, sizeof(__pyx_k_use_vertex_color), 0, 0, 1, 1},
   {&__pyx_n_s_vg_collision_index, __pyx_k_vg_collision_index, sizeof(__pyx_k_vg_collision_index), 0, 0, 1, 1},
   {&__pyx_n_s_wmo_utils, __pyx_k_wmo_utils, sizeof(__pyx_k_wmo_utils), 0, 0, 1, 1},
+  {&__pyx_n_s_x_tiles, __pyx_k_x_tiles, sizeof(__pyx_k_x_tiles), 0, 0, 1, 1},
+  {&__pyx_n_s_y_tiles, __pyx_k_y_tiles, sizeof(__pyx_k_y_tiles), 0, 0, 1, 1},
   {0, 0, 0, 0, 0, 0, 0}
 };
 static CYTHON_SMALL_CODE int __Pyx_InitCachedBuiltins(void) {
-  __pyx_builtin_enumerate = __Pyx_GetBuiltinName(__pyx_n_s_enumerate); if (!__pyx_builtin_enumerate) __PYX_ERR(0, 76, __pyx_L1_error)
+  __pyx_builtin_enumerate = __Pyx_GetBuiltinName(__pyx_n_s_enumerate); if (!__pyx_builtin_enumerate) __PYX_ERR(0, 114, __pyx_L1_error)
+  __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 118, __pyx_L1_error)
   __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(1, 2, __pyx_L1_error)
   return 0;
   __pyx_L1_error:;
@@ -5038,41 +5907,41 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_GOTREF(__pyx_tuple__2);
   __Pyx_GIVEREF(__pyx_tuple__2);
 
-  /* "wmo_utils.pyx":17
+  /* "wmo_utils.pyx":20
  *     n_batches_ext: int
  * 
  *     def __init__(self, n_batches_trans: int, n_batches_int: int, n_batches_ext: int):             # <<<<<<<<<<<<<<
  *         self.n_batches_trans = n_batches_trans
  *         self.n_batches_int = n_batches_int
  */
-  __pyx_tuple__3 = PyTuple_Pack(4, __pyx_n_s_self, __pyx_n_s_n_batches_trans, __pyx_n_s_n_batches_int, __pyx_n_s_n_batches_ext); if (unlikely(!__pyx_tuple__3)) __PYX_ERR(0, 17, __pyx_L1_error)
+  __pyx_tuple__3 = PyTuple_Pack(4, __pyx_n_s_self, __pyx_n_s_n_batches_trans, __pyx_n_s_n_batches_int, __pyx_n_s_n_batches_ext); if (unlikely(!__pyx_tuple__3)) __PYX_ERR(0, 20, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__3);
   __Pyx_GIVEREF(__pyx_tuple__3);
-  __pyx_codeobj__4 = (PyObject*)__Pyx_PyCode_New(4, 0, 4, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__3, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_wmo_utils_pyx, __pyx_n_s_init, 17, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__4)) __PYX_ERR(0, 17, __pyx_L1_error)
+  __pyx_codeobj__4 = (PyObject*)__Pyx_PyCode_New(4, 0, 4, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__3, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_wmo_utils_pyx, __pyx_n_s_init, 20, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__4)) __PYX_ERR(0, 20, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":26
+  /* "wmo_utils.pyx":29
  *     max: Tuple[float, float, float]
  * 
  *     def __init__(self, min: Tuple[float, float, float], max: Tuple[float, float, float]):             # <<<<<<<<<<<<<<
  *         self.min = min
  *         self.max = max
  */
-  __pyx_tuple__5 = PyTuple_Pack(3, __pyx_n_s_self, __pyx_n_s_min, __pyx_n_s_max); if (unlikely(!__pyx_tuple__5)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_tuple__5 = PyTuple_Pack(3, __pyx_n_s_self, __pyx_n_s_min, __pyx_n_s_max); if (unlikely(!__pyx_tuple__5)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__5);
   __Pyx_GIVEREF(__pyx_tuple__5);
-  __pyx_codeobj__6 = (PyObject*)__Pyx_PyCode_New(3, 0, 3, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__5, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_wmo_utils_pyx, __pyx_n_s_init, 26, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__6)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_codeobj__6 = (PyObject*)__Pyx_PyCode_New(3, 0, 3, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__5, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_wmo_utils_pyx, __pyx_n_s_init, 29, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__6)) __PYX_ERR(0, 29, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":43
- *     material_mapping: List[int]
+  /* "wmo_utils.pyx":59
+ *     liquid_params: Optional[LiquidExportParams]
  * 
  *     def __init__(self             # <<<<<<<<<<<<<<
  *                 , mesh_pointer: int
- *                 , use_large_material_id: bool
+ *                 , mesh_matrix_world: mathutils.Matrix
  */
-  __pyx_tuple__7 = PyTuple_Pack(7, __pyx_n_s_self, __pyx_n_s_mesh_pointer, __pyx_n_s_use_large_material_id, __pyx_n_s_use_vertex_color, __pyx_n_s_vg_collision_index, __pyx_n_s_node_size, __pyx_n_s_material_mapping); if (unlikely(!__pyx_tuple__7)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __pyx_tuple__7 = PyTuple_Pack(12, __pyx_n_s_self, __pyx_n_s_mesh_pointer, __pyx_n_s_mesh_matrix_world, __pyx_n_s_collision_mesh_pointer, __pyx_n_s_collision_mesh_matrix_world, __pyx_n_s_use_large_material_id, __pyx_n_s_use_vertex_color, __pyx_n_s_use_custom_normals, __pyx_n_s_vg_collision_index, __pyx_n_s_node_size, __pyx_n_s_material_mapping, __pyx_n_s_liquid_params); if (unlikely(!__pyx_tuple__7)) __PYX_ERR(0, 59, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__7);
   __Pyx_GIVEREF(__pyx_tuple__7);
-  __pyx_codeobj__8 = (PyObject*)__Pyx_PyCode_New(7, 0, 7, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__7, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_wmo_utils_pyx, __pyx_n_s_init, 43, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__8)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __pyx_codeobj__8 = (PyObject*)__Pyx_PyCode_New(12, 0, 12, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__7, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_wmo_utils_pyx, __pyx_n_s_init, 59, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__8)) __PYX_ERR(0, 59, __pyx_L1_error)
   __Pyx_RefNannyFinishContext();
   return 0;
   __pyx_L1_error:;
@@ -5135,15 +6004,15 @@ static int __Pyx_modinit_type_init_code(void) {
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__Pyx_modinit_type_init_code", 0);
   /*--- Type init code ---*/
-  if (PyType_Ready(&__pyx_type_9wmo_utils_CWMOGeometryBatcher) < 0) __PYX_ERR(0, 65, __pyx_L1_error)
+  if (PyType_Ready(&__pyx_type_9wmo_utils_CWMOGeometryBatcher) < 0) __PYX_ERR(0, 98, __pyx_L1_error)
   #if PY_VERSION_HEX < 0x030800B1
   __pyx_type_9wmo_utils_CWMOGeometryBatcher.tp_print = 0;
   #endif
   if ((CYTHON_USE_TYPE_SLOTS && CYTHON_USE_PYTYPE_LOOKUP) && likely(!__pyx_type_9wmo_utils_CWMOGeometryBatcher.tp_dictoffset && __pyx_type_9wmo_utils_CWMOGeometryBatcher.tp_getattro == PyObject_GenericGetAttr)) {
     __pyx_type_9wmo_utils_CWMOGeometryBatcher.tp_getattro = __Pyx_PyObject_GenericGetAttr;
   }
-  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_CWMOGeometryBatcher, (PyObject *)&__pyx_type_9wmo_utils_CWMOGeometryBatcher) < 0) __PYX_ERR(0, 65, __pyx_L1_error)
-  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_9wmo_utils_CWMOGeometryBatcher) < 0) __PYX_ERR(0, 65, __pyx_L1_error)
+  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_CWMOGeometryBatcher, (PyObject *)&__pyx_type_9wmo_utils_CWMOGeometryBatcher) < 0) __PYX_ERR(0, 98, __pyx_L1_error)
+  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_9wmo_utils_CWMOGeometryBatcher) < 0) __PYX_ERR(0, 98, __pyx_L1_error)
   __pyx_ptype_9wmo_utils_CWMOGeometryBatcher = &__pyx_type_9wmo_utils_CWMOGeometryBatcher;
   __Pyx_RefNannyFinishContext();
   return 0;
@@ -5380,14 +6249,14 @@ if (!__Pyx_RefNanny) {
   if (__Pyx_patch_abc() < 0) __PYX_ERR(0, 1, __pyx_L1_error)
   #endif
 
-  /* "wmo_utils.pyx":7
- * from cython.operator cimport dereference as deref, preincrement as inc
+  /* "wmo_utils.pyx":8
+ * from libc.stdlib cimport malloc, free
  * 
  * from typing import Tuple, Optional, List             # <<<<<<<<<<<<<<
  * 
  * from enum import Enum
  */
-  __pyx_t_1 = PyList_New(3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 7, __pyx_L1_error)
+  __pyx_t_1 = PyList_New(3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_INCREF(__pyx_n_s_Tuple);
   __Pyx_GIVEREF(__pyx_n_s_Tuple);
@@ -5398,108 +6267,120 @@ if (!__Pyx_RefNanny) {
   __Pyx_INCREF(__pyx_n_s_List);
   __Pyx_GIVEREF(__pyx_n_s_List);
   PyList_SET_ITEM(__pyx_t_1, 2, __pyx_n_s_List);
-  __pyx_t_2 = __Pyx_Import(__pyx_n_s_typing, __pyx_t_1, -1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 7, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_Import(__pyx_n_s_typing, __pyx_t_1, -1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = __Pyx_ImportFrom(__pyx_t_2, __pyx_n_s_Tuple); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 7, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_ImportFrom(__pyx_t_2, __pyx_n_s_Tuple); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_Tuple, __pyx_t_1) < 0) __PYX_ERR(0, 7, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_Tuple, __pyx_t_1) < 0) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = __Pyx_ImportFrom(__pyx_t_2, __pyx_n_s_Optional); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 7, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_ImportFrom(__pyx_t_2, __pyx_n_s_Optional); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_Optional, __pyx_t_1) < 0) __PYX_ERR(0, 7, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_Optional, __pyx_t_1) < 0) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = __Pyx_ImportFrom(__pyx_t_2, __pyx_n_s_List); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 7, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_ImportFrom(__pyx_t_2, __pyx_n_s_List); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_List, __pyx_t_1) < 0) __PYX_ERR(0, 7, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_List, __pyx_t_1) < 0) __PYX_ERR(0, 8, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "wmo_utils.pyx":9
+  /* "wmo_utils.pyx":10
  * from typing import Tuple, Optional, List
  * 
  * from enum import Enum             # <<<<<<<<<<<<<<
  * 
- * 
+ * import mathutils
  */
-  __pyx_t_2 = PyList_New(1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 9, __pyx_L1_error)
+  __pyx_t_2 = PyList_New(1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 10, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_INCREF(__pyx_n_s_Enum);
   __Pyx_GIVEREF(__pyx_n_s_Enum);
   PyList_SET_ITEM(__pyx_t_2, 0, __pyx_n_s_Enum);
-  __pyx_t_1 = __Pyx_Import(__pyx_n_s_enum, __pyx_t_2, -1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 9, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_Import(__pyx_n_s_enum, __pyx_t_2, -1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 10, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __pyx_t_2 = __Pyx_ImportFrom(__pyx_t_1, __pyx_n_s_Enum); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 9, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_ImportFrom(__pyx_t_1, __pyx_n_s_Enum); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 10, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_Enum, __pyx_t_2) < 0) __PYX_ERR(0, 9, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_Enum, __pyx_t_2) < 0) __PYX_ERR(0, 10, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
   /* "wmo_utils.pyx":12
+ * from enum import Enum
+ * 
+ * import mathutils             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+  __pyx_t_1 = __Pyx_Import(__pyx_n_s_mathutils, 0, -1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 12, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_mathutils, __pyx_t_1) < 0) __PYX_ERR(0, 12, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "wmo_utils.pyx":15
  * 
  * 
  * class CBatchCountInfo:             # <<<<<<<<<<<<<<
  *     n_batches_trans: int
  *     n_batches_int: int
  */
-  __pyx_t_1 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_CBatchCountInfo, __pyx_n_s_CBatchCountInfo, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 12, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_CBatchCountInfo, __pyx_n_s_CBatchCountInfo, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 15, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
 
-  /* "wmo_utils.pyx":17
+  /* "wmo_utils.pyx":20
  *     n_batches_ext: int
  * 
  *     def __init__(self, n_batches_trans: int, n_batches_int: int, n_batches_ext: int):             # <<<<<<<<<<<<<<
  *         self.n_batches_trans = n_batches_trans
  *         self.n_batches_int = n_batches_int
  */
-  __pyx_t_2 = __Pyx_PyDict_NewPresized(3); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 17, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyDict_NewPresized(3); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 20, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  if (PyDict_SetItem(__pyx_t_2, __pyx_n_s_n_batches_trans, __pyx_n_u_int) < 0) __PYX_ERR(0, 17, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_2, __pyx_n_s_n_batches_int, __pyx_n_u_int) < 0) __PYX_ERR(0, 17, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_2, __pyx_n_s_n_batches_ext, __pyx_n_u_int) < 0) __PYX_ERR(0, 17, __pyx_L1_error)
-  __pyx_t_3 = __Pyx_CyFunction_New(&__pyx_mdef_9wmo_utils_15CBatchCountInfo_1__init__, 0, __pyx_n_s_CBatchCountInfo___init, NULL, __pyx_n_s_wmo_utils, __pyx_d, ((PyObject *)__pyx_codeobj__4)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 17, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_2, __pyx_n_s_n_batches_trans, __pyx_n_u_int) < 0) __PYX_ERR(0, 20, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_2, __pyx_n_s_n_batches_int, __pyx_n_u_int) < 0) __PYX_ERR(0, 20, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_2, __pyx_n_s_n_batches_ext, __pyx_n_u_int) < 0) __PYX_ERR(0, 20, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_CyFunction_New(&__pyx_mdef_9wmo_utils_15CBatchCountInfo_1__init__, 0, __pyx_n_s_CBatchCountInfo___init, NULL, __pyx_n_s_wmo_utils, __pyx_d, ((PyObject *)__pyx_codeobj__4)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 20, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_3, __pyx_t_2);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  if (__Pyx_SetNameInClass(__pyx_t_1, __pyx_n_s_init, __pyx_t_3) < 0) __PYX_ERR(0, 17, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_1, __pyx_n_s_init, __pyx_t_3) < 0) __PYX_ERR(0, 20, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-  /* "wmo_utils.pyx":12
+  /* "wmo_utils.pyx":15
  * 
  * 
  * class CBatchCountInfo:             # <<<<<<<<<<<<<<
  *     n_batches_trans: int
  *     n_batches_int: int
  */
-  __pyx_t_3 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_CBatchCountInfo, __pyx_empty_tuple, __pyx_t_1, NULL, 0, 1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 12, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_CBatchCountInfo, __pyx_empty_tuple, __pyx_t_1, NULL, 0, 1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 15, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_CBatchCountInfo, __pyx_t_3) < 0) __PYX_ERR(0, 12, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_CBatchCountInfo, __pyx_t_3) < 0) __PYX_ERR(0, 15, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "wmo_utils.pyx":22
+  /* "wmo_utils.pyx":25
  *         self.n_batches_ext = n_batches_ext
  * 
  * class CBoundingBox:             # <<<<<<<<<<<<<<
  *     min: Tuple[float, float, float]
  *     max: Tuple[float, float, float]
  */
-  __pyx_t_1 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_CBoundingBox, __pyx_n_s_CBoundingBox, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 22, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_CBoundingBox, __pyx_n_s_CBoundingBox, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 25, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
 
-  /* "wmo_utils.pyx":26
+  /* "wmo_utils.pyx":29
  *     max: Tuple[float, float, float]
  * 
  *     def __init__(self, min: Tuple[float, float, float], max: Tuple[float, float, float]):             # <<<<<<<<<<<<<<
  *         self.min = min
  *         self.max = max
  */
-  __pyx_t_3 = __Pyx_PyDict_NewPresized(2); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(2); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_Tuple); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_Tuple); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_4 = PyTuple_New(3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_4 = PyTuple_New(3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_INCREF(((PyObject *)(&PyFloat_Type)));
   __Pyx_GIVEREF(((PyObject *)(&PyFloat_Type)));
@@ -5510,15 +6391,15 @@ if (!__Pyx_RefNanny) {
   __Pyx_INCREF(((PyObject *)(&PyFloat_Type)));
   __Pyx_GIVEREF(((PyObject *)(&PyFloat_Type)));
   PyTuple_SET_ITEM(__pyx_t_4, 2, ((PyObject *)(&PyFloat_Type)));
-  __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_min, __pyx_t_5) < 0) __PYX_ERR(0, 26, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_min, __pyx_t_5) < 0) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-  __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_n_s_Tuple); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_n_s_Tuple); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_4 = PyTuple_New(3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_4 = PyTuple_New(3); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_INCREF(((PyObject *)(&PyFloat_Type)));
   __Pyx_GIVEREF(((PyObject *)(&PyFloat_Type)));
@@ -5529,149 +6410,222 @@ if (!__Pyx_RefNanny) {
   __Pyx_INCREF(((PyObject *)(&PyFloat_Type)));
   __Pyx_GIVEREF(((PyObject *)(&PyFloat_Type)));
   PyTuple_SET_ITEM(__pyx_t_4, 2, ((PyObject *)(&PyFloat_Type)));
-  __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_t_5, __pyx_t_4); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_t_5, __pyx_t_4); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_max, __pyx_t_2) < 0) __PYX_ERR(0, 26, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_max, __pyx_t_2) < 0) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_9wmo_utils_12CBoundingBox_1__init__, 0, __pyx_n_s_CBoundingBox___init, NULL, __pyx_n_s_wmo_utils, __pyx_d, ((PyObject *)__pyx_codeobj__6)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_9wmo_utils_12CBoundingBox_1__init__, 0, __pyx_n_s_CBoundingBox___init, NULL, __pyx_n_s_wmo_utils, __pyx_d, ((PyObject *)__pyx_codeobj__6)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_2, __pyx_t_3);
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (__Pyx_SetNameInClass(__pyx_t_1, __pyx_n_s_init, __pyx_t_2) < 0) __PYX_ERR(0, 26, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_1, __pyx_n_s_init, __pyx_t_2) < 0) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "wmo_utils.pyx":22
+  /* "wmo_utils.pyx":25
  *         self.n_batches_ext = n_batches_ext
  * 
  * class CBoundingBox:             # <<<<<<<<<<<<<<
  *     min: Tuple[float, float, float]
  *     max: Tuple[float, float, float]
  */
-  __pyx_t_2 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_CBoundingBox, __pyx_empty_tuple, __pyx_t_1, NULL, 0, 1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 22, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_CBoundingBox, __pyx_empty_tuple, __pyx_t_1, NULL, 0, 1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 25, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_CBoundingBox, __pyx_t_2) < 0) __PYX_ERR(0, 22, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_CBoundingBox, __pyx_t_2) < 0) __PYX_ERR(0, 25, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "wmo_utils.pyx":30
+  /* "wmo_utils.pyx":33
  *         self.max = max
  * 
  * class CWMOGeometryBatcherError(Enum):             # <<<<<<<<<<<<<<
  *     NO_ERROR = 0
  *     LOOSE_MATERIAL_ID = 1
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_Enum); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_Enum); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 33, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = PyTuple_New(1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_2 = PyTuple_New(1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 33, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_GIVEREF(__pyx_t_1);
   PyTuple_SET_ITEM(__pyx_t_2, 0, __pyx_t_1);
   __pyx_t_1 = 0;
-  __pyx_t_1 = __Pyx_CalculateMetaclass(NULL, __pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_CalculateMetaclass(NULL, __pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 33, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_3 = __Pyx_Py3MetaclassPrepare(__pyx_t_1, __pyx_t_2, __pyx_n_s_CWMOGeometryBatcherError, __pyx_n_s_CWMOGeometryBatcherError, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_Py3MetaclassPrepare(__pyx_t_1, __pyx_t_2, __pyx_n_s_CWMOGeometryBatcherError, __pyx_n_s_CWMOGeometryBatcherError, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 33, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
 
-  /* "wmo_utils.pyx":31
+  /* "wmo_utils.pyx":34
  * 
  * class CWMOGeometryBatcherError(Enum):
  *     NO_ERROR = 0             # <<<<<<<<<<<<<<
  *     LOOSE_MATERIAL_ID = 1
  * 
  */
-  if (__Pyx_SetNameInClass(__pyx_t_3, __pyx_n_s_NO_ERROR, __pyx_int_0) < 0) __PYX_ERR(0, 31, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_3, __pyx_n_s_NO_ERROR, __pyx_int_0) < 0) __PYX_ERR(0, 34, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":32
+  /* "wmo_utils.pyx":35
  * class CWMOGeometryBatcherError(Enum):
  *     NO_ERROR = 0
  *     LOOSE_MATERIAL_ID = 1             # <<<<<<<<<<<<<<
  * 
  * 
  */
-  if (__Pyx_SetNameInClass(__pyx_t_3, __pyx_n_s_LOOSE_MATERIAL_ID, __pyx_int_1) < 0) __PYX_ERR(0, 32, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_3, __pyx_n_s_LOOSE_MATERIAL_ID, __pyx_int_1) < 0) __PYX_ERR(0, 35, __pyx_L1_error)
 
-  /* "wmo_utils.pyx":30
+  /* "wmo_utils.pyx":33
  *         self.max = max
  * 
  * class CWMOGeometryBatcherError(Enum):             # <<<<<<<<<<<<<<
  *     NO_ERROR = 0
  *     LOOSE_MATERIAL_ID = 1
  */
-  __pyx_t_4 = __Pyx_Py3ClassCreate(__pyx_t_1, __pyx_n_s_CWMOGeometryBatcherError, __pyx_t_2, __pyx_t_3, NULL, 0, 1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_Py3ClassCreate(__pyx_t_1, __pyx_n_s_CWMOGeometryBatcherError, __pyx_t_2, __pyx_t_3, NULL, 0, 1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 33, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_CWMOGeometryBatcherError, __pyx_t_4) < 0) __PYX_ERR(0, 30, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_CWMOGeometryBatcherError, __pyx_t_4) < 0) __PYX_ERR(0, 33, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "wmo_utils.pyx":35
+  /* "wmo_utils.pyx":38
  * 
  * 
- * class WMOGeometryBatcherMeshParams:             # <<<<<<<<<<<<<<
- *     mesh_pointer: int
- *     use_large_material_id: bool
+ * class LiquidExportParams:             # <<<<<<<<<<<<<<
+ *     liquid_mesh_pointer: int
+ *     liquid_mesh_matrix_world: mathutils.Matrix
  */
-  __pyx_t_2 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_WMOGeometryBatcherMeshParams, __pyx_n_s_WMOGeometryBatcherMeshParams, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_LiquidExportParams, __pyx_n_s_LiquidExportParams, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 38, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
 
-  /* "wmo_utils.pyx":43
- *     material_mapping: List[int]
+  /* "wmo_utils.pyx":44
+ *     y_tiles: int
+ *     mat_id: int
+ *     is_water: bool             # <<<<<<<<<<<<<<
  * 
- *     def __init__(self             # <<<<<<<<<<<<<<
- *                 , mesh_pointer: int
- *                 , use_large_material_id: bool
+ * class WMOGeometryBatcherMeshParams:
  */
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_LiquidExportParams, __pyx_empty_tuple, __pyx_t_2, NULL, 0, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 38, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_mesh_pointer, __pyx_n_u_int) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_use_large_material_id, __pyx_n_u_bool) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_use_vertex_color, __pyx_n_u_bool) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_vg_collision_index, __pyx_n_u_int) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_node_size, __pyx_n_u_int) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-
-  /* "wmo_utils.pyx":49
- *                 , vg_collision_index: int
- *                 , node_size: int
- *                 , material_mapping: List[int]):             # <<<<<<<<<<<<<<
- *         self.mesh_pointer = mesh_pointer
- *         self.use_large_material_id = use_large_material_id
- */
-  __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_List); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 49, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_3, ((PyObject *)(&PyInt_Type))); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 49, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_4);
-  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_material_mapping, __pyx_t_4) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-
-  /* "wmo_utils.pyx":43
- *     material_mapping: List[int]
- * 
- *     def __init__(self             # <<<<<<<<<<<<<<
- *                 , mesh_pointer: int
- *                 , use_large_material_id: bool
- */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init__, 0, __pyx_n_s_WMOGeometryBatcherMeshParams___i, NULL, __pyx_n_s_wmo_utils, __pyx_d, ((PyObject *)__pyx_codeobj__8)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 43, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_4);
-  __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_4, __pyx_t_1);
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_LiquidExportParams, __pyx_t_1) < 0) __PYX_ERR(0, 38, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  if (__Pyx_SetNameInClass(__pyx_t_2, __pyx_n_s_init, __pyx_t_4) < 0) __PYX_ERR(0, 43, __pyx_L1_error)
-  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "wmo_utils.pyx":35
- * 
+  /* "wmo_utils.pyx":46
+ *     is_water: bool
  * 
  * class WMOGeometryBatcherMeshParams:             # <<<<<<<<<<<<<<
  *     mesh_pointer: int
- *     use_large_material_id: bool
+ *     mesh_matrix_world: mathutils.Matrix
  */
-  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_WMOGeometryBatcherMeshParams, __pyx_empty_tuple, __pyx_t_2, NULL, 0, 1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_empty_tuple, __pyx_n_s_WMOGeometryBatcherMeshParams, __pyx_n_s_WMOGeometryBatcherMeshParams, (PyObject *) NULL, __pyx_n_s_wmo_utils, (PyObject *) NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 46, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+
+  /* "wmo_utils.pyx":59
+ *     liquid_params: Optional[LiquidExportParams]
+ * 
+ *     def __init__(self             # <<<<<<<<<<<<<<
+ *                 , mesh_pointer: int
+ *                 , mesh_matrix_world: mathutils.Matrix
+ */
+  __pyx_t_1 = __Pyx_PyDict_NewPresized(11); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_mesh_pointer, __pyx_n_u_int) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":61
+ *     def __init__(self
+ *                 , mesh_pointer: int
+ *                 , mesh_matrix_world: mathutils.Matrix             # <<<<<<<<<<<<<<
+ *                 , collision_mesh_pointer: int
+ *                 , collision_mesh_matrix_world: Optional[mathutils.Matrix]
+ */
+  __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_mathutils); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 61, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_t_3, __pyx_n_s_Matrix); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 61, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_WMOGeometryBatcherMeshParams, __pyx_t_4) < 0) __PYX_ERR(0, 35, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_mesh_matrix_world, __pyx_t_4) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_collision_mesh_pointer, __pyx_n_u_int) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":63
+ *                 , mesh_matrix_world: mathutils.Matrix
+ *                 , collision_mesh_pointer: int
+ *                 , collision_mesh_matrix_world: Optional[mathutils.Matrix]             # <<<<<<<<<<<<<<
+ *                 , use_large_material_id: bool
+ *                 , use_vertex_color: bool
+ */
+  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_Optional); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 63, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_mathutils); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 63, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_3, __pyx_n_s_Matrix); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 63, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  __pyx_t_3 = __Pyx_PyObject_GetItem(__pyx_t_4, __pyx_t_5); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 63, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_collision_mesh_matrix_world, __pyx_t_3) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_use_large_material_id, __pyx_n_u_bool) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_use_vertex_color, __pyx_n_u_bool) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_use_custom_normals, __pyx_n_u_bool) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_vg_collision_index, __pyx_n_u_int) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_node_size, __pyx_n_u_int) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+
+  /* "wmo_utils.pyx":69
+ *                 , vg_collision_index: int
+ *                 , node_size: int
+ *                 , material_mapping: List[int]             # <<<<<<<<<<<<<<
+ *                 , liquid_params: LiquidExportParams):
+ *         self.mesh_pointer = mesh_pointer
+ */
+  __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_List); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 69, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_t_3, ((PyObject *)(&PyInt_Type))); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 69, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_material_mapping, __pyx_t_5) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+
+  /* "wmo_utils.pyx":70
+ *                 , node_size: int
+ *                 , material_mapping: List[int]
+ *                 , liquid_params: LiquidExportParams):             # <<<<<<<<<<<<<<
+ *         self.mesh_pointer = mesh_pointer
+ *         self.mesh_matrix_world = mesh_matrix_world
+ */
+  __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_n_s_LiquidExportParams); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 70, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_liquid_params, __pyx_t_5) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+
+  /* "wmo_utils.pyx":59
+ *     liquid_params: Optional[LiquidExportParams]
+ * 
+ *     def __init__(self             # <<<<<<<<<<<<<<
+ *                 , mesh_pointer: int
+ *                 , mesh_matrix_world: mathutils.Matrix
+ */
+  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_9wmo_utils_28WMOGeometryBatcherMeshParams_1__init__, 0, __pyx_n_s_WMOGeometryBatcherMeshParams___i, NULL, __pyx_n_s_wmo_utils, __pyx_d, ((PyObject *)__pyx_codeobj__8)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_5, __pyx_t_1);
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  if (__Pyx_SetNameInClass(__pyx_t_2, __pyx_n_s_init, __pyx_t_5) < 0) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+
+  /* "wmo_utils.pyx":46
+ *     is_water: bool
+ * 
+ * class WMOGeometryBatcherMeshParams:             # <<<<<<<<<<<<<<
+ *     mesh_pointer: int
+ *     mesh_matrix_world: mathutils.Matrix
+ */
+  __pyx_t_5 = __Pyx_Py3ClassCreate(((PyObject*)&__Pyx_DefaultClassType), __pyx_n_s_WMOGeometryBatcherMeshParams, __pyx_empty_tuple, __pyx_t_2, NULL, 0, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 46, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_WMOGeometryBatcherMeshParams, __pyx_t_5) < 0) __PYX_ERR(0, 46, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "wmo_utils.pyx":1
@@ -6045,6 +6999,93 @@ static PyObject* __Pyx_PyInt_AddObjC(PyObject *op1, PyObject *op2, CYTHON_UNUSED
     return (inplace ? PyNumber_InPlaceAdd : PyNumber_Add)(op1, op2);
 }
 #endif
+
+/* GetItemInt */
+static PyObject *__Pyx_GetItemInt_Generic(PyObject *o, PyObject* j) {
+    PyObject *r;
+    if (!j) return NULL;
+    r = PyObject_GetItem(o, j);
+    Py_DECREF(j);
+    return r;
+}
+static CYTHON_INLINE PyObject *__Pyx_GetItemInt_List_Fast(PyObject *o, Py_ssize_t i,
+                                                              CYTHON_NCP_UNUSED int wraparound,
+                                                              CYTHON_NCP_UNUSED int boundscheck) {
+#if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
+    Py_ssize_t wrapped_i = i;
+    if (wraparound & unlikely(i < 0)) {
+        wrapped_i += PyList_GET_SIZE(o);
+    }
+    if ((!boundscheck) || likely(__Pyx_is_valid_index(wrapped_i, PyList_GET_SIZE(o)))) {
+        PyObject *r = PyList_GET_ITEM(o, wrapped_i);
+        Py_INCREF(r);
+        return r;
+    }
+    return __Pyx_GetItemInt_Generic(o, PyInt_FromSsize_t(i));
+#else
+    return PySequence_GetItem(o, i);
+#endif
+}
+static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Tuple_Fast(PyObject *o, Py_ssize_t i,
+                                                              CYTHON_NCP_UNUSED int wraparound,
+                                                              CYTHON_NCP_UNUSED int boundscheck) {
+#if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
+    Py_ssize_t wrapped_i = i;
+    if (wraparound & unlikely(i < 0)) {
+        wrapped_i += PyTuple_GET_SIZE(o);
+    }
+    if ((!boundscheck) || likely(__Pyx_is_valid_index(wrapped_i, PyTuple_GET_SIZE(o)))) {
+        PyObject *r = PyTuple_GET_ITEM(o, wrapped_i);
+        Py_INCREF(r);
+        return r;
+    }
+    return __Pyx_GetItemInt_Generic(o, PyInt_FromSsize_t(i));
+#else
+    return PySequence_GetItem(o, i);
+#endif
+}
+static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Fast(PyObject *o, Py_ssize_t i, int is_list,
+                                                     CYTHON_NCP_UNUSED int wraparound,
+                                                     CYTHON_NCP_UNUSED int boundscheck) {
+#if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS && CYTHON_USE_TYPE_SLOTS
+    if (is_list || PyList_CheckExact(o)) {
+        Py_ssize_t n = ((!wraparound) | likely(i >= 0)) ? i : i + PyList_GET_SIZE(o);
+        if ((!boundscheck) || (likely(__Pyx_is_valid_index(n, PyList_GET_SIZE(o))))) {
+            PyObject *r = PyList_GET_ITEM(o, n);
+            Py_INCREF(r);
+            return r;
+        }
+    }
+    else if (PyTuple_CheckExact(o)) {
+        Py_ssize_t n = ((!wraparound) | likely(i >= 0)) ? i : i + PyTuple_GET_SIZE(o);
+        if ((!boundscheck) || likely(__Pyx_is_valid_index(n, PyTuple_GET_SIZE(o)))) {
+            PyObject *r = PyTuple_GET_ITEM(o, n);
+            Py_INCREF(r);
+            return r;
+        }
+    } else {
+        PySequenceMethods *m = Py_TYPE(o)->tp_as_sequence;
+        if (likely(m && m->sq_item)) {
+            if (wraparound && unlikely(i < 0) && likely(m->sq_length)) {
+                Py_ssize_t l = m->sq_length(o);
+                if (likely(l >= 0)) {
+                    i += l;
+                } else {
+                    if (!PyErr_ExceptionMatches(PyExc_OverflowError))
+                        return NULL;
+                    PyErr_Clear();
+                }
+            }
+            return m->sq_item(o, i);
+        }
+    }
+#else
+    if (is_list || PySequence_Check(o)) {
+        return PySequence_GetItem(o, i);
+    }
+#endif
+    return __Pyx_GetItemInt_Generic(o, PyInt_FromSsize_t(i));
+}
 
 /* PyFunctionFastCall */
 #if CYTHON_FAST_PYCALL
@@ -7560,93 +8601,6 @@ static PyObject *__Pyx_Py3ClassCreate(PyObject *metaclass, PyObject *name, PyObj
     return result;
 }
 
-/* GetItemInt */
-static PyObject *__Pyx_GetItemInt_Generic(PyObject *o, PyObject* j) {
-    PyObject *r;
-    if (!j) return NULL;
-    r = PyObject_GetItem(o, j);
-    Py_DECREF(j);
-    return r;
-}
-static CYTHON_INLINE PyObject *__Pyx_GetItemInt_List_Fast(PyObject *o, Py_ssize_t i,
-                                                              CYTHON_NCP_UNUSED int wraparound,
-                                                              CYTHON_NCP_UNUSED int boundscheck) {
-#if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-    Py_ssize_t wrapped_i = i;
-    if (wraparound & unlikely(i < 0)) {
-        wrapped_i += PyList_GET_SIZE(o);
-    }
-    if ((!boundscheck) || likely(__Pyx_is_valid_index(wrapped_i, PyList_GET_SIZE(o)))) {
-        PyObject *r = PyList_GET_ITEM(o, wrapped_i);
-        Py_INCREF(r);
-        return r;
-    }
-    return __Pyx_GetItemInt_Generic(o, PyInt_FromSsize_t(i));
-#else
-    return PySequence_GetItem(o, i);
-#endif
-}
-static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Tuple_Fast(PyObject *o, Py_ssize_t i,
-                                                              CYTHON_NCP_UNUSED int wraparound,
-                                                              CYTHON_NCP_UNUSED int boundscheck) {
-#if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-    Py_ssize_t wrapped_i = i;
-    if (wraparound & unlikely(i < 0)) {
-        wrapped_i += PyTuple_GET_SIZE(o);
-    }
-    if ((!boundscheck) || likely(__Pyx_is_valid_index(wrapped_i, PyTuple_GET_SIZE(o)))) {
-        PyObject *r = PyTuple_GET_ITEM(o, wrapped_i);
-        Py_INCREF(r);
-        return r;
-    }
-    return __Pyx_GetItemInt_Generic(o, PyInt_FromSsize_t(i));
-#else
-    return PySequence_GetItem(o, i);
-#endif
-}
-static CYTHON_INLINE PyObject *__Pyx_GetItemInt_Fast(PyObject *o, Py_ssize_t i, int is_list,
-                                                     CYTHON_NCP_UNUSED int wraparound,
-                                                     CYTHON_NCP_UNUSED int boundscheck) {
-#if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS && CYTHON_USE_TYPE_SLOTS
-    if (is_list || PyList_CheckExact(o)) {
-        Py_ssize_t n = ((!wraparound) | likely(i >= 0)) ? i : i + PyList_GET_SIZE(o);
-        if ((!boundscheck) || (likely(__Pyx_is_valid_index(n, PyList_GET_SIZE(o))))) {
-            PyObject *r = PyList_GET_ITEM(o, n);
-            Py_INCREF(r);
-            return r;
-        }
-    }
-    else if (PyTuple_CheckExact(o)) {
-        Py_ssize_t n = ((!wraparound) | likely(i >= 0)) ? i : i + PyTuple_GET_SIZE(o);
-        if ((!boundscheck) || likely(__Pyx_is_valid_index(n, PyTuple_GET_SIZE(o)))) {
-            PyObject *r = PyTuple_GET_ITEM(o, n);
-            Py_INCREF(r);
-            return r;
-        }
-    } else {
-        PySequenceMethods *m = Py_TYPE(o)->tp_as_sequence;
-        if (likely(m && m->sq_item)) {
-            if (wraparound && unlikely(i < 0) && likely(m->sq_length)) {
-                Py_ssize_t l = m->sq_length(o);
-                if (likely(l >= 0)) {
-                    i += l;
-                } else {
-                    if (!PyErr_ExceptionMatches(PyExc_OverflowError))
-                        return NULL;
-                    PyErr_Clear();
-                }
-            }
-            return m->sq_item(o, i);
-        }
-    }
-#else
-    if (is_list || PySequence_Check(o)) {
-        return PySequence_GetItem(o, i);
-    }
-#endif
-    return __Pyx_GetItemInt_Generic(o, PyInt_FromSsize_t(i));
-}
-
 /* ObjectGetItem */
 #if CYTHON_USE_TYPE_SLOTS
 static PyObject *__Pyx_PyObject_GetIndex(PyObject *obj, PyObject* index) {
@@ -7912,6 +8866,202 @@ bad:
     }
 
 /* CIntFromPy */
+static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif
+    const int neg_one = (int) -1, const_zero = (int) 0;
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic pop
+#endif
+    const int is_unsigned = neg_one > const_zero;
+#if PY_MAJOR_VERSION < 3
+    if (likely(PyInt_Check(x))) {
+        if (sizeof(int) < sizeof(long)) {
+            __PYX_VERIFY_RETURN_INT(int, long, PyInt_AS_LONG(x))
+        } else {
+            long val = PyInt_AS_LONG(x);
+            if (is_unsigned && unlikely(val < 0)) {
+                goto raise_neg_overflow;
+            }
+            return (int) val;
+        }
+    } else
+#endif
+    if (likely(PyLong_Check(x))) {
+        if (is_unsigned) {
+#if CYTHON_USE_PYLONG_INTERNALS
+            const digit* digits = ((PyLongObject*)x)->ob_digit;
+            switch (Py_SIZE(x)) {
+                case  0: return (int) 0;
+                case  1: __PYX_VERIFY_RETURN_INT(int, digit, digits[0])
+                case 2:
+                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) >= 2 * PyLong_SHIFT) {
+                            return (int) (((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                        }
+                    }
+                    break;
+                case 3:
+                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) >= 3 * PyLong_SHIFT) {
+                            return (int) (((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                        }
+                    }
+                    break;
+                case 4:
+                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) >= 4 * PyLong_SHIFT) {
+                            return (int) (((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                        }
+                    }
+                    break;
+            }
+#endif
+#if CYTHON_COMPILING_IN_CPYTHON
+            if (unlikely(Py_SIZE(x) < 0)) {
+                goto raise_neg_overflow;
+            }
+#else
+            {
+                int result = PyObject_RichCompareBool(x, Py_False, Py_LT);
+                if (unlikely(result < 0))
+                    return (int) -1;
+                if (unlikely(result == 1))
+                    goto raise_neg_overflow;
+            }
+#endif
+            if (sizeof(int) <= sizeof(unsigned long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned long, PyLong_AsUnsignedLong(x))
+#ifdef HAVE_LONG_LONG
+            } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
+#endif
+            }
+        } else {
+#if CYTHON_USE_PYLONG_INTERNALS
+            const digit* digits = ((PyLongObject*)x)->ob_digit;
+            switch (Py_SIZE(x)) {
+                case  0: return (int) 0;
+                case -1: __PYX_VERIFY_RETURN_INT(int, sdigit, (sdigit) (-(sdigit)digits[0]))
+                case  1: __PYX_VERIFY_RETURN_INT(int,  digit, +digits[0])
+                case -2:
+                    if (8 * sizeof(int) - 1 > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                            return (int) (((int)-1)*(((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case 2:
+                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                            return (int) ((((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case -3:
+                    if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                            return (int) (((int)-1)*(((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case 3:
+                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                            return (int) ((((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case -4:
+                    if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
+                            return (int) (((int)-1)*(((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case 4:
+                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
+                            return (int) ((((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+            }
+#endif
+            if (sizeof(int) <= sizeof(long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, long, PyLong_AsLong(x))
+#ifdef HAVE_LONG_LONG
+            } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, PY_LONG_LONG, PyLong_AsLongLong(x))
+#endif
+            }
+        }
+        {
+#if CYTHON_COMPILING_IN_PYPY && !defined(_PyLong_AsByteArray)
+            PyErr_SetString(PyExc_RuntimeError,
+                            "_PyLong_AsByteArray() not available in PyPy, cannot convert large numbers");
+#else
+            int val;
+            PyObject *v = __Pyx_PyNumber_IntOrLong(x);
+ #if PY_MAJOR_VERSION < 3
+            if (likely(v) && !PyLong_Check(v)) {
+                PyObject *tmp = v;
+                v = PyNumber_Long(tmp);
+                Py_DECREF(tmp);
+            }
+ #endif
+            if (likely(v)) {
+                int one = 1; int is_little = (int)*(unsigned char *)&one;
+                unsigned char *bytes = (unsigned char *)&val;
+                int ret = _PyLong_AsByteArray((PyLongObject *)v,
+                                              bytes, sizeof(val),
+                                              is_little, !is_unsigned);
+                Py_DECREF(v);
+                if (likely(!ret))
+                    return val;
+            }
+#endif
+            return (int) -1;
+        }
+    } else {
+        int val;
+        PyObject *tmp = __Pyx_PyNumber_IntOrLong(x);
+        if (!tmp) return (int) -1;
+        val = __Pyx_PyInt_As_int(tmp);
+        Py_DECREF(tmp);
+        return val;
+    }
+raise_overflow:
+    PyErr_SetString(PyExc_OverflowError,
+        "value too large to convert to int");
+    return (int) -1;
+raise_neg_overflow:
+    PyErr_SetString(PyExc_OverflowError,
+        "can't convert negative value to int");
+    return (int) -1;
+}
+
+/* CIntFromPy */
 static CYTHON_INLINE size_t __Pyx_PyInt_As_size_t(PyObject *x) {
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic push
@@ -8107,8 +9257,8 @@ raise_neg_overflow:
     return (size_t) -1;
 }
 
-/* CIntFromPy */
-static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
+/* CIntToPy */
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value) {
 #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -8118,16 +9268,54 @@ static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
 #pragma GCC diagnostic pop
 #endif
     const int is_unsigned = neg_one > const_zero;
+    if (is_unsigned) {
+        if (sizeof(int) < sizeof(long)) {
+            return PyInt_FromLong((long) value);
+        } else if (sizeof(int) <= sizeof(unsigned long)) {
+            return PyLong_FromUnsignedLong((unsigned long) value);
+#ifdef HAVE_LONG_LONG
+        } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
+            return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
+#endif
+        }
+    } else {
+        if (sizeof(int) <= sizeof(long)) {
+            return PyInt_FromLong((long) value);
+#ifdef HAVE_LONG_LONG
+        } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
+            return PyLong_FromLongLong((PY_LONG_LONG) value);
+#endif
+        }
+    }
+    {
+        int one = 1; int little = (int)*(unsigned char *)&one;
+        unsigned char *bytes = (unsigned char *)&value;
+        return _PyLong_FromByteArray(bytes, sizeof(int),
+                                     little, !is_unsigned);
+    }
+}
+
+/* CIntFromPy */
+static CYTHON_INLINE unsigned int __Pyx_PyInt_As_unsigned_int(PyObject *x) {
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif
+    const unsigned int neg_one = (unsigned int) -1, const_zero = (unsigned int) 0;
+#ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+#pragma GCC diagnostic pop
+#endif
+    const int is_unsigned = neg_one > const_zero;
 #if PY_MAJOR_VERSION < 3
     if (likely(PyInt_Check(x))) {
-        if (sizeof(int) < sizeof(long)) {
-            __PYX_VERIFY_RETURN_INT(int, long, PyInt_AS_LONG(x))
+        if (sizeof(unsigned int) < sizeof(long)) {
+            __PYX_VERIFY_RETURN_INT(unsigned int, long, PyInt_AS_LONG(x))
         } else {
             long val = PyInt_AS_LONG(x);
             if (is_unsigned && unlikely(val < 0)) {
                 goto raise_neg_overflow;
             }
-            return (int) val;
+            return (unsigned int) val;
         }
     } else
 #endif
@@ -8136,32 +9324,32 @@ static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
 #if CYTHON_USE_PYLONG_INTERNALS
             const digit* digits = ((PyLongObject*)x)->ob_digit;
             switch (Py_SIZE(x)) {
-                case  0: return (int) 0;
-                case  1: __PYX_VERIFY_RETURN_INT(int, digit, digits[0])
+                case  0: return (unsigned int) 0;
+                case  1: __PYX_VERIFY_RETURN_INT(unsigned int, digit, digits[0])
                 case 2:
-                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) > 1 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) >= 2 * PyLong_SHIFT) {
-                            return (int) (((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) >= 2 * PyLong_SHIFT) {
+                            return (unsigned int) (((((unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0]));
                         }
                     }
                     break;
                 case 3:
-                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) > 2 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) >= 3 * PyLong_SHIFT) {
-                            return (int) (((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) >= 3 * PyLong_SHIFT) {
+                            return (unsigned int) (((((((unsigned int)digits[2]) << PyLong_SHIFT) | (unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0]));
                         }
                     }
                     break;
                 case 4:
-                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) > 3 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) >= 4 * PyLong_SHIFT) {
-                            return (int) (((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) >= 4 * PyLong_SHIFT) {
+                            return (unsigned int) (((((((((unsigned int)digits[3]) << PyLong_SHIFT) | (unsigned int)digits[2]) << PyLong_SHIFT) | (unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0]));
                         }
                     }
                     break;
@@ -8175,86 +9363,86 @@ static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
             {
                 int result = PyObject_RichCompareBool(x, Py_False, Py_LT);
                 if (unlikely(result < 0))
-                    return (int) -1;
+                    return (unsigned int) -1;
                 if (unlikely(result == 1))
                     goto raise_neg_overflow;
             }
 #endif
-            if (sizeof(int) <= sizeof(unsigned long)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned long, PyLong_AsUnsignedLong(x))
+            if (sizeof(unsigned int) <= sizeof(unsigned long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(unsigned int, unsigned long, PyLong_AsUnsignedLong(x))
 #ifdef HAVE_LONG_LONG
-            } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
+            } else if (sizeof(unsigned int) <= sizeof(unsigned PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(unsigned int, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
 #endif
             }
         } else {
 #if CYTHON_USE_PYLONG_INTERNALS
             const digit* digits = ((PyLongObject*)x)->ob_digit;
             switch (Py_SIZE(x)) {
-                case  0: return (int) 0;
-                case -1: __PYX_VERIFY_RETURN_INT(int, sdigit, (sdigit) (-(sdigit)digits[0]))
-                case  1: __PYX_VERIFY_RETURN_INT(int,  digit, +digits[0])
+                case  0: return (unsigned int) 0;
+                case -1: __PYX_VERIFY_RETURN_INT(unsigned int, sdigit, (sdigit) (-(sdigit)digits[0]))
+                case  1: __PYX_VERIFY_RETURN_INT(unsigned int,  digit, +digits[0])
                 case -2:
-                    if (8 * sizeof(int) - 1 > 1 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) - 1 > 1 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
-                            return (int) (((int)-1)*(((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) - 1 > 2 * PyLong_SHIFT) {
+                            return (unsigned int) (((unsigned int)-1)*(((((unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0])));
                         }
                     }
                     break;
                 case 2:
-                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) > 1 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
-                            return (int) ((((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) - 1 > 2 * PyLong_SHIFT) {
+                            return (unsigned int) ((((((unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0])));
                         }
                     }
                     break;
                 case -3:
-                    if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) - 1 > 2 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
-                            return (int) (((int)-1)*(((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) - 1 > 3 * PyLong_SHIFT) {
+                            return (unsigned int) (((unsigned int)-1)*(((((((unsigned int)digits[2]) << PyLong_SHIFT) | (unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0])));
                         }
                     }
                     break;
                 case 3:
-                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) > 2 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
-                            return (int) ((((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) - 1 > 3 * PyLong_SHIFT) {
+                            return (unsigned int) ((((((((unsigned int)digits[2]) << PyLong_SHIFT) | (unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0])));
                         }
                     }
                     break;
                 case -4:
-                    if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) - 1 > 3 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
-                            return (int) (((int)-1)*(((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) - 1 > 4 * PyLong_SHIFT) {
+                            return (unsigned int) (((unsigned int)-1)*(((((((((unsigned int)digits[3]) << PyLong_SHIFT) | (unsigned int)digits[2]) << PyLong_SHIFT) | (unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0])));
                         }
                     }
                     break;
                 case 4:
-                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
+                    if (8 * sizeof(unsigned int) > 3 * PyLong_SHIFT) {
                         if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
-                            return (int) ((((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                            __PYX_VERIFY_RETURN_INT(unsigned int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(unsigned int) - 1 > 4 * PyLong_SHIFT) {
+                            return (unsigned int) ((((((((((unsigned int)digits[3]) << PyLong_SHIFT) | (unsigned int)digits[2]) << PyLong_SHIFT) | (unsigned int)digits[1]) << PyLong_SHIFT) | (unsigned int)digits[0])));
                         }
                     }
                     break;
             }
 #endif
-            if (sizeof(int) <= sizeof(long)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, long, PyLong_AsLong(x))
+            if (sizeof(unsigned int) <= sizeof(long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(unsigned int, long, PyLong_AsLong(x))
 #ifdef HAVE_LONG_LONG
-            } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, PY_LONG_LONG, PyLong_AsLongLong(x))
+            } else if (sizeof(unsigned int) <= sizeof(PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(unsigned int, PY_LONG_LONG, PyLong_AsLongLong(x))
 #endif
             }
         }
@@ -8263,7 +9451,7 @@ static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
             PyErr_SetString(PyExc_RuntimeError,
                             "_PyLong_AsByteArray() not available in PyPy, cannot convert large numbers");
 #else
-            int val;
+            unsigned int val;
             PyObject *v = __Pyx_PyNumber_IntOrLong(x);
  #if PY_MAJOR_VERSION < 3
             if (likely(v) && !PyLong_Check(v)) {
@@ -8283,24 +9471,24 @@ static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
                     return val;
             }
 #endif
-            return (int) -1;
+            return (unsigned int) -1;
         }
     } else {
-        int val;
+        unsigned int val;
         PyObject *tmp = __Pyx_PyNumber_IntOrLong(x);
-        if (!tmp) return (int) -1;
-        val = __Pyx_PyInt_As_int(tmp);
+        if (!tmp) return (unsigned int) -1;
+        val = __Pyx_PyInt_As_unsigned_int(tmp);
         Py_DECREF(tmp);
         return val;
     }
 raise_overflow:
     PyErr_SetString(PyExc_OverflowError,
-        "value too large to convert to int");
-    return (int) -1;
+        "value too large to convert to unsigned int");
+    return (unsigned int) -1;
 raise_neg_overflow:
     PyErr_SetString(PyExc_OverflowError,
-        "can't convert negative value to int");
-    return (int) -1;
+        "can't convert negative value to unsigned int");
+    return (unsigned int) -1;
 }
 
 /* CIntToPy */

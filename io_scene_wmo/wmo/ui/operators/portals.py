@@ -53,7 +53,7 @@ class WMO_OT_invert_portals(bpy.types.Operator):
     bl_description = 'Set portal direction calculation algorithm.'
     bl_options = {'REGISTER', 'UNDO'}
 
-    Algorithm:  bpy.props.EnumProperty(
+    algorithm:  bpy.props.EnumProperty(
         items=portal_dir_alg_enum,
         default="0"
     )
@@ -62,7 +62,7 @@ class WMO_OT_invert_portals(bpy.types.Operator):
         success = False
         for ob in bpy.context.selected_objects:
             if ob.wow_wmo_portal.enabled:
-                ob.wow_wmo_portal.algorithm = self.Algorithm
+                ob.wow_wmo_portal.algorithm = self.algorithm
                 success = True
 
         if success:

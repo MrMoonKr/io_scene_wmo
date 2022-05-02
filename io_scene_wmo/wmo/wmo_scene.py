@@ -2,7 +2,7 @@ import hashlib
 import bpy
 import bmesh
 
-from mathutils import Vector
+from mathutils import Vector, Matrix
 from bmesh.types import BMVert
 
 from math import sqrt, atan2, pi
@@ -15,7 +15,7 @@ from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui import get_addon_prefs
 from ..utils.misc import find_nearest_object
-from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
@@ -38,6 +38,8 @@ class BlenderWMOScene:
         self.bl_lights: List[bpy.types.Object] = []
         self.bl_liquids: List[bpy.types.Object] = []
         self.bl_doodad_sets: Dict[str, bpy.types.Object] = {}
+        self.groups_eval: List[bpy.types.Mesh] = []
+        self.group_batch_params: List[WMOGeometryBatcherMeshParams] = []
 
     def load_materials(self, texture_dir=None):
         """ Load materials from WoW WMO root file """
@@ -350,19 +352,6 @@ class BlenderWMOScene:
             obj = bpy.data.objects.new(portal_name, mesh)
 
             obj.wow_wmo_portal.enabled = True
-            first_relationship = True
-
-            for relation in self.wmo.mopr.relations:
-                if relation.portal_index == index:
-                    group_name = self.wmo.mogn.get_string(
-                        self.bl_groups[relation.group_index].wmo_group.mogp.group_name_ofs)
-
-                    if first_relationship:
-                        obj.wow_wmo_portal.first = bpy.context.scene.objects[group_name]
-                        first_relationship = False
-                    else:
-                        obj.wow_wmo_portal.second = bpy.context.scene.objects[group_name]
-                        break
 
             mesh.from_pydata(verts, [], faces)
 
@@ -391,6 +380,46 @@ class BlenderWMOScene:
                 scn.collection.children.link(portal_collection)
 
             portal_collection.objects.link(obj)
+
+    def load_portal_relations(self):
+        """
+            Load portal relations from MOPR data.
+            Note that portals do not have to have a pair of relations. They may be linked to just one group.
+            In that the portal works in a one-sided way. Example is floating cathedral exterior in Stormwind.
+        """
+
+        portal_relations = {}
+
+        for index, group in tqdm(list(enumerate(self.bl_groups)), desc='Importing portal relations', ascii=True):
+            portal_start = group.wmo_group.mogp.portal_start
+            portal_count = group.wmo_group.mogp.portal_count
+
+            if not portal_count:
+                continue
+
+            for i in range(portal_count):
+                relation = self.wmo.mopr.relations[portal_start + i]
+
+                # group from
+                this_portal_rels = portal_relations.setdefault(relation.portal_index, (set(), set()))
+                this_portal_rels[0].add(group.bl_object)
+                this_portal_rels[1].add(group.bl_object)
+
+                other_group = self.bl_groups[relation.group_index]
+                this_portal_rels[0].add(other_group.bl_object)
+
+        for portal_index, linked_groups in portal_relations.items():
+            assert(len(linked_groups) == 2 and f"Portal links {len(linked_groups)} groups. Expected 2.")
+            portal = self.bl_portals[portal_index]
+
+            l_linked_groups = list(linked_groups[0])
+            portal.wow_wmo_portal.first = l_linked_groups[0]
+            portal.wow_wmo_portal.second = l_linked_groups[1]
+
+            if portal.wow_wmo_portal.first not in linked_groups[1]:
+                portal.wow_wmo_portal.detail = "1"
+            elif portal.wow_wmo_portal.second not in linked_groups[1]:
+                portal.wow_wmo_portal.detail = "2"
 
     def load_properties(self):
         """ Load global WoW WMO properties """
@@ -429,7 +458,7 @@ class BlenderWMOScene:
         root_elements = bpy.context.scene.wow_wmo_root_elements
 
         # process materials
-        for i, slot in enumerate(root_elements.materials):
+        for i, slot in tqdm(enumerate(root_elements.materials), desc='Building material references', ascii=True):
             if not slot.pointer:
                 raise ReferenceError('\nError: Material slot does not point to a valid material.')
 
@@ -437,7 +466,7 @@ class BlenderWMOScene:
 
         # process groups
         group_objects = []
-        for i, slot in enumerate(root_elements.groups):
+        for i, slot in tqdm(enumerate(root_elements.groups), desc='Building group references', ascii=True):
 
             if not slot.pointer:
                 raise ReferenceError('\nError: Group slot \"#{}\" is empty or pointing to an invalid object.')
@@ -458,26 +487,25 @@ class BlenderWMOScene:
             group.export = not (export_method == 'PARTIAL' and not slot.export)
 
         # process portals
-        for i, slot in enumerate(root_elements.portals):
+        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building portal references', ascii=True):
             self.bl_portals.append(slot.pointer)
             slot.pointer.wow_wmo_portal.portal_id = i
 
-            if not slot.pointer.wow_wmo_portal.first or not slot.pointer.wow_wmo_portal.second:
-                raise ReferenceError('\nError: Portal \"{}\" points to a non-existing group.'.format(slot.pointer.name))
+            if slot.pointer.wow_wmo_portal.first:
+                rel = slot.pointer.wow_wmo_portal.first.wow_wmo_group.relations.portals.add()
+                rel.id = slot.pointer.name  # TODO: store pointer instead?
 
-            rel = slot.pointer.wow_wmo_portal.first.wow_wmo_group.relations.portals.add()
-            rel.id = slot.pointer.name  # TODO: store pointer instead?
-
-            rel = slot.pointer.wow_wmo_portal.second.wow_wmo_group.relations.portals.add()
-            rel.id = slot.pointer.name  # TODO: store pointer instead?
+            if slot.pointer.wow_wmo_portal.second:
+                rel = slot.pointer.wow_wmo_portal.second.wow_wmo_group.relations.portals.add()
+                rel.id = slot.pointer.name  # TODO: store pointer instead?
 
         # process fogs
-        for i, slot in enumerate(root_elements.fogs):
+        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building fog references', ascii=True):
             self.bl_fogs.append(slot.pointer)
             slot.pointer.wow_wmo_fog.fog_id = i
 
         # process lights
-        for i, slot in enumerate(root_elements.lights):
+        for i, slot in tqdm(enumerate(root_elements.lights), desc='Building light references', ascii=True):
             group = find_nearest_object(slot.pointer, group_objects)
             rel = group.wow_wmo_group.relations.lights.add()
             rel.id = i
@@ -486,14 +514,13 @@ class BlenderWMOScene:
 
         # process doodads
         doodad_counter = 0
-        for i, slot in enumerate(root_elements.doodad_sets):
+        for i, slot in tqdm(enumerate(root_elements.doodad_sets), desc='Building doodad references', ascii=True):
 
             doodads = []
             for doodad in slot.doodads:
                 if not doodad.pointer:
-                    print("Skipping bugged doodad reference")
-                    # raise Exception("Error : Doodad reference is linked with a non existing object, check and fix your doodad references.")
-                    continue
+                    raise Exception("Error : Doodad reference is linked with a non existing object, "
+                                    "check and fix your doodad references.")
                     
                 group = find_nearest_object(doodad.pointer, group_objects)
                 rel = group.wow_wmo_group.relations.doodads.add()
@@ -507,10 +534,10 @@ class BlenderWMOScene:
     def save_materials(self):
         """ Add material if not already added, then return index in root file """
 
-        for i, mat_slot in tqdm( enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
-                                         , desc='Saving materials'
-                                         , ascii=True
-                                         ):
+        for i, mat_slot in tqdm(enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
+                                , desc='Saving materials'
+                                , ascii=True
+                                ):
 
             mat = mat_slot.pointer
 
@@ -527,7 +554,7 @@ class BlenderWMOScene:
             for flag in mat.wow_wmo_material.flags:
                 flags |= int(flag)
 
-            self.wmo.add_material(  diff_texture_1
+            self.wmo.add_material(diff_texture_1
                                   , diff_texture_2
                                   , int(mat.wow_wmo_material.shader)
                                   , int(mat.wow_wmo_material.blending_mode)
@@ -676,14 +703,14 @@ class BlenderWMOScene:
         for vtx in vertices:
             if len(vtx.link_edges) == 2 and origin is None:
                 origin = vtx
-            pos_n += vtx.co
+            pos_n += (vtx.co)
 
         pos_n /= len(vertices)
         vtx_a = origin.link_edges[0].other_vert(origin)
         vtx_b = origin.link_edges[1].other_vert(origin)
-        vector_o = origin.co - pos_n
-        next_vtx = vtx_b if BlenderWMOScene.get_angle(vtx_a.co - pos_n, vector_o, normal) \
-                            < BlenderWMOScene.get_angle(vtx_b.co - pos_n, vector_o, normal) else vtx_a
+        vector_o = (origin.co) - pos_n
+        next_vtx = vtx_b if BlenderWMOScene.get_angle((vtx_a.co) - pos_n, vector_o, normal) \
+                            < BlenderWMOScene.get_angle((vtx_b.co) - pos_n, vector_o, normal) else vtx_a
 
         # traversing mesh
         nodes_to_hit = list(vertices).copy()
@@ -699,27 +726,32 @@ class BlenderWMOScene:
 
         saved_portals_ids = []
 
+        depsgraph = bpy.context.evaluated_depsgraph_get()
         self.wmo.mopt.infos = len(self.bl_portals) * [PortalInfo()]
 
-        for bl_group in tqdm(self.bl_groups, desc='Saving portals', ascii=True):
+        for bl_group, group_mesh_eval in tqdm(zip(self.bl_groups, self.groups_eval), desc='Saving portals', ascii=True):
 
             group_obj = bl_group.bl_object
             portal_relations = group_obj.wow_wmo_group.relations.portals
             bl_group.wmo_group.mogp.portal_start = len(self.wmo.mopr.relations)
 
             for relation in portal_relations:
-                portal_obj = bpy.context.scene.objects[relation.id]
-                portal_index = portal_obj.wow_wmo_portal.portal_id
+                portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
+                portal_index = portal_obj.original.wow_wmo_portal.portal_id
+                portal_mesh = portal_obj.data
 
                 if portal_index not in saved_portals_ids:
 
-                    portal_mesh = portal_obj.data
                     portal_info = PortalInfo()
                     portal_info.start_vertex = len(self.wmo.mopv.portal_vertices)
                     v = []
 
                     bm = bmesh.new()
                     bm.from_mesh(portal_mesh)
+                    bm.verts.ensure_lookup_table()
+
+                    portal_matrix_normal = portal_obj.matrix_world.to_3x3().transposed().inverted()
+                    portal_normal = (portal_matrix_normal @ portal_mesh.polygons[0].normal).normalized()
 
                     portal_verts = self.sort_portal_vertices(bm.verts, portal_mesh.polygons[0].normal)
 
@@ -745,41 +777,45 @@ class BlenderWMOScene:
 
                     portal_info.unknown = v_D / sqrt(v_A * v_A + v_B * v_B + v_C * v_C)
                     portal_info.n_vertices = len(self.wmo.mopv.portal_vertices) - portal_info.start_vertex
-                    portal_info.normal = tuple(portal_mesh.polygons[0].normal)
+                    portal_info.normal = portal_normal.to_tuple()
 
                     self.wmo.mopt.infos[portal_index] = portal_info
                     saved_portals_ids.append(portal_index)
 
-                first = self.bl_portals[portal_index].wow_wmo_portal.first
-                second = self.bl_portals[portal_index].wow_wmo_portal.second
+                first = portal_obj.original.wow_wmo_portal.first
+                second = portal_obj.original.wow_wmo_portal.second
+
+                # skip detail groups (see e.g. Stormwind cathedral)
+                if portal_obj.original.wow_wmo_portal.detail != '0':
+                    if first.name == group_obj.original.name:
+                        if portal_obj.original.wow_wmo_portal.detail == '1':
+                            continue
+                    else:
+                        if portal_obj.original.wow_wmo_portal.detail == '2':
+                            continue
 
                 # calculating portal relation
                 relation = PortalRelation()
                 relation.portal_index = portal_index
-                relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.name \
-                                                                     else first.wow_wmo_group.group_id
+                relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.original.name \
+                    else first.wow_wmo_group.group_id
 
-                relation.side = bl_group.get_portal_direction(portal_obj, group_obj)
+                relation.side = bl_group.get_portal_direction(portal_obj, group_obj.evaluated_get(depsgraph))
 
                 self.wmo.mopr.relations.append(relation)
 
             bl_group.wmo_group.mogp.portal_count = len(self.wmo.mopr.relations) - bl_group.wmo_group.mogp.portal_start
 
-    def save_groups(self):
-        temp_meshes = []
-        batch_params = []
-
+    def prepare_groups(self):
         for bl_group in tqdm(self.bl_groups, desc='Preparing groups', ascii=True):
             if bl_group.wmo_group.export:
                 mesh, params = bl_group.create_batching_parameters()
-                temp_meshes.append(mesh)
-                batch_params.append(params)
+                self.groups_eval.append(mesh)
+                self.group_batch_params.append(params)
 
+    def save_groups(self):
         for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
-            batcher = CWMOGeometryBatcher(batch_params)
-
-        for mesh in tqdm(temp_meshes, desc='Cleaning up temporary meshes', ascii=True):
-            bpy.data.meshes.remove(mesh)
+            batcher = CWMOGeometryBatcher(self.group_batch_params)
 
         for i, bl_group in enumerate(tqdm(self.bl_groups, desc='Saving groups', ascii=True)):
 

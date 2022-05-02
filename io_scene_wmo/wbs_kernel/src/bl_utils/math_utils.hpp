@@ -3,6 +3,9 @@
 
 #include <cmath>
 #include <cassert>
+#include <extern/glm/mat4x4.hpp>
+#include <extern/glm/vec3.hpp>
+#include <extern/glm/vec4.hpp>
 
 extern "C"
 {
@@ -11,6 +14,12 @@ extern "C"
 
 namespace wbs_kernel::bl_utils::math_utils
 {
+  struct Vector2Di
+  {
+    std::int32_t x;
+    std::int32_t y;
+  };
+
   struct Vector3D
   {
     float x;

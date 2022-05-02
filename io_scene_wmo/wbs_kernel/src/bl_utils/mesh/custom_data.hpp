@@ -20,6 +20,10 @@ namespace wbs_kernel::bl_utils::mesh
 
   int WBS_CustomData_get_active_layer_index(const CustomData* data, int type);
 
+  int WBS_CustomData_get_layer_index(const CustomData* data, int type);
+
+  bool WBS_CustomData_has_layer(const CustomData* data, int type);
+
   // Returns deform weight if vertex group is asigned to that vertex, nullptr if not
   MDeformWeight* WBS_BKE_defvert_find_index(const MDeformVert* dvert, const int defgroup);
 

@@ -18,13 +18,26 @@ cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh
         NO_ERROR = 0,
         LOOSE_MATERIAL_ID = 1
 
+    cdef struct LiquidParams:
+        uintptr_t liquid_mesh;
+        const float* liquid_mesh_matrix_world
+        unsigned x_tiles
+        unsigned y_tiles
+        unsigned mat_id
+        bool is_water
+
     cdef cppclass WMOGeometryBatcher:
         WMOGeometryBatcher(uintptr_t mesh_ptr
+                           , const float* mesh_matrix_world
+                           , uintptr_t collision_mesh_ptr
+                           , const float* collision_mesh_matrix_world
                            , bool use_large_material_id
                            , bool use_vertex_color
+                           , bool use_custom_normals
                            , int vg_collision_index
                            , unsigned node_size
-                           , const vector[int]& material_mapping) nogil
+                           , const vector[int]& material_mapping
+                           , const LiquidParams* liquid_params) nogil
 
         BufferKey batches()
         BufferKey normals()
@@ -37,6 +50,9 @@ cdef extern from "bl_utils/math_utils.hpp" namespace "wbs_kernel::bl_utils::mesh
         BufferKey vertex_colors2()
         BufferKey bsp_nodes()
         BufferKey bsp_faces()
+        BufferKey liquid_header()
+        BufferKey liquid_vertices()
+        BufferKey liquid_tiles()
         uint16_t trans_batch_count() const
         uint16_t int_batch_count() const
         uint16_t ext_batch_count() const

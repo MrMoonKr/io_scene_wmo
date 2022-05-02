@@ -6,80 +6,24 @@ import inspect
 
 from math import pi, ceil, floor, isclose
 from logging import exception
-from typing import Tuple
+from typing import Tuple, Optional, Union
 
-from ..pywowlib.file_formats.wmo_format_root import MOHDFlags
-from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, TriangleMaterial, Batch
+from ..pywowlib.file_formats.wmo_format_root import MOHDFlags, PortalRelation
+from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex
 from ..pywowlib.wmo_file import WMOGroupFile
 from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
 from ..pywowlib import WoWVersionManager, WoWVersions
-from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
+from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams, LiquidExportParams
 
 
 class BlenderWMOSceneGroup:
     def __init__(self, wmo_scene, wmo_group, obj=None):
         self.wmo_group: WMOGroupFile = wmo_group
-        self.wmo_scene: 'BlenderWMOSceneGroup' = wmo_scene
+        self.wmo_scene: 'BlenderWMOScene' = wmo_scene
         self.bl_object: bpy.types.Object = obj
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
         self.has_blending: bool = False
-
-    @staticmethod
-    def get_avg(list_):
-        """ Get single average normal vector from a split normal """
-        normal = [0.0, 0.0, 0.0]
-
-        for n in list_:
-            for i in range(0, 3):
-                normal[i] += n[i]
-
-        for i in range(0, 3):
-            normal[i] /= len(list_)
-
-        return normal
-
-    @staticmethod
-    def comp_colors(color1, color2):
-        """ Compare two colors """
-
-        for i in range(3):
-            if color1[i] != color2[i]:
-                return False
-        return True
-
-    @staticmethod
-    def comp_colors_key(color1):
-        for i in range(len(color1)):
-            if color1[i] > 0:
-                return True
-        return False
-
-    @staticmethod
-    def get_batch_type(b_face, batch_map_trans, batch_map_int):
-        """ Find which MOBA batch type a passed bmesh face belongs two """
-
-        if not batch_map_trans and not batch_map_int:
-            return 2
-
-        trans_count = 0
-        int_count = 0
-
-        n_verts = len(b_face.loops)
-
-        for loop in b_face.loops:
-            if batch_map_trans and BlenderWMOSceneGroup.comp_colors_key(loop[batch_map_trans]):
-                trans_count += 1
-
-            if batch_map_int and BlenderWMOSceneGroup.comp_colors_key(loop[batch_map_int]):
-                int_count += 1
-
-        if trans_count == n_verts:
-            return 0
-        elif int_count == n_verts:
-            return 1
-        else:
-            return 2
 
     @staticmethod
     def get_material_viewport_image(material):
@@ -87,58 +31,6 @@ class BlenderWMOSceneGroup:
 
         if material.wow_wmo_material.diff_texture_1:
             return material.wow_wmo_material.diff_texture_1
-
-    @staticmethod
-    def get_linked_faces(b_face, face_batch_type, uv, uv2, batch_map_trans, batch_map_int, stack=len(inspect.stack())):
-        # check if face was already processed
-        if b_face.tag:
-            return []
-
-        f_linked = [b_face]
-        mat_idx = b_face.material_index
-        b_face.tag = True
-
-        # Select edges that link two faces
-        for link_edge in b_face.edges:
-            # check if edge is shared with another face
-            if not len(link_edge.link_faces) == 2:
-                continue
-
-            # prevent recursion stack overflow
-            if stack >= sys.getrecursionlimit() - 1:
-                break
-
-            for link_face in link_edge.link_faces:
-                # check if face was already processed and if it shares the same material
-                if link_face.tag or link_face.material_index != mat_idx:
-                    continue
-
-                # check if face is located within same UV island.
-                linked_uvs = 0
-                for loop in b_face.loops:
-
-                    for l_loop in loop.vert.link_loops:
-                        if l_loop.face is link_face:
-                            if isclose(l_loop[uv].uv[0], loop[uv].uv[0]) and isclose(l_loop[uv].uv[1], loop[uv].uv[1]):
-                                linked_uvs += 1
-                            if uv2 and isclose(l_loop[uv2].uv[0], loop[uv2].uv[0]) and isclose(l_loop[uv2].uv[1],
-                                                                                               loop[uv2].uv[1]):
-                                linked_uvs += 1
-
-                if (not uv2 and linked_uvs < 2) or (uv2 and linked_uvs < 4):
-                    continue
-
-                # check if face is located within the same batch
-                batch_type = BlenderWMOSceneGroup.get_batch_type(link_face, batch_map_trans, batch_map_int)
-
-                if batch_type != face_batch_type:
-                    continue
-
-                # call this function recursively on this face if all checks are passed
-                f_linked.extend(BlenderWMOSceneGroup.get_linked_faces(link_face, batch_type, uv, uv2, batch_map_trans,
-                                                                      batch_map_int, stack=stack + 1))
-
-        return f_linked
 
     def from_wmo_liquid_type(self, basic_liquid_type):
         """ Convert simplified WMO liquid type IDs to real LiquidType.dbc IDs """
@@ -377,7 +269,6 @@ class BlenderWMOSceneGroup:
 
         obj.wow_wmo_liquid.enabled = True
 
-
         obj.wow_wmo_liquid.color = self.wmo_scene.bl_materials[group.mliq.material_id].wow_wmo_material.diff_color
 
         wmo_group_obj = bpy.context.scene.objects[group_name]
@@ -545,6 +436,7 @@ class BlenderWMOSceneGroup:
         for i, loop in enumerate(mesh.loops):
 
             if vertex_color_layer is not None:
+
                 mesh.vertex_colors['Col'].data[i].color = (group.mocv.vert_colors[loop.vertex_index][2] / 255,
                                                            group.mocv.vert_colors[loop.vertex_index][1] / 255,
                                                            group.mocv.vert_colors[loop.vertex_index][0] / 255,
@@ -655,6 +547,8 @@ class BlenderWMOSceneGroup:
         if nobj.wow_wmo_group.place_type == '8192':
             wmo_indoor_collection.objects.link(nobj)
 
+        self.bl_object = nobj
+
         # remove collision faces from mesh
         if collision_face_ids:
 
@@ -729,161 +623,179 @@ class BlenderWMOSceneGroup:
 
             nobj.wow_wmo_group.liquid_type = str(real_liquid_type)
 
-    def get_portal_direction(self, portal_obj, group_obj):
-        """ Get the direction of MOPR portal relation given a portal object and a target group """
+    @staticmethod
+    def try_calculate_direction(portal_obj: bpy.types.Object
+                                , group_obj: bpy.types.Object
+                                , bound_relation: PortalRelation
+                                , triangulated: bool = False) -> int:
 
-        def try_calculate_direction():
+        portal_mesh = portal_obj.data
+        portal_polygons = portal_mesh.polygons
+        mesh = group_obj.data
+        ray_cast_bias = 0.001  # sys.float_info.epsilon does not work here, ray cast origin returns itself.
 
-            mesh = group_obj.data
-            portal_mesh = portal_obj.data
-            normal = portal_obj.data.polygons[0].normal
+        if triangulated:
+            portal_mesh.calc_loop_triangles()
+            portal_polygons = portal_mesh.loop_triangles
 
-            for poly in mesh.polygons:
-                poly_normal = mathutils.Vector(poly.normal)
-                g_center = group_obj.matrix_world @ poly.center + poly_normal * sys.float_info.epsilon
+        group_matrix_inv = group_obj.matrix_world.inverted()
+        portal_matrix_normal = portal_obj.matrix_world.to_3x3().transposed().inverted()
+        group_matrix_normal_inv = portal_obj.matrix_world.to_3x3().transposed()
 
-                dist = normal[0] * g_center[0] + normal[1] * g_center[1] \
-                       + normal[2] * g_center[2] - portal_mesh.polygons[0].normal[0] \
-                       * portal_mesh.vertices[portal_mesh.polygons[0].vertices[0]].co[0] \
-                       - portal_mesh.polygons[0].normal[1] \
-                       * portal_mesh.vertices[portal_mesh.polygons[0].vertices[0]].co[1] \
-                       - portal_mesh.polygons[0].normal[2] \
-                       * portal_mesh.vertices[portal_mesh.polygons[0].vertices[0]].co[2]
+        for portal_poly in portal_polygons:
 
-                if dist == 0:
+            portal_normal = (portal_matrix_normal @ portal_poly.normal).normalized()
+            portal_center = portal_obj.matrix_world @ mathutils.Vector(portal_poly.center)
+
+            portal_normal_gs = (group_matrix_normal_inv @ portal_normal).normalized()
+            portal_center_gs = group_matrix_inv @ portal_center
+
+            # cast a ray into object space to see if any face was hit
+            # using this hack we will avoid expensive calculations for many indoor-indoor relations.
+            # note: this whole approach does not cover the situations of convoluted cases where the geometry of the
+            # group intersects the portal plane from both sides (e.g. Ironforge big hallway portals.
+            # For now the users will have to resolve the direction of such portals manually through GUI. TODO: fix?
+
+            # first we cast alongside the normal vector
+
+            ray_cast_direction = portal_normal_gs
+            ray_cast_origin = portal_center_gs + ray_cast_direction * ray_cast_bias
+            result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
+
+            if result and normal.dot(ray_cast_direction) < 0:
+                if bound_relation and bound_relation.side == 0:
+                    bound_relation.side = -1
+
+                return 1
+
+            # next we cast in the oppositve direction
+            ray_cast_direction = portal_normal_gs.copy()
+            ray_cast_direction.negate()
+            ray_cast_origin = portal_center_gs - ray_cast_direction * ray_cast_bias
+            result, _, normal, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
+
+            if result and normal.dot(ray_cast_direction) < 0:
+                if bound_relation and bound_relation.side == 0:
+                    bound_relation.side = 1
+
+                return -1
+
+            ray_cast_origin = portal_center_gs
+
+            for mesh_poly in mesh.polygons:
+                is_in_portal_direction = portal_normal.dot((group_obj.matrix_world
+                                                            @ mesh_poly.center) - portal_center) > 0.0
+                mesh_poly_normal = mathutils.Vector(mesh_poly.normal)
+                ray_cast_direction = mesh_poly.center - ray_cast_origin
+                ray_cast_direction.normalize()
+
+                # skip back faces
+                if mesh_poly_normal.dot(ray_cast_direction) >= 0.0:
                     continue
 
-                for portal_poly in portal_mesh.polygons:
+                result, _, _, index = group_obj.ray_cast(ray_cast_origin, ray_cast_direction)
 
-                    direction = portal_poly.center - g_center
-                    length = mathutils.Vector(direction).length
-                    direction.normalize()
+                if result and mesh_poly.index == index:
 
-                    angle = mathutils.Vector(direction).angle(poly.normal, None)
+                    # here we need to do a slower-space ray cast to determine if view is not obstructed by another
+                    # group. We expect to hit the same group in this pass. If not, view is considered obstructed.
+                    # It is okay though to hit collision, doodad or liquid of the same group. TODO: doodads
 
-                    if angle is None or angle >= pi * 0.5:
+                    depsgraph = bpy.context.evaluated_depsgraph_get()
+                    scene_ray_cast_origin = (portal_center + portal_normal * ray_cast_bias) \
+                        if is_in_portal_direction else (portal_center - portal_normal * ray_cast_bias)
+
+                    result, _, _, _, obj, _ = bpy.context.scene.ray_cast(depsgraph, scene_ray_cast_origin,
+                          (group_obj.matrix_world @ mesh_poly.center) - scene_ray_cast_origin)
+
+                    allowed_names = [
+                        group_obj.original.name
+                        , group_obj.original.wow_wmo_group.collision_mesh.name
+                        if group_obj.original.wow_wmo_group.collision_mesh else None
+                        , group_obj.original.wow_wmo_group.liquid_mesh.name
+                        if group_obj.original.wow_wmo_group.liquid_mesh else None
+                     ]
+
+                    if not result or obj.name not in allowed_names:
+                        # if obj: print(f"Ray casted from {portal_obj.name} to {group_obj.name}, but got {obj.name}")
                         continue
 
-                    ray_cast_result = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), g_center,
-                                                                 direction)
+                    portal_dir = 1 if is_in_portal_direction else -1
 
-                    if not ray_cast_result[0] \
-                            or ray_cast_result[4].name == portal_obj.name \
-                            or mathutils.Vector(
-                        (ray_cast_result[1][0] - g_center[0], ray_cast_result[1][1] - g_center[1],
-                         ray_cast_result[1][2] - g_center[2])).length > length:
-                        result = 1 if dist > 0 else -1
+                    # fill in the other relation if it is a second attempt from the other side
+                    if bound_relation and bound_relation.side == 0:
+                        bound_relation.side = -portal_dir
 
-                        if bound_relation_side == 0:
-                            bound_relation.side = -result
+                    return portal_dir
 
-                        return result
+        return 0
 
-            return 0
-
-        bpy.ops.object.select_all(action='DESELECT')
-
-        bpy.context.view_layer.objects.active = portal_obj
+    def get_portal_direction(self
+                             , portal_obj: bpy.types.Object
+                             , group_obj: bpy.types.Object) -> int:
+        """ Get the direction of MOPR portal relation given a portal object and a target group """
 
         # check if this portal was already processed
         bound_relation_side = None
         bound_relation = None
         for relation in self.wmo_scene.wmo.mopr.relations:
-            if relation.portal_index == portal_obj.wow_wmo_portal.portal_id:
+            if relation.portal_index == portal_obj.original.wow_wmo_portal.portal_id:
                 bound_relation_side = relation.side
                 bound_relation = relation
 
         if bound_relation_side:
             return -bound_relation_side
 
-        if portal_obj.wow_wmo_portal.algorithm != '0':
-            return 1 if portal_obj.wow_wmo_portal.algorithm == '1' else -1
+        if portal_obj.original.wow_wmo_portal.algorithm != '0':
+            return 1 if portal_obj.original.wow_wmo_portal.algorithm == '1' else -1
 
-        # reveal hidden geometry
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.reveal()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        portal_obj.select_set(True)
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        portal_obj.select_set(False)
-
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-
-        result = try_calculate_direction()
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, group_obj, bound_relation)
 
         if result:
             return result
 
-        # triangulate the proxy portal
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.quads_convert_to_tris()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        result = try_calculate_direction()
+        # if the previous attempt failed, we try to calculate the direction on a triangulated portal
+        # for that we use the loop tris to avoid overhead
+        result = BlenderWMOSceneGroup.try_calculate_direction(portal_obj, group_obj, bound_relation, True)
 
         if result:
             return result
 
-        if bound_relation_side is None:
-            print("\nFailed to calculate direction for portal \"{}\". "
-                  "Calculation from another side will be attempted.".format(portal_obj.name))
-        else:
-            print("\nFailed to calculate direction from the opposite side for portal \"{}\" "
+        if bound_relation_side is not None:
+            print("\nFailed to calculate direction from the both sides for portal \"{}\" "
                   "You may consider setting up the direction manually.".format(portal_obj.name))
 
         return 0
 
-    def save_liquid(self, ob):
-
+    def save_liquid(self, obj: bpy.types.Object) -> LiquidExportParams:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
         group = self.wmo_group
+        obj_eval = obj.evaluated_get(depsgraph)
+        mesh = obj_eval.data
 
-        mesh = ob.data
+        params = LiquidExportParams()
+        params.liquid_mesh_pointer = mesh.as_pointer()
+        params.liquid_mesh_matrix_world = obj_eval.matrix_world
+        params.x_tiles = round(obj_eval.dimensions[0] / 4.1666625)
+        params.y_tiles = round(obj_eval.dimensions[1] / 4.1666625)
 
-        # apply mesh transformations
-        active = bpy.context.view_layer.objects.active
-        bpy.context.view_layer.objects.active = ob
-        ob.select_set(True)
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        ob.select_set(False)
-        bpy.context.view_layer.objects.active = active
+        group.mogp.flags |= MOGPFlags.HasWater
 
-        start_vertex = 0
-        sum = 0
-        for vertex in mesh.vertices:
-            cur_sum = vertex.co[0] + vertex.co[1]
+        types_1 = {3, 7, 11, 15, 19, 121, 141}  # lava
+        types_2 = {4, 8, 12, 20, 21}  # slime
 
-            if cur_sum < sum:
-                start_vertex = vertex.index
-                sum = cur_sum
+        diff_color = (int(obj.wow_wmo_liquid.color[2] * 255),
+                      int(obj.wow_wmo_liquid.color[1] * 255),
+                      int(obj.wow_wmo_liquid.color[0] * 255),
+                      int(obj.wow_wmo_liquid.color[3] * 255)
+                      )
 
-        group.mliq.x_tiles = round(ob.dimensions[0] / 4.1666625)
-        group.mliq.y_tiles = round(ob.dimensions[1] / 4.1666625)
-        group.mliq.x_verts = group.mliq.x_tiles + 1
-        group.mliq.y_verts = group.mliq.y_tiles + 1
-        group.mliq.position = mesh.vertices[start_vertex].co.to_tuple()
+        if mesh.materials[0].wow_wmo_material.enabled:
+            material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+                mesh.materials[0].name)
+        else:
+            # if no mat or if the mat isn't a wmo mat, create a new one
 
-        group.mogp.flags |= MOGPFlags.HasWater # do we really need that?
-
-        types_1 = {3, 7, 11, 15, 19, 121, 141} # lava
-        types_2 = {4, 8, 12, 20, 21} # slime
-
-        diff_color = (int(ob.wow_wmo_liquid.color[2] * 255),
-                      int(ob.wow_wmo_liquid.color[1] * 255),
-                      int(ob.wow_wmo_liquid.color[0] * 255),
-                      int(ob.wow_wmo_liquid.color[3] * 255)
-                     )
-
-        try:
-            if not mesh.materials[0].wow_wmo_material.enabled:
-                raise exception()
-            group.mliq.material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
-                    mesh.materials[0].name)
-        except: # if no mat or if the mat isn't a wmo mat, create a new one
             texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
 
             if group.mogp.liquid_type in types_1:
@@ -892,67 +804,12 @@ class BlenderWMOSceneGroup:
             elif group.mogp.liquid_type in types_2:
                 texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
 
-            group.mliq.material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
+            material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
 
-        if group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2:
+        params.mat_id = material_id
+        params.is_water = not (group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2)
 
-            if mesh.uv_layers.active:
-
-                uv_map = {}
-
-                for poly in mesh.polygons:
-                    for loop_index in poly.loop_indices:
-                        if mesh.loops[loop_index].vertex_index not in uv_map:
-                            uv_map[mesh.loops[loop_index].vertex_index] = mesh.uv_layers.active.data[loop_index].uv
-
-                for i in range(group.mliq.x_verts * group.mliq.y_verts):
-                    vertex = LiquidVertex()
-                    vertex.is_water = False
-                    group.mliq.is_water = False
-
-                    vertex.u = int(uv_map.get(mesh.vertices[i].index)[0] * 255)
-                    vertex.v = int(uv_map.get(mesh.vertices[i].index)[1] * 255)
-
-                    vertex.height = (ob.matrix_world @ mesh.vertices[i].co)[2]
-                    group.mliq.vertex_map.append(vertex)
-            else:
-                raise Exception("\nError saving WMO. Slime and magma (lava) liquids require a UV map to be created.")
-
-        else:
-
-            for j in range(group.mliq.x_verts * group.mliq.y_verts):
-                vertex = LiquidVertex()
-
-                vertex.height = mesh.vertices[j].co[2]
-                group.mliq.vertex_map.append(vertex)
-
-        for poly in mesh.polygons:
-            tile_flag = 0
-            blue = [0.0, 0.0, 1.0]
-
-            counter = 0
-            bit = 1
-            not_rendered = False
-            while bit <= 0x80:
-                vc_layer = mesh.vertex_colors["flag_{}".format(counter)]
-                
-                if bit == 0x1:
-                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
-                        not_rendered = True
-
-                if bit <= 0x8: # legacy/no render tile flags : set not rendered from layer 0
-                    if not_rendered:
-                        tile_flag |= bit
-                    # TODO : For vanilla/BC, set liquid type flags here
-                else:
-                    if self.comp_colors(vc_layer.data[poly.loop_indices[0]].color, blue):
-                        tile_flag |= bit
-
-                bit <<= 1
-
-                counter += 1
-
-            group.mliq.tile_flags.append(tile_flag)
+        return params
 
     def create_batching_parameters(self) -> Tuple[bpy.types.Mesh, WMOGeometryBatcherMeshParams]:
         """ Prepare the WoW WMO group proxy mesh for export.
@@ -967,49 +824,35 @@ class BlenderWMOSceneGroup:
         group = self.wmo_group
         scene = bpy.context.scene
 
-        bpy.context.view_layer.objects.active = obj
         mesh = obj_eval.data
+
+        # extremely important for accessing correct data in C++
+        mesh.calc_loop_triangles()
+        mesh.calc_normals()
 
         if mesh.has_custom_normals:
             mesh.calc_normals_split()
 
-        # create bmesh
-        bm = bmesh.new()
-        bm.from_mesh(mesh)
-
         # handle separate collision
+        col_obj_eval = None
+        col_mesh_eval = None
         if obj.wow_wmo_group.collision_mesh:
-            col_mesh_eval = obj.wow_wmo_group.collision_mesh.evaluated_get(depsgraph).data
+            col_obj_eval = obj.wow_wmo_group.collision_mesh.evaluated_get(depsgraph)
+            col_mesh_eval = col_obj_eval.data
 
-            for poly in col_mesh_eval.polygons:
-                poly.material_index = 32767
+            # extremely important for accessing correct data in C++
+            col_mesh_eval.calc_loop_triangles()
+            col_mesh_eval.calc_normals()
 
-            bm.from_mesh(col_mesh_eval)
-            bm.verts.ensure_lookup_table()
-            bm.faces.ensure_lookup_table()
+            if col_mesh_eval.has_custom_normals:
+                mesh.calc_normals_split()
 
-        # triangulate bmesh
-        bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
+        if 'UVMap' not in mesh.uv_layers:
+            raise Exception('\nThe group \"{}\" must have a UV map layer named UVMap.'.format(obj.name))
 
-        vertices = bm.verts
-        edges = bm.edges
-        faces = bm.faces
-
-        vertices.ensure_lookup_table()
-        edges.ensure_lookup_table()
-        faces.ensure_lookup_table()
-
-        if not bm.loops.layers.uv.get('UVMap'):
-            raise Exception('\nThe group \"{}\" must have a UV map layer.'.format(obj.name))
-
-        self.has_blending = bm.loops.layers.uv.get('UVMap.001') and bm.loops.layers.color.get('Blendmap')
+        self.has_blending = 'UVMap.001' in mesh.uv_layers and 'Blendmap' in mesh.vertex_colors
         if self.has_blending:
             group.add_blendmap_chunks()
-
-        mesh_final = bpy.data.meshes.new("Temp")
-        bm.to_mesh(mesh_final)
-        mesh_final.calc_normals()
-        bm.free()
 
         use_vertex_color = '0' in obj.wow_wmo_group.flags \
                            or (obj.wow_wmo_group.place_type == '8192' and '1' not in obj.wow_wmo_group.flags)
@@ -1033,12 +876,19 @@ class BlenderWMOSceneGroup:
 
             material_mapping.append(mat_id)
 
-        return mesh_final, WMOGeometryBatcherMeshParams(mesh_final.as_pointer()
-                                                        , False
-                                                        , use_vertex_color
-                                                        , vg_collision_index
-                                                        , obj.wow_wmo_vertex_info.node_size
-                                                        , material_mapping)
+        liquid_params = self.save_liquid(obj.wow_wmo_group.liquid_mesh) if obj.wow_wmo_group.liquid_mesh else None
+
+        return mesh, WMOGeometryBatcherMeshParams(mesh.as_pointer()
+                                                  , obj_eval.matrix_world
+                                                  , col_mesh_eval.as_pointer() if col_mesh_eval else 0
+                                                  , col_obj_eval.matrix_world if col_obj_eval else None
+                                                  , False  # TODO: use large material ID
+                                                  , use_vertex_color
+                                                  , mesh.has_custom_normals
+                                                  , vg_collision_index
+                                                  , obj.wow_wmo_vertex_info.node_size
+                                                  , material_mapping
+                                                  , liquid_params)
 
     def save(self, batcher: CWMOGeometryBatcher, group_index: int):
         """ Save WoW WMO group data for future export """
@@ -1057,6 +907,18 @@ class BlenderWMOSceneGroup:
         if self.has_blending:
             self.wmo_group.motv2.from_bytes(batcher.tex_coords2(group_index))
             self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2(group_index))
+
+        # save liquid
+        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
+        if obj.wow_wmo_group.liquid_mesh:
+            self.wmo_group.mliq.from_bytes(batcher.liquid(group_index))
+        else:
+            self.wmo_group.mliq = None
+            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
+            wow_version = int(bpy.context.scene.wow_scene.version)
+            if wow_version >= WoWVersions.WOTLK:
+                # this flag causes wmo groups to fill with liquid if liquid type is not 0.
+                self.wmo_group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         # bsp = BSPTree()
         # bsp.generate_bsp(self.wmo_group.movt.vertices, self.wmo_group.movi.indices, obj.wow_wmo_vertex_info.node_size)
@@ -1103,7 +965,6 @@ class BlenderWMOSceneGroup:
                 obj.wow_wmo_group.fog3,
                 obj.wow_wmo_group.fog4)
 
-
         # set fog references
         self.wmo_group.mogp.fog_indices = (fogs[0].wow_wmo_fog.fog_id if fogs[0] else 0,
                                   fogs[1].wow_wmo_fog.fog_id if fogs[1] else 0,
@@ -1146,18 +1007,6 @@ class BlenderWMOSceneGroup:
                     self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor
             else:
                 self.wmo_group.mocv = None
-        
-        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
-
-        if obj.wow_wmo_group.liquid_mesh:
-            self.save_liquid(obj.wow_wmo_group.liquid_mesh)
-        else:
-            self.wmo_group.mliq = None
-            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
-            wow_version = int(bpy.context.scene.wow_scene.version)
-            if wow_version >= WoWVersions.WOTLK:
-                # this flag causes wmo groups to fill with liquid if liquid type is not 0.
-                self.wmo_group.root.mohd.flags |= MOHDFlags.UseLiquidTypeDBCId
 
         if not has_lights:
             self.wmo_group.molr = None

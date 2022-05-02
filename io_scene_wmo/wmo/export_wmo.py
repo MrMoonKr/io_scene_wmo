@@ -4,6 +4,8 @@ import time
 from ..pywowlib import WoWVersionManager
 from ..pywowlib.wmo_file import WMOFile
 
+from ..third_party.tqdm import tqdm
+
 from .wmo_scene import BlenderWMOScene
 
 from ..ui import get_addon_prefs
@@ -31,11 +33,13 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
     bl_scene.save_doodad_sets()
     bl_scene.save_lights()
     bl_scene.save_fogs()
+    bl_scene.prepare_groups()
     bl_scene.save_portals()
     bl_scene.save_groups()
     bl_scene.save_root_header()
 
-    wmo.write()
+    for _ in tqdm(range(1), desc='Writing WMO files', ascii=True):
+        wmo.write()
 
     bpy.context.scene.wow_wmo_root_elements.is_update_critical = False
 

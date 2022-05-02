@@ -2,6 +2,7 @@
 #define WBS_KERNEL_BATCH_GEOMETRY_HPP
 
 #include <bl_utils/math_utils.hpp>
+#include <bl_utils/color_utils.hpp>
 
 #include <cstdint>
 #include <vector>
@@ -19,16 +20,7 @@ struct MDeformVert;
 namespace wbs_kernel::bl_utils::mesh::wmo
 {
   class BSPTree;
-
-  inline constexpr short COLLISION_MAT_NR = 32767;
-
-  struct RGBA
-  {
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char a;
-  };
+  class LiquidExporter;
 
   enum MOBAFlags
   {
@@ -109,21 +101,38 @@ namespace wbs_kernel::bl_utils::mesh::wmo
   struct BatchVertexInfo
   {
     unsigned local_index;
-    RGBA col;
-    RGBA col2;
+    color_utils::RGBA col;
+    color_utils::RGBA col2;
     math_utils::Vector2D uv;
     math_utils::Vector2D uv2;
+    math_utils::Vector3D loop_normal;
+
+  };
+
+  struct LiquidParams
+  {
+    std::uintptr_t liquid_mesh;
+    const float* liquid_mesh_matrix_world;
+    unsigned x_tiles;
+    unsigned y_tiles;
+    unsigned mat_id;
+    bool is_water;
   };
 
   class WMOGeometryBatcher
   {
   public:
     WMOGeometryBatcher(std::uintptr_t mesh_ptr
+                       , const float* mesh_matrix_world
+                       , std::uintptr_t collision_mesh_ptr
+                       , const float* collision_mesh_matrix_world
                        , bool use_large_material_id
                        , bool use_vertex_color
+                       , bool use_custom_normals
                        , int vg_collision_index
                        , unsigned node_size
                        , std::vector<int> const& material_mapping
+                       , const LiquidParams* liquid_params
     );
 
     ~WMOGeometryBatcher();
@@ -162,6 +171,15 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     BufferKey bsp_faces();
 
     [[nodiscard]]
+    BufferKey liquid_vertices();
+
+    [[nodiscard]]
+    BufferKey liquid_tiles();
+
+    [[nodiscard]]
+    BufferKey liquid_header();
+
+    [[nodiscard]]
     std::uint16_t trans_batch_count() const { return _trans_batch_count; };
 
     [[nodiscard]]
@@ -189,9 +207,9 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     void _create_new_collision_vert(const MVert* vertex
                                    , const MLoop* loop);
 
-    void _create_new_collision_triangle(const MPoly* poly);
+    void _create_new_collision_triangle(const MLoopTri* tri);
 
-    void _create_new_render_triangle(const MPoly* poly, MOBABatch* cur_batch);
+    void _create_new_render_triangle(const MLoopTri* tri, MOBABatch* cur_batch);
 
     // Initalize
     void _unpack_vertex(BatchVertexInfo& v_info
@@ -210,15 +228,15 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     [[nodiscard]]
     bool _is_vertex_collidable(unsigned vert_index);
 
-    void _calculate_bounding_for_vertex(const MVert* vertex);
+    void _calculate_bounding_for_vertex(glm::vec3 const& vertex);
 
-    void _calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, const MVert* vertex) const;
+    void _calculate_batch_bounding_for_vertex(MOBABatch* cur_batch,  glm::vec3 const& vertex) const;
 
     void _set_last_error(WMOGeometryBatcherError error) { _last_error = error; };
 
     [[nodiscard]]
     bool _needs_new_batch(MOBABatch* cur_batch
-        , const MPoly* cur_poly
+        , const MLoopTri* cur_tri
         , BatchType cur_batch_type
         , BatchType cur_poly_batch_type
         , std::uint16_t cur_batch_mat_id);
@@ -227,18 +245,17 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     static unsigned char _get_grayscale_factor(const MLoopCol* color);
 
     [[nodiscard]]
-    static bool _compare_colors(RGBA const& v1, RGBA const& v2);
-
-    [[nodiscard]]
-    static bool comp_color_key(RGBA const& color);
-
-    [[nodiscard]]
-    static BatchType get_batch_type(const MPoly* poly
+    static BatchType get_batch_type(const MLoopTri* poly
         , const MLoopCol* batch_map_trans
         , const MLoopCol* batch_map_int);
 
 
     Mesh* _mesh;
+    Mesh* _collision_mesh;
+
+    glm::mat4 _mesh_mtx_world;
+    glm::mat4 _collision_mtx_world;
+
     std::vector<MOBABatch> _batches;
 
     std::vector<math_utils::Vector3D> _vertices;
@@ -247,8 +264,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     std::vector<math_utils::Vector3D> _normals;
     std::vector<math_utils::Vector2D> _tex_coords;
     std::vector<math_utils::Vector2D> _tex_coords2;
-    std::vector<RGBA> _vertex_colors;
-    std::vector<RGBA> _vertex_colors2;
+    std::vector<color_utils::RGBA> _vertex_colors;
+    std::vector<color_utils::RGBA> _vertex_colors2;
 
     std::uint16_t _trans_batch_count;
     std::uint16_t _int_batch_count;
@@ -267,12 +284,15 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     bool _use_vertex_color;
     bool _use_large_material_id;
+    bool _use_custom_normals;
     bool _has_collision_vg;
 
     const MLoop* _bl_loops;
     const MVert* _bl_verts;
     const MPoly* _bl_polygons;
+    const MLoopTri* _bl_looptris;
     const float(*_bl_vertex_normals)[3];
+    const float(*_bl_loop_normals)[3];
 
     MLoopCol* _bl_batch_map_trans;
     MLoopCol* _bl_batch_map_int;
@@ -283,7 +303,14 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     MLoopUV* _bl_uv2;
     MDeformVert* _bl_vg_data;
 
+    // collision mesh data
+    const MLoop* _bl_col_loops;
+    const MVert* _bl_col_verts;
+    const MLoopTri* _bl_col_looptris;
+    const float(*_bl_col_vertex_normals)[3];
+
     BSPTree* _bsp_tree;
+    LiquidExporter* _liquid_exporter;
 
 
   };

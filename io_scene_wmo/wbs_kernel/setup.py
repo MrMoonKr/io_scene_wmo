@@ -3,7 +3,7 @@ import sys
 import platform
 import argparse
 
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 
@@ -24,13 +24,14 @@ def main(debug: bool):
     print_info("\nBuilding WBS kernel...")
     print(f"Target mode: {'Debug' if debug else 'Release'}")
 
+
     if platform.system() == 'Darwin':
         if debug:
-            extra_compile_args = ['-g3', '-O0', '-stdlib=libc++']
-            extra_link_args = ['-stdlib=libc++']
+            extra_compile_args = ['-std=c++17', '-g3', '-O0']
+            extra_link_args = []
         else:
-            extra_compile_args = ['-O3', '-stdlib=libc++']
-            extra_link_args = ['-stdlib=libc++']
+            extra_compile_args = ['-std=c++17', '-O3']
+            extra_link_args = []
 
     elif platform.system() == 'Windows':
         if debug:
@@ -60,9 +61,11 @@ def main(debug: bool):
     wmo_utils_sources = [
         "src/wmo_utils.pyx",
         "src/bl_utils/math_utils.cpp",
+        "src/bl_utils/color_utils.cpp",
         "src/bl_utils/mesh/custom_data.cpp",
         "src/bl_utils/mesh/wmo/batch_geometry.cpp",
-        "src/bl_utils/mesh/wmo/bsp_tree.cpp"
+        "src/bl_utils/mesh/wmo/bsp_tree.cpp",
+        "src/bl_utils/mesh/wmo/wmo_liquid_exporter.cpp"
     ]
 
     wmo_utils_include_dirs = [

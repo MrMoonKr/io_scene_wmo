@@ -1,6 +1,8 @@
 #include "batch_geometry.hpp"
 #include <bl_utils/mesh/custom_data.hpp>
 #include <bl_utils/mesh/wmo/bsp_tree.hpp>
+#include <bl_utils/mesh/wmo/wmo_liquid_exporter.hpp>
+#include <extern/glm/gtc/type_ptr.hpp>
 
 #include <cassert>
 #include <algorithm>
@@ -16,20 +18,28 @@ extern "C"
 }
 
 using namespace wbs_kernel::bl_utils::math_utils;
+using namespace wbs_kernel::bl_utils::color_utils;
 using namespace wbs_kernel::bl_utils::mesh::wmo;
 using namespace wbs_kernel::bl_utils::mesh;
 
 
 WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
+  , const float* mesh_matrix_world
+  , std::uintptr_t collision_mesh_ptr
+  , const float* collision_mesh_matrix_world
   , bool use_large_material_id
   , bool use_vertex_color
+  , bool use_custom_normals
   , int vg_collision_index
   , unsigned node_size
   , std::vector<int> const& material_mapping
+  , const LiquidParams* liquid_params
 
 )
 : _mesh(reinterpret_cast<Mesh*>(mesh_ptr))
+, _mesh_mtx_world(glm::make_mat4(mesh_matrix_world))
 , _bsp_tree(nullptr)
+, _liquid_exporter(nullptr)
 , _trans_batch_count(0)
 , _int_batch_count(0)
 , _ext_batch_count(0)
@@ -42,9 +52,10 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _bounding_box_max(Vector3D{std::numeric_limits<float>::lowest()
                               , std::numeric_limits<float>::lowest()
                               , std::numeric_limits<float>::lowest()})
-, _bl_loops(reinterpret_cast<const MLoop*>(_mesh->mloop))
-, _bl_verts(reinterpret_cast<const MVert*>(_mesh->mvert))
-, _bl_polygons(reinterpret_cast<const MPoly*>(_mesh->mpoly))
+, _bl_loops(_mesh->mloop)
+, _bl_verts(_mesh->mvert)
+, _bl_polygons(_mesh->mpoly)
+, _bl_looptris(_mesh->runtime.looptris.array)
 , _bl_vertex_normals(reinterpret_cast<const float(*)[3]>(_mesh->runtime.vert_normals))
 , _has_collision_vg(_vg_collision_index >= 0)
 , _bl_batch_map_trans(get_custom_data_layer_named<MLoopCol>(&_mesh->ldata, "BatchmapTrans"))
@@ -55,10 +66,27 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _bl_uv(get_custom_data_layer_named<MLoopUV>(&_mesh->ldata, "UVMap"))
 , _bl_uv2(get_custom_data_layer_named<MLoopUV>(&_mesh->ldata, "UVMap.001"))
 , _last_error(WMOGeometryBatcherError::NO_ERROR)
+, _collision_mesh(nullptr)
 , _material_ids(material_mapping)
 {
-  assert(!_mesh->runtime.vert_normals_dirty && "Vertex normals were not calculated.");
-  assert(!_mesh->runtime.poly_normals_dirty && "Poly normals were not calculated.");
+  assert(!_mesh->runtime.vert_normals_dirty && "Vertex normals were not calculated for group mesh.");
+  assert(!_mesh->runtime.poly_normals_dirty && "Poly normals were not calculated for group mesh.");
+
+  if (collision_mesh_ptr)
+  {
+    _collision_mesh = reinterpret_cast<Mesh*>(collision_mesh_ptr);
+
+    assert(!_collision_mesh->runtime.vert_normals_dirty && "Vertex normals were not calculated for collision mesh.");
+    assert(!_collision_mesh->runtime.poly_normals_dirty && "Poly normals were not calculated for collision mesh.");
+
+    _bl_col_loops = _collision_mesh->mloop;
+    _bl_col_verts = _collision_mesh->mvert;
+    _bl_col_vertex_normals = reinterpret_cast<const float(*)[3]>(_collision_mesh->runtime.vert_normals);
+    _bl_col_looptris = _collision_mesh->runtime.looptris.array;
+
+    assert(collision_mesh_matrix_world && "Collision is present but its world matrix is nullptr.");
+    _collision_mtx_world = glm::make_mat4(collision_mesh_matrix_world);
+  }
 
   if (_has_collision_vg)
   {
@@ -71,12 +99,24 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     }
   }
 
-  std::vector<std::pair<const MPoly*, BatchType>> polys_per_mat;
-  polys_per_mat.resize(_mesh->totpoly);
+  // custom normals
+  _use_custom_normals = use_custom_normals && WBS_CustomData_has_layer(&_mesh->ldata,
+                                                                       CustomDataType::CD_CUSTOMLOOPNORMAL);
 
-  for (int i = 0; i < _mesh->totpoly; ++i)
+  if (_use_custom_normals)
   {
-    polys_per_mat[i] = std::make_pair(&_bl_polygons[i], WMOGeometryBatcher::get_batch_type(&_bl_polygons[i]
+    _bl_loop_normals = reinterpret_cast<const float(*)[3]>(WBS_CustomData_get_layer(&_mesh->ldata,
+                                                                                    CustomDataType::CD_NORMAL));
+  }
+
+
+  unsigned n_loop_tris = _mesh->totloop - (_mesh->totpoly * 2);
+  std::vector<std::pair<const MLoopTri*, BatchType>> polys_per_mat;
+  polys_per_mat.resize(n_loop_tris);
+
+  for (int i = 0; i < n_loop_tris; ++i)
+  {
+    polys_per_mat[i] = std::make_pair(&_bl_looptris[i], WMOGeometryBatcher::get_batch_type(&_bl_looptris[i]
                                                                                            , _bl_batch_map_trans
                                                                                            , _bl_batch_map_int));
   }
@@ -84,58 +124,65 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 
   // presort faces by their batch type and material_id forming the batches
   std::sort(polys_per_mat.begin(), polys_per_mat.end(),
-      [](std::pair<const MPoly*, BatchType> const& lhs, std::pair<const MPoly*, BatchType> const& rhs) -> bool
+      [this](std::pair<const MLoopTri*, BatchType> const& lhs, std::pair<const MLoopTri*, BatchType> const& rhs) -> bool
       {
-        return std::tie(lhs.second, lhs.first->mat_nr) < std::tie(rhs.second, rhs.first->mat_nr);
+        return std::tie(lhs.second, _bl_polygons[lhs.first->poly].mat_nr)
+          < std::tie(rhs.second, _bl_polygons[rhs.first->poly].mat_nr);
       });
 
   MOBABatch* cur_batch = nullptr;
   std::uint16_t cur_batch_mat_id = 0;
   BatchType cur_batch_type = BatchType::TRANS;
 
-  for (auto [poly, batch_type] : polys_per_mat)
+  for (auto [looptri, batch_type] : polys_per_mat)
   {
-    // handle collision-only geometry later, collisions non-batched geometry comes last.
-    // stop iterating the list when collision is encountered, not more real batches should follow.
-    if (poly->mat_nr == COLLISION_MAT_NR)
-      continue;
-
-    if (WMOGeometryBatcher::_needs_new_batch(cur_batch, poly, cur_batch_type,
+    if (WMOGeometryBatcher::_needs_new_batch(cur_batch, looptri, cur_batch_type,
                                              batch_type, cur_batch_mat_id))
     {
-      _create_new_batch(_material_ids[poly->mat_nr], batch_type, cur_batch, cur_batch_mat_id, cur_batch_type);
+      _create_new_batch(_material_ids[_bl_polygons[looptri->poly].mat_nr],
+                        batch_type, cur_batch, cur_batch_mat_id, cur_batch_type);
     }
 
-    _create_new_render_triangle(poly, cur_batch);
+    _create_new_render_triangle(looptri, cur_batch);
   }
 
   // handle collision only faces
-  for (auto [poly, batch_type] : polys_per_mat)
+  if (_collision_mesh)
   {
-    if (poly->mat_nr != COLLISION_MAT_NR)
-      continue;
-
-    _create_new_collision_triangle(poly);
+    for (std::size_t i = 0; i < _collision_mesh->totloop - (_collision_mesh->totpoly * 2); ++i)
+    {
+      _create_new_collision_triangle(&_bl_col_looptris[i]);
+    }
   }
 
   // calculate BSP tree
   BoundingBox bb_box{_bounding_box_min, _bounding_box_max};
   _bsp_tree = new BSPTree{_vertices, _triangle_indices, bb_box, node_size};
+
+  // handle liquid
+  if (liquid_params)
+  {
+    _liquid_exporter = new LiquidExporter(liquid_params->liquid_mesh
+        , liquid_params->liquid_mesh_matrix_world
+        , liquid_params->x_tiles
+        , liquid_params->y_tiles
+        , liquid_params->mat_id
+        , liquid_params->is_water);
+  }
 }
 
-void WMOGeometryBatcher::_create_new_collision_triangle(const MPoly* poly)
+void WMOGeometryBatcher::_create_new_collision_triangle(const MLoopTri* tri)
 {
-  assert(poly->mat_nr == COLLISION_MAT_NR);
 
   MOPYTriangleMaterial& tri_mat = _triangle_materials.emplace_back();
   tri_mat.flags_int = 0;
   tri_mat.flags.F_COLLISION = true;
   tri_mat.material_id = 0xFF;
 
-  for (int j = 0; j < poly->totloop; ++j)
+  for (unsigned loop_index : tri->tri)
   {
-    const MLoop* loop = &_bl_loops[poly->loopstart + j];
-    const MVert* vert = &_bl_verts[loop->v];
+    const MLoop* loop = &_bl_col_loops[loop_index];
+    const MVert* vert = &_bl_col_verts[loop->v];
 
     auto it = _collision_vertex_map.find(loop->v);
 
@@ -159,9 +206,9 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
   if (_use_vertex_color && _bl_vertex_color)
   {
     const MLoopCol* color = &_bl_vertex_color[loop_index];
-    v_info.col.r = color->r;
+    v_info.col.r = color->b;
     v_info.col.g = color->g;
-    v_info.col.b = color->b;
+    v_info.col.b = color->r;
 
     if (_bl_lightmap)
     {
@@ -175,7 +222,6 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
 
       v_info.col.a = attenuation;
     }
-
   }
 
   if (_bl_blendmap)
@@ -195,15 +241,33 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
     const MLoopUV* uv_coord = &_bl_uv2[loop_index];
     v_info.uv2 = {uv_coord->uv[0], 1.0f - uv_coord->uv[1]};
   }
+
+  if (_use_custom_normals)
+  {
+    v_info.loop_normal = Vector3D({_bl_loop_normals[loop_index][0],
+                                   _bl_loop_normals[loop_index][1],
+                                   _bl_loop_normals[loop_index][2]});
+  }
 }
 
 void WMOGeometryBatcher::_create_new_collision_vert(const MVert* vertex
                                                    , const MLoop* loop)
 {
   unsigned v_local_index = _vertices.size();
-  _vertices.emplace_back(Vector3D{vertex->co[0], vertex->co[1], vertex->co[2]});
-  _normals.emplace_back(Vector3D{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
-                                 _bl_vertex_normals[loop->v][2]});
+
+  glm::vec4 vertex_co_4 = glm::vec4(vertex->co[0], vertex->co[1], vertex->co[2], 1.f);
+  glm::vec3 vertex_co = glm::vec3(_collision_mtx_world * vertex_co_4);
+
+  _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
+
+  glm::mat3 normal_mtx = glm::inverse(glm::transpose( glm::mat3(_collision_mtx_world)));
+
+  glm::vec3 normal = glm::vec3{_bl_col_vertex_normals[loop->v][0], _bl_col_vertex_normals[loop->v][1],
+                                 _bl_col_vertex_normals[loop->v][2]};
+  normal = glm::normalize(glm::vec3(normal_mtx * normal));
+
+  _normals.emplace_back(Vector3D{normal.x, normal.y, normal.z});
+
   _tex_coords.emplace_back(Vector2D{0.f, 0.f});
 
   if (_bl_uv2)
@@ -224,7 +288,7 @@ void WMOGeometryBatcher::_create_new_collision_vert(const MVert* vertex
   _triangle_indices.emplace_back(v_local_index);
   _collision_vertex_map[loop->v] = v_local_index;
 
-  _calculate_bounding_for_vertex(vertex);
+  _calculate_bounding_for_vertex(vertex_co);
 }
 
 void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
@@ -233,9 +297,29 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
                                          , const MLoop* loop)
 {
   v_info.local_index = _vertices.size();
-  _vertices.emplace_back(Vector3D{vertex->co[0], vertex->co[1], vertex->co[2]});
-  _normals.emplace_back(Vector3D{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
-                                 _bl_vertex_normals[loop->v][2]});
+
+  glm::vec4 vertex_co_4 = glm::vec4(vertex->co[0], vertex->co[1], vertex->co[2], 1.f);
+  glm::vec3 vertex_co = glm::vec3(_mesh_mtx_world * vertex_co_4);
+
+  _vertices.emplace_back(Vector3D{vertex_co.x, vertex_co.y, vertex_co.z});
+
+  glm::mat3 normal_mtx = glm::inverse(glm::transpose( glm::mat3(_mesh_mtx_world)));
+
+  glm::vec3 normal;
+  if (_use_custom_normals)
+  {
+    normal = glm::vec4{v_info.loop_normal.x, v_info.loop_normal.y, v_info.loop_normal.z, 0.f};
+  }
+  else
+  {
+    normal = glm::vec4{_bl_vertex_normals[loop->v][0], _bl_vertex_normals[loop->v][1],
+                         _bl_vertex_normals[loop->v][2], 0.f};
+  }
+
+  normal = glm::normalize(normal_mtx * normal);
+  _normals.emplace_back(Vector3D{normal.x, normal.y, normal.z});
+
+
   _tex_coords.emplace_back(v_info.uv);
 
   if (_bl_uv2)
@@ -253,8 +337,8 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
 
   _cur_batch_vertex_map[loop->v].emplace_back(v_info);
 
-  _calculate_bounding_for_vertex(vertex);
-  _calculate_batch_bounding_for_vertex(cur_batch, vertex);
+  _calculate_bounding_for_vertex(vertex_co);
+  _calculate_batch_bounding_for_vertex(cur_batch, vertex_co);
 }
 
 
@@ -274,8 +358,13 @@ bool WMOGeometryBatcher::_needs_new_vert(unsigned vert_index, BatchVertexInfo& c
   {
     if (!compare_v2v2(v_info.uv, cur_v_info.uv, STD_UV_CONNECT_LIMIT)
       || !compare_v2v2(v_info.uv2, cur_v_info.uv2, STD_UV_CONNECT_LIMIT)
-      || !_compare_colors(v_info.col, cur_v_info.col)
-      || !_compare_colors(v_info.col2, cur_v_info.col2))
+      || !compare_colors(v_info.col, cur_v_info.col)
+      || !compare_colors(v_info.col2, cur_v_info.col2))
+    {
+      continue;
+    }
+
+    if (_use_custom_normals && !compare_v3v3(v_info.loop_normal, cur_v_info.loop_normal, STD_UV_CONNECT_LIMIT))
     {
       continue;
     }
@@ -287,23 +376,14 @@ bool WMOGeometryBatcher::_needs_new_vert(unsigned vert_index, BatchVertexInfo& c
   return true;
 }
 
-bool WMOGeometryBatcher::_compare_colors(RGBA const& v1, RGBA const& v2)
-{
-  return v1.r == v2.r && v1.g == v2.g && v1.b == v2.b && v1.a == v2.a;
-}
-
 bool WMOGeometryBatcher::_needs_new_batch(MOBABatch* cur_batch
-    , const MPoly* cur_poly
+    , const MLoopTri* cur_tri
     , BatchType cur_batch_type
     , BatchType cur_poly_batch_type
     , std::uint16_t cur_batch_mat_id)
 {
-  return !cur_batch || cur_batch_type != cur_poly_batch_type || _material_ids[cur_poly->mat_nr] != cur_batch_mat_id;
-}
-
-bool WMOGeometryBatcher::comp_color_key(RGBA const& color)
-{
-  return color.r || color.b || color.g || color.a;
+  return !cur_batch || cur_batch_type != cur_poly_batch_type
+    || _material_ids[_bl_polygons[cur_tri->poly].mat_nr] != cur_batch_mat_id;
 }
 
 unsigned char WMOGeometryBatcher::_get_grayscale_factor(const MLoopCol* color)
@@ -311,7 +391,7 @@ unsigned char WMOGeometryBatcher::_get_grayscale_factor(const MLoopCol* color)
   return (color->r + color->g + color->b) / 3;
 }
 
-BatchType WMOGeometryBatcher::get_batch_type(const MPoly* poly
+BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly
     , const MLoopCol* batch_map_trans
     , const MLoopCol* batch_map_int)
 {
@@ -321,18 +401,15 @@ BatchType WMOGeometryBatcher::get_batch_type(const MPoly* poly
   unsigned trans_count = 0;
   unsigned int_count = 0;
 
-  unsigned n_loops = poly->totloop;
-  assert(n_loops == 3 && "Mesh was not triangulated.");
-
-  for (int i = 0; i < n_loops; ++i)
+  for (int i = 0; i < 3; ++i)
   {
 
     if (batch_map_trans)
     {
-      const MLoopCol* loop_col = &batch_map_trans[poly->loopstart + i];
+      const MLoopCol* loop_col = &batch_map_trans[poly->tri[i]];
       RGBA color = {loop_col->r, loop_col->g, loop_col->b, loop_col->a};
 
-      if (WMOGeometryBatcher::comp_color_key(color))
+      if (comp_color_key(color))
       {
         trans_count++;
       }
@@ -341,21 +418,21 @@ BatchType WMOGeometryBatcher::get_batch_type(const MPoly* poly
 
     if (batch_map_int)
     {
-      const MLoopCol* loop_col = &batch_map_int[poly->loopstart + i];
+      const MLoopCol* loop_col = &batch_map_int[poly->tri[i]];
       RGBA color = {loop_col->r, loop_col->g, loop_col->b, loop_col->a};
 
-      if (WMOGeometryBatcher::comp_color_key(color))
+      if (comp_color_key(color))
       {
         int_count++;
       }
     }
   }
 
-  if (trans_count == n_loops)
+  if (trans_count == 3)
   {
     return BatchType::TRANS;
   }
-  else if (int_count == n_loops)
+  else if (int_count == 3)
   {
     return BatchType::INT;
   }
@@ -425,7 +502,7 @@ bool WMOGeometryBatcher::_is_vertex_collidable(unsigned int vert_index)
   return WBS_BKE_defvert_find_index(&_bl_vg_data[vert_index], _vg_collision_index);
 }
 
-void WMOGeometryBatcher::_create_new_render_triangle(const MPoly* poly, MOBABatch* cur_batch)
+void WMOGeometryBatcher::_create_new_render_triangle(const MLoopTri* tri, MOBABatch* cur_batch)
 {
   MOPYTriangleMaterial& tri_mat = _triangle_materials.emplace_back();
   tri_mat.flags_int = 0;
@@ -436,12 +513,9 @@ void WMOGeometryBatcher::_create_new_render_triangle(const MPoly* poly, MOBABatc
   tri_mat.material_id = cur_batch->material_id;
 
 
-  assert(poly->totloop == 3 && "Mesh was not triangulated");
-
   unsigned collision_counter = 0;
-  for (int i = 0; i < poly->totloop; ++i)
+  for (unsigned loop_index : tri->tri)
   {
-    int loop_index = poly->loopstart + i;
     const MLoop* loop = &_bl_loops[loop_index];
     const MVert* vertex = &_bl_verts[loop->v];
 
@@ -474,30 +548,30 @@ void WMOGeometryBatcher::_create_new_render_triangle(const MPoly* poly, MOBABatc
   }
 }
 
-void WMOGeometryBatcher::_calculate_bounding_for_vertex(const MVert* vertex)
+void WMOGeometryBatcher::_calculate_bounding_for_vertex(glm::vec3 const& vertex)
 {
-  _bounding_box_min.x = std::min(_bounding_box_min.x, vertex->co[0]);
-  _bounding_box_min.y = std::min(_bounding_box_min.y, vertex->co[1]);
-  _bounding_box_min.z = std::min(_bounding_box_min.z, vertex->co[2]);
+  _bounding_box_min.x = std::min(_bounding_box_min.x, vertex[0]);
+  _bounding_box_min.y = std::min(_bounding_box_min.y, vertex[1]);
+  _bounding_box_min.z = std::min(_bounding_box_min.z, vertex[2]);
 
-  _bounding_box_max.x = std::max(_bounding_box_max.x, vertex->co[0]);
-  _bounding_box_max.y = std::max(_bounding_box_max.y, vertex->co[1]);
-  _bounding_box_max.z = std::max(_bounding_box_max.z, vertex->co[2]);
+  _bounding_box_max.x = std::max(_bounding_box_max.x, vertex[0]);
+  _bounding_box_max.y = std::max(_bounding_box_max.y, vertex[1]);
+  _bounding_box_max.z = std::max(_bounding_box_max.z, vertex[2]);
 }
 
-void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, const MVert* vertex) const
+void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, glm::vec3 const& vertex) const
 {
   // batch bounding box is not needed for newer clients supporting large material ids
   if (_use_large_material_id)
     return;
 
-  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(vertex->co[0]));
-  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(vertex->co[1]));
-  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(vertex->co[2]));
+  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(std::round(vertex[0])));
+  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(std::round(vertex[1])));
+  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(std::round(vertex[2])));
 
-  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(vertex->co[0]));
-  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(vertex->co[1]));
-  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(vertex->co[2]));
+  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(std::round(vertex[0])));
+  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(std::round(vertex[1])));
+  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(std::round(vertex[2])));
 }
 
 
@@ -562,5 +636,27 @@ BufferKey WMOGeometryBatcher::bsp_faces()
 WMOGeometryBatcher::~WMOGeometryBatcher()
 {
   delete _bsp_tree;
+  delete _liquid_exporter;
+}
+
+BufferKey WMOGeometryBatcher::liquid_vertices()
+{
+  assert(_liquid_exporter && "Attempted accessing liquid data, but not liquid params were provided.");
+  return {reinterpret_cast<char*>(_liquid_exporter->vertices().data()),
+          _liquid_exporter->vertices().size() * sizeof(SMOLVert)};
+}
+
+BufferKey WMOGeometryBatcher::liquid_tiles()
+{
+  assert(_liquid_exporter && "Attempted accessing liquid data, but not liquid params were provided.");
+  return {reinterpret_cast<char*>(_liquid_exporter->tiles().data()),
+          _liquid_exporter->tiles().size() * sizeof(SMOLTile)};
+
+}
+
+BufferKey WMOGeometryBatcher::liquid_header()
+{
+  assert(_liquid_exporter && "Attempted accessing liquid data, but not liquid params were provided.");
+  return {reinterpret_cast<char*>(&_liquid_exporter->header()), sizeof(MLIQHeader)};
 }
 
