@@ -265,7 +265,7 @@ class BlenderM2Scene:
                 print("\nWarning: failed to load texture \"{}\".".format(tex_path_png))
 
         if not tex:
-            tex = bpy.data.images.new('Failed Loading', 256, 256)
+            tex = bpy.data.images.new(os.path.basename(texture.filename.value), 256, 256)
 
         tex.wow_m2_texture.enabled = True
         tex.wow_m2_texture.flags = parse_bitfield(texture.flags, 0x2)
