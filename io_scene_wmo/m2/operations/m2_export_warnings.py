@@ -22,7 +22,7 @@ def transformed_objects():
     name = "Transformed Objects"
     description = [
         'Issue: Objects in the scene are transformed in any way (moved, rotated or scaled)',
-        'Fix: Run the "Apply All Transforms" command and fix any issues it might cause.'
+        'Fix: Run the "Convert Bones To WoW" command and fix any issues it might cause.'
     ]
     items = []
 
@@ -241,6 +241,20 @@ def too_many_bone_groups():
             items.append(f'Object {obj.name} has {broken_vertices} vertices with too many bone groups')
     return (name,description,items)
 
+def fcurves_transforming_objects():
+    name = "FCurves Transforming Objects"
+    description = [
+        'Issue: You have FCurves that transform blender objects themselves, this is currently unsupported',
+        'Effect: Object has wrong scale/rotation/location ingame.',
+        'Fix: Run "Convert Bones To WoW" and check the result.'
+    ]
+    items = []
+    for action in bpy.data.actions:
+        for curve in action.fcurves:
+            if curve.data_path in ["location","rotation_euler","scale"]:
+                items.append(f'FCurve "{curve.data_path}[{curve.array_index}]" in {action.name} transforms an object')
+    return (name,description,items)
+
 def print_warnings():
     printed_warnings = False
     def warning_section(callback):
@@ -271,6 +285,7 @@ def print_warnings():
     warning_section(non_primary_sequences)
     warning_section(non_uniform_scale_tracks)
     warning_section(too_many_bone_groups)
+    warning_section(fcurves_transforming_objects)
 
     if not printed_warnings:
         print("\nNo warnings found!")

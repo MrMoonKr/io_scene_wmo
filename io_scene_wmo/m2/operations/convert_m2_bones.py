@@ -104,6 +104,19 @@ def convert_m2_bones():
                 fixed_vertices += 1
     print(f'Removed overflowing groups for {fixed_vertices} vertices')
 
+    for action in bpy.data.actions:
+        removed_fcurves = []
+        for curve in action.fcurves:
+            if curve.data_path in ["location","rotation_euler","scale"]:
+                removed_fcurves.append(curve)
+                print(f'Removed fcurve "{curve.data_path}[{curve.array_index}]" from action {action.name}')
+        for curve in removed_fcurves:
+            action.fcurves.remove(curve)
+
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=False)
+    bpy.ops.object.select_all(action='DESELECT')
+
     changed_bones = {}
     changed_objects = []
 
