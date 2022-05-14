@@ -2323,8 +2323,10 @@ class BlenderM2Scene:
 
                 if curve_type == 'scale':
                     def convert_scale(scale):
-                        if self.forward_axis != 'X+' and (scale[0] != scale[1] or scale[0] != scale[2]):
-                            raise ValueError(f'WBS currently cannot write non-uniform scale with forward axis {self.forward_axis} (must be X+ for now)')
+                        if self.forward_axis != 'X+':
+                            if abs(scale[0]-scale[1])>0.0001 or abs(scale[0]-scale[2])>0.0001:
+                                raise ValueError(f'WBS currently cannot write non-uniform scale with forward axis {self.forward_axis} (must be X+ for now)')
+                            scale = (scale[0],scale[0],scale[0])
                         return scale
                     cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale)
 
