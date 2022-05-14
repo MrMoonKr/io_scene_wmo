@@ -241,9 +241,10 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
         )
 
     def execute(self, context):
-        if context.scene and context.scene.wow_scene.type == 'M2':
-            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale)
-            return {'FINISHED'}
+        if context.scene:
+            context.scene.wow_scene.type = 'M2'
+        export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale)
+        return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')
 
