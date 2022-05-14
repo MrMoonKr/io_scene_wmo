@@ -257,6 +257,7 @@ class BlenderM2Scene:
             except KeyError:
                 pass
 
+        tex = None
         if tex_path_png:
             try:
                 tex = bpy.data.images.load(tex_path_png)
