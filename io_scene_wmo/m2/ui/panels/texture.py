@@ -1,6 +1,17 @@
 import bpy
 from ..enums import *
 
+class SetDefaultTexture(bpy.types.Operator):
+    """Sets the texture to the default value 'textures\\ShaneCube.blp'"""
+    bl_idname = "wow_m2_texture.set_default_texture"
+    bl_label = "Set Default Texture"
+
+    img_name:  bpy.props.StringProperty(options={'HIDDEN'})
+
+    def execute(self, context):
+        edit_image = bpy.data.images[self.img_name]
+        edit_image.wow_m2_texture.path = "textures\\ShaneCube.blp"
+        return {'FINISHED'}
 
 class M2_PT_texture_panel(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
@@ -18,6 +29,10 @@ class M2_PT_texture_panel(bpy.types.Panel):
         # only show path setting if texture type is hardcoded
         if context.edit_image.wow_m2_texture.texture_type == "0":
             col.prop(context.edit_image.wow_m2_texture, "path", text='Path')
+            if(len(context.edit_image.wow_m2_texture.path) == 0):
+                op = col.operator(SetDefaultTexture.bl_idname, text="Set Default Texture", icon="CONSOLE")
+                # todo: not a great method, but it should work reliably since this updates every frame
+                op.img_name = context.edit_image.name
 
     @classmethod
     def poll(cls, context):
