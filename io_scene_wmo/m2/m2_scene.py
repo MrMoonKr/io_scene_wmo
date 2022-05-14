@@ -1821,11 +1821,14 @@ class BlenderM2Scene:
         b_min, b_max = get_objs_boundbox_world(filter(lambda ob: not ob.wow_m2_geoset.collision_mesh
                                                                 and ob.type == 'MESH'
                                                                 and not ob.hide_get(), objects))
+        b_min = self._convert_vec(b_min)
+        b_max = self._convert_vec(b_max)
+
         self.m2.root.bounding_box.min = b_min
         self.m2.root.bounding_box.max = b_max
         self.m2.root.bounding_sphere_radius = sqrt(((b_max[self.axis_order[0]]-b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
                                                 + ((b_max[self.axis_order[1]]-b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
-                                                + ((b_max[2]-b_min[2]) * self.scale) ** 2) / 2
+                                                + ((b_max[2]-b_min[2])) ** 2) / 2
 
         # TODO: flags, collision bounding box
 
@@ -2762,9 +2765,11 @@ class BlenderM2Scene:
 
         # calculate collision bounding box
         b_min, b_max = get_objs_boundbox_world(objects)
+        b_min = self._convert_vec(b_min)
+        b_max = self._convert_vec(b_max)
         self.m2.root.collision_box.min = b_min
         self.m2.root.collision_box.max = b_max
         self.m2.root.collision_sphere_radius = sqrt(((b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
                                                     + ((b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
-                                                    + ((b_max[2] - b_min[2])*self.scale) ** 2) / 2
+                                                    + ((b_max[2] - b_min[2])) ** 2) / 2
 
