@@ -897,6 +897,7 @@ class BlenderWMOSceneGroup:
         """ Save WoW WMO group data for future export """
         obj = self.bl_object
 
+        self.wmo_group.mver.version = 17
         self.wmo_group.movt.from_bytes(batcher.vertices(group_index))
         self.wmo_group.monr.from_bytes(batcher.normals(group_index))
         self.wmo_group.moba.from_bytes(batcher.batches(group_index))
