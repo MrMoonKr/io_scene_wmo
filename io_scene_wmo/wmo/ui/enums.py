@@ -45,7 +45,8 @@ group_flag_enum = [
     ('1', "No local lighting", "Use world-defined lighting in a group", 'LIGHT', 0x2),
     ('2', "Always draw", "Always draw the model. Disable portal-based geometry culling", 'SHAPEKEY_DATA', 0x4),
     ('3', "Mounts allowed", "Allow mounts in this indoor group", 'MESH_MONKEY', 0x8),
-    ('4', "Use Skybox", "Display WMO skybox in this indoor group", 'SURFACE_NSPHERE', 0x10)
+    ('4', "Use Skybox", "Display WMO skybox in this indoor group", 'SURFACE_NSPHERE', 0x10),
+    ('5', "Show exterior sky", "Show exterior sky in interior WMO group", 'MAT_SPHERE_SKY', 0x20)
 ]
 
 place_type_enum = [('8', "Outdoor", "", 'OBJECT_DATA', 0), ('8192', "Indoor", "", 'MOD_SUBSURF', 1)]

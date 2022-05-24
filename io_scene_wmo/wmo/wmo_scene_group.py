@@ -525,6 +525,9 @@ class BlenderWMOSceneGroup:
 
         if group.mogp.flags & MOGPFlags.HasSkybox:
             flag_set.add('4')
+        
+        if group.mogp.flags & MOGPFlags.UseExteriorSky:
+            flag_set.add('5')
 
         nobj.wow_wmo_group.flags = flag_set
         nobj.pass_index = pass_index
@@ -951,6 +954,8 @@ class BlenderWMOSceneGroup:
             self.wmo_group.mogp.flags |= MOGPFlags.AlwaysDraw
         if '3' in obj.wow_wmo_group.flags:
             self.wmo_group.mogp.flags |= MOGPFlags.IsMountAllowed
+        if '5' in obj.wow_wmo_group.flags:
+            self.wmo_group.mogp.flags |= MOGPFlags.UseExteriorSky
 
         self.wmo_group.mogp.flags |= int(obj.wow_wmo_group.place_type)
 
