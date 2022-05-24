@@ -500,7 +500,7 @@ class BlenderWMOScene:
                 rel.id = slot.pointer.name  # TODO: store pointer instead?
 
         # process fogs
-        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building fog references', ascii=True):
+        for i, slot in tqdm(enumerate(root_elements.fogs), desc='Building fog references', ascii=True):
             self.bl_fogs.append(slot.pointer)
             slot.pointer.wow_wmo_fog.fog_id = i
 
