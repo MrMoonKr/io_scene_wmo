@@ -793,12 +793,7 @@ class BlenderWMOSceneGroup:
                       int(obj.wow_wmo_liquid.color[3] * 255)
                       )
 
-        if mesh.materials[0].wow_wmo_material.enabled:
-            material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
-                mesh.materials[0].name)
-        else:
-            # if no mat or if the mat isn't a wmo mat, create a new one
-
+        def create_default_liquid_mat():
             texture1 = "DUNGEONS\\TEXTURES\\STORMWIND\\GRAY12.BLP"
 
             if group.mogp.liquid_type in types_1:
@@ -808,6 +803,17 @@ class BlenderWMOSceneGroup:
                 texture1 = "DUNGEONS\\TEXTURES\\FLOOR\\JLO_UNDEADZIGG_SLIMEFLOOR.BLP"
 
             material_id = self.wmo_scene.wmo.add_material(texture1, diff_color=diff_color)
+
+            return material_id
+
+        if len(mesh.materials) > 0:
+            if mesh.materials[0].wow_wmo_material.enabled:
+                material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+                    mesh.materials[0].name)
+            else:
+                material_id = create_default_liquid_mat()
+        else:
+            material_id = create_default_liquid_mat()
 
         params.mat_id = material_id
         params.is_water = not (group.mogp.liquid_type in types_1 or group.mogp.liquid_type in types_2)
