@@ -332,6 +332,7 @@ def handle_liquid_update(update):
 
 def handle_doodad_update(update) -> bool:
     delete = False
+    is_duplicated = False
     obj = bpy.data.objects[update.id.name, update.id.library]
 
     # handle object copies
