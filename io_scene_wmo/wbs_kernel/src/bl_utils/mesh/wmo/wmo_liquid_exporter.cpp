@@ -38,6 +38,11 @@ LiquidExporter::LiquidExporter(std::uintptr_t liquid_mesh
   _mliq_header.liquid_verts.y = y_tiles + 1;
   _mliq_header.liquid_mat_id = mat_id;
 
+  const MVert* vertex = &_liquid_mesh->mvert[0];
+  glm::vec4 vertex_co4 = {vertex->co[0], vertex->co[1], vertex->co[2], 1.f};
+  glm::vec3 vertex_co = _liquid_mesh_matrix_world * vertex_co4;
+  _mliq_header.liquid_corner = Vector3D{vertex_co.x, vertex_co.y, vertex_co.z};
+
   _process_mesh_data();
 }
 
