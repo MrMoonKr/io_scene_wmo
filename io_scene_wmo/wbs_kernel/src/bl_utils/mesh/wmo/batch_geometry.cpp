@@ -146,6 +146,12 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     _create_new_render_triangle(looptri, cur_batch);
   }
 
+  // fill last batch max index
+  if (cur_batch)
+  {
+    cur_batch->max_index = _vertices.size() - 1;
+  }
+
   // handle collision only faces
   if (_collision_mesh)
   {
