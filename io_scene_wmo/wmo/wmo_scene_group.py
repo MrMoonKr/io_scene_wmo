@@ -924,7 +924,7 @@ class BlenderWMOSceneGroup:
             self.wmo_group.mliq.from_bytes(batcher.liquid(group_index))
         else:
             self.wmo_group.mliq = None
-            self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
+            # self.wmo_group.mogp.flags |= MOGPFlags.IsNotOcean  # TODO: check if this is necessary
             wow_version = int(bpy.context.scene.wow_scene.version)
             if wow_version >= WoWVersions.WOTLK:
                 # this flag causes wmo groups to fill with liquid if liquid type is not 0.
