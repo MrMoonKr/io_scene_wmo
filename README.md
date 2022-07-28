@@ -3,3 +3,4 @@
 - M2 exporting doesn't work for animated models and is also unstable for static models.
 - The addon needs to be built by running build.py with a python version matching blender's, or grab a pre compiled build at https://gitlab.com/skarnproject/blender-wow-studio/-/jobs
 - To enable the addon, search "WoW" in the addons list, fill the WoW Client path, WMV log path (select log.txt), cache and project paths (use empty folders)
+- Discord : https://discord.gg/SBEDRXrSnd
