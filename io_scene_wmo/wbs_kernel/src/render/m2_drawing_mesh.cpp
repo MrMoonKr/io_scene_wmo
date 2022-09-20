@@ -1,12 +1,9 @@
 #include <render/m2_drawing_mesh.hpp>
 
-extern "C"
-{
 #include <BKE_mesh.h>
 #include <DNA_meshdata_types.h>
 #include <BKE_mesh_mapping.h>
 #include <BKE_mesh_runtime.h>
-}
 
 #include <cmath>
 #include <cassert>
@@ -82,9 +79,9 @@ int M2DrawingMesh::create_vertex_map()
   this->vertex_map.reserve(this->mesh->totvert);
 
   std::vector<int> uv_layers = {M2DrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                                 CustomDataType::CD_MLOOPUV, "UVMap"),
+                                                                 eCustomDataType::CD_MLOOPUV, "UVMap"),
                                 M2DrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                                 CustomDataType::CD_MLOOPUV, "UVMap.001")};
+                                                                 eCustomDataType::CD_MLOOPUV, "UVMap.001")};
 
   int v_index_global_counter = 0;
 
@@ -260,9 +257,9 @@ bool M2DrawingMesh::update_geometry_nonindexed()
   M2DrawingBatch* cur_batch = nullptr;
 
   std::vector<int> uv_layers = {M2DrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                                 CustomDataType::CD_MLOOPUV, "UVMap"),
+                                                                 eCustomDataType::CD_MLOOPUV, "UVMap"),
                                 M2DrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                                 CustomDataType::CD_MLOOPUV, "UVMap.001")};
+                                                                 eCustomDataType::CD_MLOOPUV, "UVMap.001")};
 
   std::vector<float*> uv_buffers = {this->tex_coords, this->tex_coords2};
 

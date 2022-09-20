@@ -8,14 +8,11 @@
 #include <algorithm>
 #include <limits>
 
-extern "C"
-{
-  #include <DNA_mesh_types.h>
-  #include <DNA_meshdata_types.h>
-  #include <DNA_material_types.h>
-  #include <DNA_ID.h>
-  #include <BKE_customdata.h>
-}
+#include <DNA_mesh_types.h>
+#include <DNA_meshdata_types.h>
+#include <DNA_material_types.h>
+#include <DNA_ID.h>
+#include <BKE_customdata.h>
 
 using namespace wbs_kernel::bl_utils::math_utils;
 using namespace wbs_kernel::bl_utils::color_utils;
@@ -91,7 +88,7 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   if (_has_collision_vg)
   {
     _bl_vg_data = static_cast<MDeformVert*>(WBS_CustomData_get_layer(&_mesh->vdata,
-                                                                     CustomDataType::CD_MDEFORMVERT));
+                                                                     eCustomDataType::CD_MDEFORMVERT));
 
     if (!_bl_vg_data)
     {
@@ -101,12 +98,12 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 
   // custom normals
   _use_custom_normals = use_custom_normals && WBS_CustomData_has_layer(&_mesh->ldata,
-                                                                       CustomDataType::CD_CUSTOMLOOPNORMAL);
+                                                                       eCustomDataType::CD_CUSTOMLOOPNORMAL);
 
   if (_use_custom_normals)
   {
     _bl_loop_normals = reinterpret_cast<const float(*)[3]>(WBS_CustomData_get_layer(&_mesh->ldata,
-                                                                                    CustomDataType::CD_NORMAL));
+                                                                                    eCustomDataType::CD_NORMAL));
   }
 
 

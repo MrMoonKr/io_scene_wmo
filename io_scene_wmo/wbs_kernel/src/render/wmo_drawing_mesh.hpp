@@ -13,12 +13,9 @@
 #define GLEW_STATIC
 #include <glew.h>
 
-extern "C"
-{
 #include <DNA_mesh_types.h>
 #include <BKE_customdata.h>
 #include <DNA_meshdata_types.h>
-};
 
 
 namespace wbs_kernel

@@ -6,14 +6,11 @@
 #include <unordered_map>
 #include <cmath>
 
-extern "C"
-{
 #include <DNA_mesh_types.h>
 #include <DNA_meshdata_types.h>
 #include <DNA_material_types.h>
 #include <DNA_ID.h>
 #include <BKE_customdata.h>
-}
 
 using namespace wbs_kernel::bl_utils::mesh::wmo;
 using namespace wbs_kernel::bl_utils::math_utils;

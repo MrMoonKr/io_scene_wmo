@@ -7,10 +7,7 @@
 #include <extern/glm/vec3.hpp>
 #include <extern/glm/vec4.hpp>
 
-extern "C"
-{
-  #include <BKE_mesh_mapping.h>
-};
+#include <BKE_mesh_mapping.h>
 
 namespace wbs_kernel::bl_utils::math_utils
 {

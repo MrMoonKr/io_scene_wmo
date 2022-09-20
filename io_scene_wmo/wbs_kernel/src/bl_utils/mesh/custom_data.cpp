@@ -2,14 +2,11 @@
 #include <cstring>
 #include <cassert>
 
-extern "C"
-{
 #include <BKE_mesh.h>
 #include <DNA_meshdata_types.h>
 #include <BKE_mesh_mapping.h>
 #include <BKE_mesh_runtime.h>
 #include <BLI_utildefines.h>
-}
 
 int wbs_kernel::bl_utils::mesh::WBS_CustomData_get_named_layer_index(const CustomData* data, int type, const char* name)
 {
@@ -94,17 +91,17 @@ MDeformWeight* wbs_kernel::bl_utils::mesh::WBS_BKE_defvert_find_index(const MDef
 template<>
 MLoopCol* wbs_kernel::bl_utils::mesh::get_custom_data_layer_named<MLoopCol>(const CustomData* data, const std::string& name)
 {
-  return static_cast<MLoopCol*>(WBS_CustomData_get_layer_named(data,CustomDataType::CD_MLOOPCOL, name.c_str()));
+  return static_cast<MLoopCol*>(WBS_CustomData_get_layer_named(data, eCustomDataType::CD_PROP_COLOR, name.c_str()));
 }
 
 template<>
 MLoopUV* wbs_kernel::bl_utils::mesh::get_custom_data_layer_named<MLoopUV>(const CustomData* data, const std::string& name)
 {
-  return static_cast<MLoopUV*>(WBS_CustomData_get_layer_named(data,CustomDataType::CD_MLOOPUV, name.c_str()));
+  return static_cast<MLoopUV*>(WBS_CustomData_get_layer_named(data,eCustomDataType::CD_MLOOPUV, name.c_str()));
 }
 
 template<>
 MDeformVert* wbs_kernel::bl_utils::mesh::get_custom_data_layer_named<MDeformVert>(const CustomData* data, const std::string& name)
 {
-  return static_cast<MDeformVert*>(WBS_CustomData_get_layer_named(data,CustomDataType::CD_MDEFORMVERT, name.c_str()));
+  return static_cast<MDeformVert*>(WBS_CustomData_get_layer_named(data,eCustomDataType::CD_MDEFORMVERT, name.c_str()));
 }

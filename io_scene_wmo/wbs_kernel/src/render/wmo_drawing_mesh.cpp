@@ -1,11 +1,8 @@
 #include <render/wmo_drawing_mesh.hpp>
 
-extern "C"
-{
 #include <BKE_mesh.h>
 #include <BKE_mesh_mapping.h>
 #include <BKE_mesh_runtime.h>
-}
 
 #include <cmath>
 #include <cassert>
@@ -96,23 +93,23 @@ void WMODrawingMesh::init_looptris()
 std::vector<int> WMODrawingMesh::get_uv_layers()
 {
   return std::vector<int>  (WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                             CustomDataType::CD_MLOOPUV, "UVMap"),
+                                                             eCustomDataType::CD_MLOOPUV, "UVMap"),
                             WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                             CustomDataType::CD_MLOOPUV, "UVMap.001"));
+                                                             eCustomDataType::CD_MLOOPUV, "UVMap.001"));
 }
 
 std::vector<int> WMODrawingMesh::get_color_layers()
 {
    auto color_layers = std::vector<int> {WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                         CustomDataType::CD_MLOOPCOL, "Col"),
+                                                         eCustomDataType::CD_PROP_COLOR, "Col"),
                                          WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                         CustomDataType::CD_MLOOPCOL, "BatchmapTrans"),
+                                                         eCustomDataType::CD_PROP_COLOR, "BatchmapTrans"),
                                          WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                         CustomDataType::CD_MLOOPCOL, "BatchmapInt"),
+                                                         eCustomDataType::CD_PROP_COLOR, "BatchmapInt"),
                                          WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                         CustomDataType::CD_MLOOPCOL, "Blendmap"),
+                                                         eCustomDataType::CD_PROP_COLOR, "Blendmap"),
                                          WMODrawingMesh::CustomData_get_named_layer_index(&this->mesh->ldata,
-                                                         CustomDataType::CD_MLOOPCOL, "Lightmap")};
+                                                         eCustomDataType::CD_PROP_COLOR, "Lightmap")};
 
    return color_layers;
 }
@@ -131,7 +128,7 @@ WMOBatchTypes WMODrawingMesh::get_batch_type(MLoopTri* loop_tri, std::vector<int
 
     if (color_layer_index >= 0)
     {
-      auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_MLOOPCOL,
+      auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_PROP_COLOR,
                                                                                 loop_index, color_layer_index));
       if (color_loop->r > 0 || color_loop->g > 0 || color_loop->b > 0)
       {
@@ -149,7 +146,7 @@ WMOBatchTypes WMODrawingMesh::get_batch_type(MLoopTri* loop_tri, std::vector<int
 
     if (color_layer_index >= 0)
     {
-      auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_MLOOPCOL,
+      auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_PROP_COLOR,
                                                                                 loop_index, color_layer_index));
       if (color_loop->r > 0 || color_loop->g > 0 || color_loop->b > 0)
       {
@@ -264,7 +261,7 @@ int WMODrawingMesh::create_vertex_map()
                 continue;
               }
 
-              auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_MLOOPCOL,
+              auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_PROP_COLOR,
                                                                                         loop_index, color_layer_index));
 
               std::array<unsigned char, 3> cur_color = {color_loop->r, color_loop->g, color_loop->b};
@@ -338,7 +335,7 @@ int WMODrawingMesh::create_vertex_map()
         }
         else
         {
-          auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_MLOOPCOL,
+          auto color_loop = static_cast<MLoopCol*>(WMODrawingMesh::CustomData_get_n(&this->mesh->ldata, CD_PROP_COLOR,
                                                                                     loop_index, j));
           color_layers_data[j] = std::array<unsigned char, 3>{{color_loop->r, color_loop->g, color_loop->b}};
         }
