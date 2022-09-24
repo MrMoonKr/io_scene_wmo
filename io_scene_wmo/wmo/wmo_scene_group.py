@@ -333,9 +333,6 @@ class BlenderWMOSceneGroup:
                 collision_face_ids.append(i)
 
         # set normals
-        for i in range(len(normals)):
-            mesh.vertices[i].normal = normals[i]
-
         custom_normals = [(0.0, 0.0, 0.0)] * len(mesh.loops)
         mesh.use_auto_smooth = True
         for i, loop in enumerate(mesh.loops):
