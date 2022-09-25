@@ -59,6 +59,10 @@ namespace wbs_kernel::bl_utils::color_utils
 
   [[nodiscard]]
   RGBA SRGB_to_linear(RGBA const& color);
+
+  [[nodiscard]]
+  RGBA linear_to_SRGB(RGBA const& color);
+
 }
 
 #endif //WBS_KERNEL_COLOR_UTILS_HPP

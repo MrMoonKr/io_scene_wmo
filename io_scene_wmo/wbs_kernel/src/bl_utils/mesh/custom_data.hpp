@@ -6,6 +6,7 @@
 struct CustomData;
 struct MDeformWeight;
 struct MDeformVert;
+struct Mesh;
 
 
 namespace wbs_kernel::bl_utils::mesh
@@ -15,6 +16,10 @@ namespace wbs_kernel::bl_utils::mesh
   // Last updated to Blender 3.10. Please keep this note in sync with your changes.
 
   int WBS_CustomData_get_named_layer_index(const CustomData* data, int type, const char* name);
+
+  int WBS_CustomData_get_named_layer_index(const CustomData* data, const char* name);
+
+  int WBS_CustomData_get_layer_type(const CustomData* data, int index);
 
   void* WBS_CustomData_get_layer_named(const struct CustomData* data, int type, const char* name);
 
@@ -31,9 +36,6 @@ namespace wbs_kernel::bl_utils::mesh
 
   template<typename T>
   T* get_custom_data_layer_named(const CustomData* data, std::string const& name);
-
-
-
 
 }
 

@@ -35,7 +35,7 @@ def main(debug: bool):
 
     elif platform.system() == 'Windows':
         if debug:
-            extra_compile_args = ['/std:c++17', '/Zi']
+            extra_compile_args = ['/std:c++17', '/Zi', '/Od']
             extra_link_args = ['/DEBUG:FULL']
         else:
             extra_compile_args = ['/std:c++17']

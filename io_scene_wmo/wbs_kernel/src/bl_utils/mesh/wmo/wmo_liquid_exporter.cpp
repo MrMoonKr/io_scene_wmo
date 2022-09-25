@@ -1,4 +1,6 @@
 #include "wmo_liquid_exporter.hpp"
+#include "batch_geometry.hpp"
+
 #include <bl_utils/mesh/custom_data.hpp>
 #include <bl_utils/color_utils.hpp>
 #include <extern/glm/gtc/type_ptr.hpp>
@@ -135,19 +137,16 @@ void LiquidExporter::_process_mesh_data()
 
     while (bit <= 0x80)
     {
-      const MLoopCol* vc_layer = get_custom_data_layer_named<MLoopCol>(&_liquid_mesh->ldata,
-                                                                       "flag_" + std::to_string(counter));
+      VertexColorLayer vc_layer {_liquid_mesh, "flag_" + std::to_string(counter)};
 
-      if (!vc_layer)
+      if (!vc_layer.exists())
       {
         bit <<= 1;
         counter++;
         continue;
       }
-      const RGBA cur_color {vc_layer[poly->loopstart].r,
-                            vc_layer[poly->loopstart].g,
-                            vc_layer[poly->loopstart].b, 255};
 
+      const RGBA cur_color  = vc_layer[poly->loopstart];
 
       bool is_checked = compare_colors(cur_color, blue);
       if (bit == 0x1 && is_checked)

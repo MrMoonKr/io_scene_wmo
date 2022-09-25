@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include <BKE_mesh.h>
+#include <DNA_mesh_types.h>
 #include <DNA_meshdata_types.h>
 #include <BKE_mesh_mapping.h>
 #include <BKE_mesh_runtime.h>
@@ -22,6 +23,18 @@ int wbs_kernel::bl_utils::mesh::WBS_CustomData_get_named_layer_index(const Custo
   }
 
   return -1;
+}
+
+int wbs_kernel::bl_utils::mesh::WBS_CustomData_get_named_layer_index(const CustomData* data, const char* name)
+{
+    for (int i = 0; i < data->totlayer; i++)
+    {
+        if (STREQ(data->layers[i].name, name))
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 int wbs_kernel::bl_utils::mesh::WBS_CustomData_get_active_layer_index(const CustomData* data, int type)
@@ -91,7 +104,7 @@ MDeformWeight* wbs_kernel::bl_utils::mesh::WBS_BKE_defvert_find_index(const MDef
 template<>
 MLoopCol* wbs_kernel::bl_utils::mesh::get_custom_data_layer_named<MLoopCol>(const CustomData* data, const std::string& name)
 {
-  return static_cast<MLoopCol*>(WBS_CustomData_get_layer_named(data, eCustomDataType::CD_PROP_COLOR, name.c_str()));
+  return static_cast<MLoopCol*>(WBS_CustomData_get_layer_named(data, eCustomDataType::CD_PROP_BYTE_COLOR, name.c_str()));
 }
 
 template<>
@@ -105,3 +118,11 @@ MDeformVert* wbs_kernel::bl_utils::mesh::get_custom_data_layer_named<MDeformVert
 {
   return static_cast<MDeformVert*>(WBS_CustomData_get_layer_named(data,eCustomDataType::CD_MDEFORMVERT, name.c_str()));
 }
+
+int wbs_kernel::bl_utils::mesh::WBS_CustomData_get_layer_type(const CustomData* data, int index)
+{
+  assert(index >= 0 && "Requested type of non existing layer.");
+  return data->layers[index].type;
+}
+
+

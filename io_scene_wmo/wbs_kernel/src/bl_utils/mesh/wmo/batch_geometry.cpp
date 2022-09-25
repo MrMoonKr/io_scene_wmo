@@ -55,11 +55,11 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _bl_looptris(_mesh->runtime.looptris.array)
 , _bl_vertex_normals(reinterpret_cast<const float(*)[3]>(_mesh->runtime.vert_normals))
 , _has_collision_vg(_vg_collision_index >= 0)
-, _bl_batch_map_trans(get_custom_data_layer_named<MLoopCol>(&_mesh->ldata, "BatchmapTrans"))
-, _bl_batch_map_int(get_custom_data_layer_named<MLoopCol>(&_mesh->ldata, "BatchmapInt"))
-, _bl_lightmap(get_custom_data_layer_named<MLoopCol>(&_mesh->ldata, "Lightmap"))
-, _bl_blendmap(get_custom_data_layer_named<MLoopCol>(&_mesh->ldata, "Blendmap"))
-, _bl_vertex_color(get_custom_data_layer_named<MLoopCol>(&_mesh->ldata, "Col"))
+, _bl_batch_map_trans(_mesh, "BatchmapTrans")
+, _bl_batch_map_int(_mesh, "BatchmapInt")
+, _bl_lightmap(_mesh, "Lightmap")
+, _bl_blendmap(_mesh, "Blendmap")
+, _bl_vertex_color(_mesh, "Col")
 , _bl_uv(get_custom_data_layer_named<MLoopUV>(&_mesh->ldata, "UVMap"))
 , _bl_uv2(get_custom_data_layer_named<MLoopUV>(&_mesh->ldata, "UVMap.001"))
 , _last_error(WMOGeometryBatcherError::NO_ERROR)
@@ -113,9 +113,7 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 
   for (int i = 0; i < n_loop_tris; ++i)
   {
-    polys_per_mat[i] = std::make_pair(&_bl_looptris[i], WMOGeometryBatcher::get_batch_type(&_bl_looptris[i]
-                                                                                           , _bl_batch_map_trans
-                                                                                           , _bl_batch_map_int));
+    polys_per_mat[i] = std::make_pair(&_bl_looptris[i], WMOGeometryBatcher::get_batch_type(&_bl_looptris[i]));
   }
 
 
@@ -206,16 +204,16 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
     , MOPYTriangleMaterial& tri_mat
     , unsigned loop_index)
 {
-  if (_use_vertex_color && _bl_vertex_color)
+  if (_use_vertex_color && _bl_vertex_color.exists())
   {
-    const MLoopCol* color = &_bl_vertex_color[loop_index];
-    v_info.col.r = color->b;
-    v_info.col.g = color->g;
-    v_info.col.b = color->r;
+    RGBA color = _bl_vertex_color[loop_index];
+    v_info.col.r = color.b;
+    v_info.col.g = color.g;
+    v_info.col.b = color.r;
 
-    if (_bl_lightmap)
+    if (_bl_lightmap.exists())
     {
-      unsigned char attenuation = _get_grayscale_factor(&_bl_lightmap[loop_index]);
+      unsigned char attenuation = _get_grayscale_factor(_bl_lightmap[loop_index]);
 
       // TODO: verify what this actually does and if needed
       if (attenuation > 0)
@@ -227,9 +225,9 @@ void WMOGeometryBatcher::_unpack_vertex(BatchVertexInfo& v_info
     }
   }
 
-  if (_bl_blendmap)
+  if (_bl_blendmap.exists())
   {
-    const MLoopCol* color = &_bl_blendmap[loop_index];
+    RGBA color = _bl_blendmap[loop_index];
     v_info.col2.a = _get_grayscale_factor(color);
   }
 
@@ -283,7 +281,7 @@ void WMOGeometryBatcher::_create_new_collision_vert(const MVert* vertex
     _vertex_colors.emplace_back(RGBA{0x7F, 0x7F, 0x7F, 0x0});
   }
 
-  if (_bl_blendmap)
+  if (_bl_blendmap.exists())
   {
     _vertex_colors2.emplace_back(RGBA{0x0, 0x0, 0x0, 0x0});
   }
@@ -333,7 +331,7 @@ void WMOGeometryBatcher::_create_new_vert(BatchVertexInfo& v_info
     _vertex_colors.emplace_back(v_info.col);
   }
 
-  if (_bl_blendmap)
+  if (_bl_blendmap.exists())
   {
     _vertex_colors2.emplace_back(v_info.col2);
   }
@@ -389,16 +387,14 @@ bool WMOGeometryBatcher::_needs_new_batch(MOBABatch* cur_batch
     || _material_ids[_bl_polygons[cur_tri->poly].mat_nr] != cur_batch_mat_id;
 }
 
-unsigned char WMOGeometryBatcher::_get_grayscale_factor(const MLoopCol* color)
+unsigned char WMOGeometryBatcher::_get_grayscale_factor(RGBA const& color)
 {
-  return (color->r + color->g + color->b) / 3;
+  return (color.r + color.g + color.b) / 3;
 }
 
-BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly
-    , const MLoopCol* batch_map_trans
-    , const MLoopCol* batch_map_int)
+BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly)
 {
-  if (!batch_map_trans && !batch_map_int)
+  if (!_bl_batch_map_trans.exists() && !_bl_batch_map_int.exists())
     return BatchType::EXT;
 
   unsigned trans_count = 0;
@@ -407,10 +403,9 @@ BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly
   for (int i = 0; i < 3; ++i)
   {
 
-    if (batch_map_trans)
+    if (_bl_batch_map_trans.exists())
     {
-      const MLoopCol* loop_col = &batch_map_trans[poly->tri[i]];
-      RGBA color = {loop_col->r, loop_col->g, loop_col->b, loop_col->a};
+      RGBA color = _bl_batch_map_trans[poly->tri[i]];
 
       if (comp_color_key(color))
       {
@@ -419,10 +414,9 @@ BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly
 
     }
 
-    if (batch_map_int)
+    if (_bl_batch_map_int.exists())
     {
-      const MLoopCol* loop_col = &batch_map_int[poly->tri[i]];
-      RGBA color = {loop_col->r, loop_col->g, loop_col->b, loop_col->a};
+      RGBA color = _bl_batch_map_int[poly->tri[i]];
 
       if (comp_color_key(color))
       {
@@ -562,21 +556,32 @@ void WMOGeometryBatcher::_calculate_bounding_for_vertex(glm::vec3 const& vertex)
   _bounding_box_max.z = std::max(_bounding_box_max.z, vertex[2]);
 }
 
+namespace
+{
+  std::int16_t round_bb_float(float x)
+  {
+    std::int16_t sign = x < 0 ? -1 : 1;
+
+    auto base = static_cast<std::int16_t>(std::ceil(std::fabs(x)));
+
+    return sign * base;
+  }
+}
+
 void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, glm::vec3 const& vertex) const
 {
   // batch bounding box is not needed for newer clients supporting large material ids
   if (_use_large_material_id)
     return;
 
-  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(std::round(vertex[0])));
-  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(std::round(vertex[1])));
-  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(std::round(vertex[2])));
+  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], round_bb_float(vertex[0]));
+  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], round_bb_float(vertex[1]));
+  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], round_bb_float(vertex[2]));
 
-  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(std::round(vertex[0])));
-  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(std::round(vertex[1])));
-  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(std::round(vertex[2])));
+  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], round_bb_float(vertex[0]));
+  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], round_bb_float(vertex[1]));
+  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], round_bb_float(vertex[2]));
 }
-
 
 
 BufferKey WMOGeometryBatcher::batches()
@@ -663,3 +668,75 @@ BufferKey WMOGeometryBatcher::liquid_header()
   return {reinterpret_cast<char*>(&_liquid_exporter->header()), sizeof(MLIQHeader)};
 }
 
+VertexColorLayer::VertexColorLayer(const Mesh* mesh, std::string const& name)
+: _mesh(mesh)
+, _is_per_loop(false)
+, _exists(false)
+{
+  int per_loop_index = WBS_CustomData_get_named_layer_index(&mesh->ldata, name.c_str());
+
+  if (per_loop_index >= 0)
+  {
+    int type = WBS_CustomData_get_layer_type(&mesh->ldata, per_loop_index);
+
+    if (type == CD_PROP_BYTE_COLOR)
+    {
+      _exists = true;
+      _is_per_loop = true;
+      _color_layer = static_cast<MLoopCol*>(mesh->ldata.layers[per_loop_index].data);
+    }
+    else if (type == CD_PROP_COLOR)
+    {
+      _is_per_loop = true;
+      _exists = true;
+      _color_layer = static_cast<MPropCol*>(mesh->ldata.layers[per_loop_index].data);
+    }
+
+    return;
+  }
+
+  int per_vert_index = WBS_CustomData_get_named_layer_index(&mesh->vdata, name.c_str());
+
+  if (per_vert_index >= 0)
+  {
+    int type = WBS_CustomData_get_layer_type(&mesh->vdata, per_vert_index);
+
+    if (type == CD_PROP_BYTE_COLOR)
+    {
+      _exists = true;
+      _is_per_loop = false;
+      _color_layer = static_cast<MLoopCol*>(mesh->vdata.layers[per_vert_index].data);
+    }
+    else if (type == CD_PROP_COLOR)
+    {
+      _is_per_loop = false;
+      _exists = true;
+      _color_layer = static_cast<MPropCol*>(mesh->vdata.layers[per_vert_index].data);
+    }
+  }
+
+}
+
+RGBA VertexColorLayer::operator[](std::size_t index) const
+{
+  assert(_exists && "Attempt accessing non existing non-existing layer.");
+
+  if (!_is_per_loop)
+  {
+    index = _mesh->mloop[index].v;
+  }
+
+  if (std::holds_alternative<MLoopCol*>(_color_layer))
+  {
+    MLoopCol* col = &std::get<MLoopCol*>(_color_layer)[index];
+    return RGBA{col->r, col->g, col->b, 0xFF};
+  }
+  else
+  {
+    MPropCol* col = &std::get<MPropCol*>(_color_layer)[index];
+    return linear_to_SRGB({static_cast<unsigned char>(col->color[0] * 255.f)
+                          , static_cast<unsigned char>(col->color[1] * 255.f)
+                          , static_cast<unsigned char>(col->color[2] * 255.f)
+                          , 0xFF});
+  }
+}

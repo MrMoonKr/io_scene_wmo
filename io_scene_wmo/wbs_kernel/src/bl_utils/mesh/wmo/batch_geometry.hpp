@@ -8,12 +8,14 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <variant>
 
 
 struct Mesh;
 struct MPoly;
 struct MLoop;
 struct MLoopCol;
+struct MPropCol;
 struct MDeformVert;
 
 
@@ -117,6 +119,25 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     unsigned y_tiles;
     unsigned mat_id;
     bool is_water;
+  };
+
+  struct VertexColorLayer
+  {
+    VertexColorLayer(const Mesh* mesh, std::string const& name);
+
+    [[nodiscard]]
+    bool exists() const { return _exists; };
+
+    [[nodiscard]]
+    bool is_per_loop() const { return _is_per_loop; };
+
+    color_utils::RGBA operator[] (std::size_t index) const;
+
+  private:
+    bool _exists;
+    bool _is_per_loop;
+    const Mesh* _mesh;
+    std::variant<std::monostate, MLoopCol*, MPropCol*> _color_layer;
   };
 
   class WMOGeometryBatcher
@@ -242,12 +263,10 @@ namespace wbs_kernel::bl_utils::mesh::wmo
         , std::uint16_t cur_batch_mat_id);
 
     [[nodiscard]]
-    static unsigned char _get_grayscale_factor(const MLoopCol* color);
+    static unsigned char _get_grayscale_factor(color_utils::RGBA const& color);
 
     [[nodiscard]]
-    static BatchType get_batch_type(const MLoopTri* poly
-        , const MLoopCol* batch_map_trans
-        , const MLoopCol* batch_map_int);
+    BatchType get_batch_type(const MLoopTri* poly);
 
 
     Mesh* _mesh;
@@ -294,11 +313,11 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     const float(*_bl_vertex_normals)[3];
     const float(*_bl_loop_normals)[3];
 
-    MLoopCol* _bl_batch_map_trans;
-    MLoopCol* _bl_batch_map_int;
-    MLoopCol* _bl_lightmap;
-    MLoopCol* _bl_blendmap;
-    MLoopCol* _bl_vertex_color;
+    VertexColorLayer _bl_batch_map_trans;
+    VertexColorLayer _bl_batch_map_int;
+    VertexColorLayer _bl_lightmap;
+    VertexColorLayer _bl_blendmap;
+    VertexColorLayer _bl_vertex_color;
     MLoopUV* _bl_uv;
     MLoopUV* _bl_uv2;
     MDeformVert* _bl_vg_data;

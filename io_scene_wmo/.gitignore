@@ -14,6 +14,7 @@ __pycache__/
 *.a
 *.dylib
 *.dll
+*.pdb
 wbs_kernel/CMakeLists.txt
 wbs_kernel/wmo_utils.cpp
 wbs_kernel/render.cpp

@@ -209,8 +209,12 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
         poly.use_smooth = True
 
     # set normals
-    for index, vertex in enumerate(mesh.vertices):
-        vertex.normal = normals[index]
+    custom_normals = [(0.0, 0.0, 0.0)] * len(mesh.loops)
+    mesh.use_auto_smooth = True
+    for i, loop in enumerate(mesh.loops):
+        custom_normals[i] = normals[loop.vertex_index]
+
+    mesh.normals_split_custom_set(custom_normals)
 
     # set uv
     uv_layer1 = mesh.uv_layers.new(name="UVMap")
