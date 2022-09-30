@@ -11,12 +11,16 @@ from ....utils.misc import load_game_data
 
 def get_creature_model_data(self, context):
     game_data = load_game_data()
+    
     creature_model_data_db = game_data.db_files_client.CreatureModelData
+
+    # print("proc get_creature_model_data")
 
     cr_model_data_entries = [('None', 'None', '')]
     model_path = os.path.splitext(context.scene.wow_scene.game_path.lower())[0]
+
     for record in creature_model_data_db.records:
-        if os.path.splitext(record.ModelPath.lower())[0] == model_path:
+        if os.path.splitext(record.ModelName.lower())[0] == model_path:
             cr_model_data_entries.append((str(record.ID), 'ModelDataEntry_{}'.format(record.ID), ""))
     return cr_model_data_entries
 
@@ -28,7 +32,7 @@ def get_creature_display_infos(self, context):
     cr_display_infos = [('None', 'None', '')]
     cr_model_data = int(context.scene.wow_m2_creature.CreatureModelData)
     for record in creature_display_info_db.records:
-        if record.Model == cr_model_data:
+        if record.ModelID == cr_model_data:
             cr_display_infos.append((str(record.ID), 'CreatureDisplayInfoEntry_{}'.format(record.ID), ""))
 
     return cr_display_infos
@@ -38,7 +42,7 @@ def get_char_races(self, context):
     game_data = load_game_data()
     chr_races_db = game_data.db_files_client.ChrRaces
 
-    return [(str(record.ID), record.clientFileString, '') for record in chr_races_db.records]
+    return [(str(record.ID), record.ClientFileString, '') for record in chr_races_db.records]
 
 
 ###############################
@@ -50,13 +54,13 @@ def load_display_info_properties(self, context):
     creature_display_info_db = game_data.db_files_client.CreatureDisplayInfo
     record = creature_display_info_db[int(context.scene.wow_m2_creature.CreatureDisplayInfo)]
 
-    context.scene.wow_m2_creature.DisplaySound = record.Sound
-    context.scene.wow_m2_creature.DisplayScale = record.Scale
+    context.scene.wow_m2_creature.DisplaySound = record.SoundID
+    context.scene.wow_m2_creature.DisplayScale = record.CreatureModelScale
     context.scene.wow_m2_creature.DisplayTexture1 = record.Texture1
     context.scene.wow_m2_creature.DisplayTexture2 = record.Texture2
     context.scene.wow_m2_creature.DisplayTexture3 = record.Texture3
     context.scene.wow_m2_creature.DisplayPortraitTextureName = record.PortraitTextureName
-    context.scene.wow_m2_creature.ExtraDisplayInformation = record.ExtraDisplayInformation
+    context.scene.wow_m2_creature.ExtraDisplayInformation = record.ExtendedDisplayInfoID
 
 
 def load_display_extra_properties(self, context):
@@ -65,13 +69,13 @@ def load_display_extra_properties(self, context):
     record = creature_display_info_extra_db[int(context.scene.wow_m2_creature.ExtraDisplayInformation)]
 
     if record:
-        context.scene.wow_m2_creature.DisplayExtraRace = str(record.Race)
-        context.scene.wow_m2_creature.DisplayExtraGender = str(record.Gender)
-        context.scene.wow_m2_creature.DisplayExtraSkinColor = record.SkinColor
-        context.scene.wow_m2_creature.DisplayExtraFaceType = record.FaceType
-        context.scene.wow_m2_creature.DisplayExtraHairType = record.HairType
-        context.scene.wow_m2_creature.DisplayExtraHairStyle = record.HairStyle
-        context.scene.wow_m2_creature.DisplayExtraBeardStyle = record.BeardStyle
+        context.scene.wow_m2_creature.DisplayExtraRace = str(record.DisplayRaceID)
+        context.scene.wow_m2_creature.DisplayExtraGender = str(record.DisplaySexID)
+        context.scene.wow_m2_creature.DisplayExtraSkinColor = record.SkinID
+        context.scene.wow_m2_creature.DisplayExtraFaceType = record.FaceID
+        context.scene.wow_m2_creature.DisplayExtraHairType = record.HairStyleID
+        context.scene.wow_m2_creature.DisplayExtraHairStyle = record.HairColorID
+        context.scene.wow_m2_creature.DisplayExtraBeardStyle = record.FacialHairID
         context.scene.wow_m2_creature.DisplayExtraHelm = record.Helm
         context.scene.wow_m2_creature.DisplayExtraShoulder = record.Shoulder
         context.scene.wow_m2_creature.DisplayExtraShirt = record.Shirt
@@ -87,7 +91,7 @@ def load_display_extra_properties(self, context):
         context.scene.wow_m2_creature.DisplayExtraTexture = record.Texture
 
     elif int(context.scene.wow_m2_creature.ExtraDisplayInformation):
-        context.scene.wow_m2_creature.ExtraDisplayInformation = 0
+        context.scene.wow_m2_creature.ExtendedDisplayInfoID = 0
 
 
 ###############################
@@ -118,7 +122,7 @@ class M2_OT_creature_editor_dialog(bpy.types.Operator):
         col1 = split.column()
 
         if not context.scene.wow_scene.game_path:
-            col.label(text='Model path is unknown.', icon='ERROR')
+            col.label(text='Model path is unknown. Fill Game Path in scene properties.', icon='ERROR')
             return
 
         col.label(text='Model data:')
@@ -421,13 +425,35 @@ class M2_OT_creature_editor_load_textures(bpy.types.Operator):
         if img:
             for obj in filter(lambda o: o.type == 'MESH' and not o.wow_m2_geoset.collision_mesh, context.scene.objects):
                 for i, material in enumerate(obj.data.materials):
-                    if material.active_texture.wow_m2_texture.texture_type == str(tex_type):
-                        material.active_texture.image = img
+                    # OLD by skarn, not comaptible anymore
+                    # if material.active_texture.wow_m2_texture.texture_type == str(tex_type):
+                    #     material.active_texture.image = img
+# 
+                    #     uv = obj.data.uv_layers.active
+                    #     for poly in obj.data.polygons:
+                    #         if poly.material_index == i:
+                    #             uv.data[poly.index].image = img
+                    # if material.active_texture.wow_m2_texture.texture_type == str(tex_type):
+                    #     material.active_texture.image = img
 
-                        uv = obj.data.uv_layers.active
-                        for poly in obj.data.polygons:
-                            if poly.material_index == i:
-                                uv.data[poly.index].image = img
+                    #if material.wow_m2_material.texture_1:
+                    #    if material.wow_m2_material.texture_1.image.wow_m2_texture.texture_type == str(tex_type):
+                    if material.node_tree.nodes.get('Image Texture').image: # which one is better to use ? 
+                        if material.node_tree.nodes.get('Image Texture').image.wow_m2_texture.texture_type == str(tex_type):
+
+                            img.name = material.node_tree.nodes.get('Image Texture').image.name
+                            img.wow_m2_texture.texture_type = str(tex_type)
+                            img.wow_m2_texture.flags = material.node_tree.nodes.get('Image Texture').image.wow_m2_texture.flags
+                            img.wow_m2_texture.path = material.node_tree.nodes.get('Image Texture').image.wow_m2_texture.path
+                            img.wow_m2_texture.enabled = True
+
+                            material.wow_m2_material.texture_1 = img # this just changes the m2 mat to a newly created texture with incorrect m2 text settings
+                                                        # can try to replace the m2 texture by the correct texture
+
+                            # change the shader tetxures, looks like the best replacement over active texture
+                            material.node_tree.nodes.get('Image Texture').image = img
+
+                            # TODO : multiple textures ?
 
     def execute(self, context):
         if not context.scene.wow_scene.game_path:
@@ -457,6 +483,7 @@ class M2_OT_creature_editor_load_textures(bpy.types.Operator):
                 self.load_skin_texture(context, os.path.join(base_path, self.Path), self.TexNum)
             else:
                 self.report({'ERROR'}, "No texture to load.")
+                return {'ERROR'}
 
         self.report({'INFO'}, "Successfully loaded creature skins.")
         return {'FINISHED'}

@@ -149,37 +149,37 @@ class M2_OT_root_elements_components_change(bpy.types.Operator):
                 # slot.pointer = obj
 
 
-        elif self.action == 'REMOVE':
-
-            col = getattr(context.scene.wow_m2_root_elements, self.col_name)
-            cur_idx = getattr(context.scene.wow_m2_root_elements, self.cur_idx_name)
-
-            if len(col) <= cur_idx:
-                return {'FINISHED'}
-
-            item = col[cur_idx].pointer
-
-            if item:
-                if self.col_name == 'geosets':
-                    item.wow_m2_geoset.enabled = False
-
-                elif self.col_name == 'lights':
-                    item.wow_m2_light.enabled = False
-
-                elif self.col_name == 'materials':
-                    item.wow_m2_material.enabled = False
-
-                elif self.col_name == 'textures':
-                    item.wow_m2_texture.enabled = False
-                               
-                elif self.col_name == 'attachments':
-                    item.wow_m2_attachment.enabled = False
-                
-                elif self.col_name == 'events':
-                    item.wow_m2_event.enabled = False
-
-
-            col.remove(cur_idx)
+#        elif self.action == 'REMOVE':
+#
+#            col = getattr(context.scene.wow_m2_root_elements, self.col_name)
+#            cur_idx = getattr(context.scene.wow_m2_root_elements, self.cur_idx_name)
+#
+#            if len(col) <= cur_idx:
+#                return {'FINISHED'}
+#
+#            item = col[cur_idx].pointer
+#
+#            if item:
+#                if self.col_name == 'geosets':
+#                    item.wow_m2_geoset.enabled = False
+#
+#                elif self.col_name == 'lights':
+#                    item.wow_m2_light.enabled = False
+#
+#                elif self.col_name == 'materials':
+#                    item.wow_m2_material.enabled = False
+#
+#                elif self.col_name == 'textures':
+#                    item.wow_m2_texture.enabled = False
+#                               
+#                elif self.col_name == 'attachments':
+#                    item.wow_m2_attachment.enabled = False
+#                
+#                elif self.col_name == 'events':
+#                    item.wow_m2_event.enabled = False
+#
+#
+#            col.remove(cur_idx)
 
         else:
             self.report({'ERROR'}, 'Unsupported token')

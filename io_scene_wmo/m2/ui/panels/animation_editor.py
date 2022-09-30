@@ -986,7 +986,7 @@ def update_scene_frame_range():
             frame_end = bpy.context.scene.animation_data.action.frame_range[1]
 
     bpy.context.scene.frame_start = 0
-    bpy.context.scene.frame_end = frame_end
+    bpy.context.scene.frame_end = int(frame_end)
 
     # update NLA tracks length
     for anim in bpy.context.scene.wow_m2_animations:

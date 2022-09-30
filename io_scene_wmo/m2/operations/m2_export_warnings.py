@@ -39,6 +39,9 @@ def transformed_objects():
         return str_out
 
     for obj in bpy.data.objects:
+        if obj.type not in  ('ARMATURE', 'MESH'):
+            continue
+
         def compare(name,names,val1,val2):
             if not vec_eq(len(names),val1,val2):
                 items.append(f"Object {obj.name}s {name} is {vec_str(val1,names)}, but should be {vec_str(val2,names)}")
@@ -87,10 +90,13 @@ def empty_texture_paths():
         for slot in obj.material_slots:
             mat = slot.material.wow_m2_material
             for texture in [mat.texture_1,mat.texture_2,mat.texture_3,mat.texture_4]:
+
                 if (
                     texture is not None 
                     and len(texture.wow_m2_texture.path) == 0
                    ):
+                    if texture.wow_m2_texture.texture_type != 0:
+                        continue
                     if not texture.name in texture_maps:
                        texture_maps[texture.name] = []
                     
@@ -119,7 +125,7 @@ def no_materials():
     ]
     items = []
     for obj in bpy.data.objects:
-        if len(obj.material_slots) == 0:
+        if obj.type == 'MESH' and obj.name != 'Collision' and len(obj.material_slots) == 0:
             items.append(f'Object {obj.name} has no m2 materials, this is usually an error and will cause the model to be invisible ingame')
     return (name,description,items)
         
@@ -181,7 +187,8 @@ def non_primary_sequences():
     ]
     items = []
     for sequence in bpy.context.scene.wow_m2_animations:
-        if not "32" in sequence.flags:
+
+        if not "32" in sequence.flags and not sequence.is_global_sequence:
             items.append(f'Sequence {sequence.name} does not have the primary sequence flag')
 
     return (name,description,items)

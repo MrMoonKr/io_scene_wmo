@@ -1,5 +1,6 @@
 import bpy
 import json
+import os
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -8,6 +9,7 @@ from ..wmo.export_wmo import export_wmo_from_blender_scene
 from ..m2.import_m2 import import_m2
 from ..m2.export_m2 import export_m2, create_m2
 from ..utils.misc import load_game_data
+from . import get_addon_prefs
 
 #############################################################
 ######                 Common operators                ######
@@ -169,6 +171,44 @@ class WBS_OT_wmo_export(bpy.types.Operator, ExportHelper):
         self.report({'ERROR'}, 'Invalid scene type.')
         return {'CANCELLED'}
 
+class WBS_OT_blp_load_from_game(bpy.types.Operator):
+    """Load BLP from game data"""
+    bl_idname = "load.blp"
+    bl_label = "Load BLP from game data"
+    bl_options = {'UNDO','REGISTER'}
+
+    blp_file: StringProperty()
+    imported_name: StringProperty()
+
+    def execute(self, context):
+        game_data = load_game_data()
+        addon_preferences = get_addon_prefs()
+
+        if not addon_preferences.cache_dir_path:
+            raise Exception('Error: cache directory is not specified. Check addon settings.')
+        
+        if game_data and game_data.files:
+            files = game_data.extract_textures_as_png(addon_preferences.cache_dir_path, [self.blp_file])
+            for key,value in files.items():
+                img = bpy.data.images.load(os.path.join(value))
+                if self.imported_name:
+                    img.name = self.imported_name
+                else:
+                    img.name = os.path.basename(key)
+            return {'FINISHED'}
+        else:
+            raise NotImplementedError('Error: Importing without gamedata loaded is not yet implemented.')
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "blp_file", text="BLP File")
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
 class WBS_OT_m2_import(bpy.types.Operator):
     """Load M2 data"""

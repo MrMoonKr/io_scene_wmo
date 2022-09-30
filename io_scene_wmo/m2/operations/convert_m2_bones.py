@@ -122,10 +122,16 @@ def convert_m2_bones():
 
     for obj in bpy.data.objects:
         if obj.type != 'ARMATURE': continue
-        obj.select_set(True)
-        changed_objects.append(obj)
 
-        bpy.ops.object.mode_set(mode='EDIT')
+        try:
+            obj.select_set(True)
+        except RuntimeError as e:
+            print(f"Unable to select armature {obj.name}, not converting it")
+            continue
+
+        changed_objects.append(obj)
+        
+        # bpy.ops.object.mode_set(mode='EDIT')
 
         for bone in obj.data.edit_bones:
             if bone.use_connect:
