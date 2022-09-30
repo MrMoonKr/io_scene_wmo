@@ -226,7 +226,7 @@ class BlenderWMOScene:
             fog_obj.wow_wmo_fog.unknown = wmo_fog.flags & 0x10
 
             if wmo_fog.small_radius != 0:
-                fog_obj.wow_wmo_fog.inner_radius = wmo_fog.small_radius / wmo_fog.big_radius * 100
+                fog_obj.wow_wmo_fog.inner_radius = int(wmo_fog.small_radius / wmo_fog.big_radius * 100)
             else:
                 fog_obj.wow_wmo_fog.inner_radius = 0
 
@@ -500,7 +500,7 @@ class BlenderWMOScene:
                 rel.id = slot.pointer.name  # TODO: store pointer instead?
 
         # process fogs
-        for i, slot in tqdm(enumerate(root_elements.fogs), desc='Building fog references', ascii=True):
+        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building fog references', ascii=True):
             self.bl_fogs.append(slot.pointer)
             slot.pointer.wow_wmo_fog.fog_id = i
 
@@ -827,7 +827,7 @@ class BlenderWMOScene:
         for fog_obj in tqdm(self.bl_fogs, desc='Saving fogs', ascii=True):
 
             big_radius = fog_obj.dimensions[2] / 2
-            # small radius % calculation is done by pywowlib
+            small_radius = big_radius * (fog_obj.wow_wmo_fog.inner_radius / 100)
 
             color1 = (int(fog_obj.wow_wmo_fog.color1[2] * 255),
                           int(fog_obj.wow_wmo_fog.color1[1] * 255),
@@ -851,7 +851,7 @@ class BlenderWMOScene:
             if fog_obj.wow_wmo_fog.unknown:
                 flags |= 0x10
 
-            self.wmo.add_fog(big_radius, fog_obj.wow_wmo_fog.inner_radius, color1, color2, end_dist, end_dist2, position,
+            self.wmo.add_fog(big_radius, small_radius, color1, color2, end_dist, end_dist2, position,
                              start_factor, start_factor2, flags)
 
     def save_root_header(self):

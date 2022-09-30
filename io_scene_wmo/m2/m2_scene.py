@@ -13,7 +13,7 @@ from ..render.m2.shaders import M2ShaderPermutations
 from ..utils.misc import parse_bitfield, construct_bitfield, load_game_data
 from ..utils.misc import resolve_texture_path, get_origin_position, get_objs_boundbox_world, get_obj_boundbox_center, \
     get_obj_radius
-from .ui.enums import mesh_part_id_menu
+from .ui.enums import mesh_part_id_menu, TEXTURE_TYPES, get_texture_type_name
 from .ui.panels.camera import update_follow_path_constraints
 from ..pywowlib.enums.m2_enums import M2SkinMeshPartID, M2AttachmentTypes, M2EventTokens, M2SequenceNames
 from ..pywowlib.file_formats.wow_common_types import *
@@ -141,11 +141,17 @@ class BlenderM2Scene:
             for j, seq_index in enumerate(self.global_sequences):
                 anim = bpy.context.scene.wow_m2_animations[j]
 
+                if anim.is_alias: # skip alias anims
+                    continue
                 anim_pair = None
                 for pair in anim.anim_pairs:
                     if pair.type == 'SCENE':
                         anim_pair = pair
                         break
+                
+                if not anim_pair.action:
+                    print("\nFailed to animate color #{}, no action for global seq #{}".format(i, j))
+                    continue
 
                 if m2_color.color.global_sequence == seq_index:
                     animate_color(anim_pair, m2_color.color, i, 0)
@@ -157,11 +163,18 @@ class BlenderM2Scene:
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
 
+                if anim.is_alias: # skip alias anims
+                    continue
                 anim_pair = None
                 for pair in anim.anim_pairs:
                     if pair.type == 'SCENE':
                         anim_pair = pair
                         break
+                
+                if not anim_pair.action:
+                    print("\nFailed to animate color #{}, no action for anim #{}".format(i, (j - n_global_sequences)))
+                    print(anim.name)
+                    continue
 
                 if m2_color.color.global_sequence < 0:
                     animate_color(anim_pair, m2_color.color, i, anim_index)
@@ -218,11 +231,17 @@ class BlenderM2Scene:
             for j, seq_index in enumerate(self.global_sequences):
                 anim = bpy.context.scene.wow_m2_animations[j]
 
+                if anim.is_alias: # skip alias anims
+                    continue
                 anim_pair = None
                 for pair in anim.anim_pairs:
                     if pair.type == 'SCENE':
                         anim_pair = pair
                         break
+                
+                if not anim_pair.action:
+                    print("\nFailed to animate transparancy #{}, no action for global seq #{}".format(i, j))
+                    continue
 
                 if m2_transparency.global_sequence == seq_index:
                     animate_transparency(anim_pair, m2_transparency, i, 0)
@@ -231,23 +250,33 @@ class BlenderM2Scene:
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
 
+                if anim.is_alias: # skip alias anims
+                    continue
                 anim_pair = None
                 for pair in anim.anim_pairs:
                     if pair.type == 'SCENE':
                         anim_pair = pair
                         break
 
+                if not anim_pair.action:
+                    print("\nFailed to animate transparancy #{}, no action for anim #{}".format(i, (j - n_global_sequences)))
+                    print(anim.name)
+                    continue
+
                 if m2_transparency.global_sequence < 0:
                     animate_transparency(anim_pair, m2_transparency, i, anim_index)
 
     def load_texture(self,index):
+        # textureid = self.m2.root.texture_lookup_table[index]
         if index in self.loaded_textures:
             return self.loaded_textures[index]
+
 
         texture = self.m2.root.textures[index]
         tex_path_png = ""
 
-        if not texture.type:  # check if texture is hardcoded
+
+        if texture.type == 0:  # check if texture is hardcoded
 
             try:
                 tex_path_blp = self.m2.texture_path_map[texture.fdid] \
@@ -259,13 +288,18 @@ class BlenderM2Scene:
 
         tex = None
         if tex_path_png:
+            print("tex path : " + tex_path_png)
             try:
                 tex = bpy.data.images.load(tex_path_png)
             except RuntimeError:
                 print("\nWarning: failed to load texture \"{}\".".format(tex_path_png))
 
         if not tex:
-            tex = bpy.data.images.new(os.path.basename(texture.filename.value), 256, 256)
+            if texture.type == 0: # hardcoded
+                tex = bpy.data.images.new(os.path.basename(texture.filename.value), 256, 256)
+            else: # DBC tetxure
+                tetxname = get_texture_type_name(texture.type)
+                tex = bpy.data.images.new(os.path.basename(tetxname), 256, 256)
 
         tex.wow_m2_texture.enabled = True
         tex.wow_m2_texture.flags = parse_bitfield(texture.flags, 0x2)
@@ -293,7 +327,10 @@ class BlenderM2Scene:
             blender_mat.wow_m2_material.live_update = True
 
             for i in range(tex_unit.texture_count):
-                tex = self.load_texture(tex_unit.texture_combo_index + i)
+                texid = self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i]
+                tex = self.load_texture(texid)
+                # tex = self.load_texture(tex_unit.texture_combo_index + i)
+
                 setattr(blender_mat.wow_m2_material, "texture_{}".format(i + 1), tex)
 
             # bind transparency to material
@@ -530,14 +567,16 @@ class BlenderM2Scene:
         # M2Track uses global sequences
         if track.global_sequence >= 0:
             global_seq_str = str(track.global_sequence).zfill(3)
-            action_name = f'{prefix}_{i}_{obj.name}_Global_sequence_{global_seq_str}'
+            # action_name = f'{prefix}_{i}_{bl_obj.name}_Global_sequence_{global_seq_str}'
+            action_name = f'{prefix}_{bl_obj.name}_Global_sequence_{global_seq_str}'
 
             # Create new animation pair if action doesn't already exist
             if action_name in self.actions:
                 action = self.actions[action_name]
             else:
-                sequence = scene.wow_m2_animations[self.global_sequences[global_sequence]]
-                pair = sequence.anim_pairs.add()
+                sequence = bpy.context.scene.wow_m2_animations[self.global_sequences[track.global_sequence]]
+                # pair = sequence.anim_pairs.add()
+                anim_pair = sequence.anim_pairs.add()
                 anim_pair.object = bl_obj
                 anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair,action_name)
                 action = self.actions[action_name] = anim_pair.action
@@ -690,6 +729,12 @@ class BlenderM2Scene:
             # add animation properties
             anim.animation_id = str(sequence.id)
             anim.flags = parse_bitfield(sequence.flags, 0x800)
+
+            # titi set primary seq flag
+            if not "32" in anim.flags:
+                # anim.flags.add(str(32))
+                anim.flags |= {str(32)}
+
             anim.move_speed = sequence.movespeed
             anim.frequency = sequence.frequency
             anim.replay_min = sequence.replay.minimum
@@ -790,6 +835,7 @@ class BlenderM2Scene:
                 if not action:
                     continue
 
+
                 # translate bones
                 if not is_global_seq_trans and bone.translation.timestamps.n_elements > anim_index:
                     self._bl_create_action_group(action, bone.name)
@@ -797,6 +843,7 @@ class BlenderM2Scene:
                                             bone=bone), 3, anim_index,
                                             'pose.bones.["{}"].location'.format(bl_bone.name),
                                             bone.translation)
+                
 
                 # rotate bones
                 if not is_global_seq_rot and bone.rotation.timestamps.n_elements > anim_index:
@@ -811,6 +858,7 @@ class BlenderM2Scene:
                     self._bl_create_fcurves(action, bone.name, partial(bl_convert_scale_track), 3, anim_index,
                                             'pose.bones.["{}"].scale'.format(bl_bone.name),
                                             bone.scale)
+
 
     def load_geosets(self):
 
@@ -863,10 +911,11 @@ class BlenderM2Scene:
             for i in range(len(uv_layer2.data)):
                 uv = tex_coords2[mesh.loops[i].vertex_index]
                 uv_layer2.data[i].uv = (uv[0], 1 - uv[1])
-
+            
             # set textures and materials
             for material, tex_unit in self.materials[smesh_i]:
                 mesh.materials.append(material)
+
 
             for i, poly in enumerate(mesh.polygons):
                 poly.material_index = 0  # TODO: excuse me wtf?
@@ -2181,9 +2230,10 @@ class BlenderM2Scene:
             def get_curves(self, path):
                 return self.compounds[path]
 
-            def write_track(self,path,track_count,m2_track,value_type,converter = lambda x: x):
+            def write_track(self,path,track_count,m2_track,value_type,converter = lambda x: x, fill_tracks = False):
                 # Exit on empty tracks
                 if not path in self.compounds:
+                    print("M2 track path not found : " + path)
                     return
                 fcurves = self.get_curves(path)
                 if len(fcurves) == 0:
@@ -2218,7 +2268,7 @@ class BlenderM2Scene:
                 # Find missing tracks
                 for i in range(track_count):
                     if not i in fcurves:
-                        raise ValueError(f'Track index {i} missing in {name} fcurves')
+                        raise ValueError(f'Track index {i} missing in {self.pair.action.name} fcurves')
 
                 # Find keyframe count discrepancies
                 keyframe_count = len(fcurves[0].keyframe_points)
@@ -2238,6 +2288,20 @@ class BlenderM2Scene:
                 # Make sure time track exists
                 while len(m2_track.timestamps) <= self.seq_id:
                     m2_track.timestamps.add(M2Array(uint32))
+                
+                # titi
+                # bones, events, color.alpha seem to require 1 entry per animation
+                global_seq_count = 0
+                for wow_seq in bpy.context.scene.wow_m2_animations:
+                    if wow_seq.is_global_sequence:
+                        global_seq_count += 1
+                animations_count = len(bpy.context.scene.wow_m2_animations) - global_seq_count
+
+                # if fill_tracks:
+                if self.seq_id > 0:
+                    while len(m2_track.timestamps) < animations_count:
+                        m2_track.timestamps.add(M2Array(uint32))
+
                 m2_times = m2_track.timestamps[seq_id]
 
                 # Make sure value track exists
@@ -2245,6 +2309,13 @@ class BlenderM2Scene:
                 if not value_type is None:
                     while len(m2_track.values) <= self.seq_id:
                         m2_track.values.add(M2Array(value_type))
+
+                    # if fill_tracks:
+                    #     while len(m2_track.values) < animations_count:
+                    #         m2_track.values.add(M2Array(value_type))
+                    if self.seq_id > 0:
+                        while len(m2_track.values) < animations_count:
+                            m2_track.values.add(M2Array(value_type))
                     m2_values = m2_track.values[seq_id]
 
                 # Write keyframes
@@ -2318,7 +2389,7 @@ class BlenderM2Scene:
                             bl_to_m2_quat(x[self.axis_order[0] + 1] * self.axis_polarity[0]),
                             bl_to_m2_quat(x[self.axis_order[1] + 1] * self.axis_polarity[1]),
                             bl_to_m2_quat(x[3])
-                        ))
+                        )), fill_tracks = True
                     )
 
                 if curve_type == 'scale':
@@ -2328,12 +2399,13 @@ class BlenderM2Scene:
                                 raise ValueError(f'WBS currently cannot write non-uniform scale with forward axis {self.forward_axis} (must be X+ for now)')
                             scale = (scale[0],scale[0],scale[0])
                         return scale
-                    cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale)
+                    cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale, fill_tracks = True)
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
                 if curve_type == 'location':
                     cpd.write_track(path,3,m2_bone.translation,vec3D,
-                        lambda x: self._convert_vec((x[1],-x[0],x[2])))
+                        lambda x: self._convert_vec((x[1],-x[0],x[2])), fill_tracks = True)
+            
 
         def write_scene(cpd, pair):
             def extract_scene_data(path):
@@ -2358,7 +2430,7 @@ class BlenderM2Scene:
                     if data_path == 'color':
                         cpd.write_track(path,3,col.color,vec3D)
                     if data_path == 'alpha':
-                        cpd.write_track(path,1,col.alpha,fixed16,lambda x: int(x*0x7fff))
+                        cpd.write_track(path,1,col.alpha,fixed16,lambda x: int(x*0x7fff), fill_tracks = True)
 
                 if path.startswith("wow_m2_transparency"):
                     (index,_) = extract_scene_data(path)
@@ -2385,7 +2457,7 @@ class BlenderM2Scene:
 
         def write_event(cpd, pair):
             m2_event = self.m2.root.events[self.event_ids[pair.object.name]]
-            cpd.write_track("wow_m2_event.fire",1,m2_event.enabled,None)
+            cpd.write_track("wow_m2_event.fire",1,m2_event.enabled,None, fill_tracks = True)
 
         def write_texture_transform(cpd, pair):
             self.texture_transform_ids[pair.object.name] = len(self.m2.root.texture_transforms)
@@ -2443,7 +2515,12 @@ class BlenderM2Scene:
                 lambda x: int(x))
 
         def write_camera(cpd, pair):
-            pass
+            m2_camera = self.m2.root.cameras[self.camera_ids[pair.object.name]]
+            def convert_spline(x):
+                key = M2SplineKey(vec3D)
+                key.value = x
+                return key
+            cpd.write_track("rotation_axis_angle",m2_camera.positions,vec3D,convert_spline)
 
         def write_camera_target(cpd, pair):
             m2_camera = self.m2.root.cameras[self.camera_target_ids[pair.object.name]]
@@ -2516,6 +2593,7 @@ class BlenderM2Scene:
                     elif pair.object.wow_m2_particle.enabled:
                         ObjectTracks(seq_id, global_seq_id, pair, write_particle)
 
+
             for global_seq_id,duration in global_seq_durations.items():
                 assert global_seq_id < len(self.m2.root.global_sequences)
                 self.m2.root.global_sequences.set_index(global_seq_id,duration)
@@ -2536,6 +2614,7 @@ class BlenderM2Scene:
             if not 64 & wow_seq.flags: continue
             cur_seq = wow_seq
             visited = [i]
+
             while 64 & cur_seq.flags:
                 assert cur_seq.alias_next != -1,"alias action without alias_next set"
                 assert not (cur_seq.alias_next in visited),f"Circular alias_next: {cur_seq.alias_next} ({visited})"

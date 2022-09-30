@@ -254,16 +254,16 @@ def draw_list(context, col, cur_idx_name, col_name):
     sub_col_parent = row.column()
     sub_col2 = sub_col_parent.column(align=True)
 
-    if col_name not in():
+    if col_name not in('geosets'):
         op = sub_col2.operator("scene.wow_m2_root_elements_change", text='', icon='ADD')
         op.action, op.add_action, op.col_name, op.cur_idx_name = 'ADD', 'NEW', col_name, cur_idx_name
 
-    if col_name not in ('attachments', 'events'):
-        op = sub_col2.operator("scene.wow_m2_root_elements_change", text='', icon='COLLECTION_NEW')
-        op.action, op.add_action, op.col_name, op.cur_idx_name = 'ADD', 'EMPTY', col_name, cur_idx_name
+    # if col_name not in ('attachments', 'events'):
+    #     op = sub_col2.operator("scene.wow_m2_root_elements_change", text='', icon='COLLECTION_NEW')
+    #     op.action, op.add_action, op.col_name, op.cur_idx_name = 'ADD', 'EMPTY', col_name, cur_idx_name
 
-    op = sub_col2.operator("scene.wow_m2_root_elements_change", text='', icon='REMOVE')
-    op.action, op.col_name, op.cur_idx_name = 'REMOVE', col_name, cur_idx_name
+    # op = sub_col2.operator("scene.wow_m2_root_elements_change", text='', icon='REMOVE')
+    # op.action, op.col_name, op.cur_idx_name = 'REMOVE', col_name, cur_idx_name
 
     return sub_col1
 
@@ -300,8 +300,9 @@ def update_object_pointer(self, context, prop, obj_type):
             # self.pointer = None
             return
 
-        print(self.pointer)
-        print(type(self.pointer))
+        # print("updating object pointer")
+        # print(self.pointer)
+        # print(type(self.pointer))
         getattr(self.pointer, prop).enabled = True
         self.pointer_old = self.pointer
         self.name = self.pointer.name

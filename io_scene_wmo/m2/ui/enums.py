@@ -169,8 +169,13 @@ TEXTURE_TYPES = [
     ("22", "Secondary Hair", "", 'PMARKER', 23),
     ("23", "Unknown: 23", "", 'PMARKER', 24),
     ("24", "Unknown: 24", "", 'PMARKER', 25)
-
 ]
+
+def get_texture_type_name(texture_type_id):
+    for field in TEXTURE_TYPES:
+        if int(field[0]) == texture_type_id:
+            return "DBC {}".format(field[1])
+    return "DBC texture type {}".format(str(texture_type_id))
 
 TEXTURE_FLAGS = [
     ("1", "Wrap X", "Texture wrap X", 'TRIA_RIGHT', 0x1),
