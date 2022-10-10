@@ -3,6 +3,7 @@ import os
 import bpy
 
 from ....utils.misc import load_game_data
+from ....ui.preferences import get_project_preferences
 
 
 ###############################
@@ -408,8 +409,7 @@ class M2_OT_creature_editor_load_textures(bpy.types.Operator):
 
     @staticmethod
     def load_skin_texture(context, path, tex_type):
-        from ....ui import get_addon_prefs
-        cache_dir = get_addon_prefs().cache_dir_path
+        cache_dir = get_project_preferences().cache_dir_path
         game_data = load_game_data()
         game_data.extract_textures_as_png(cache_dir, [path + '.blp'])
         img = None

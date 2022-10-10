@@ -2,6 +2,7 @@ import bpy
 from ..enums import *
 from ...bl_render import update_wmo_mat_node_tree
 from ....utils.callbacks import on_release
+from .common import panel_poll
 
 from ....pywowlib import WoWVersions
 
@@ -41,12 +42,10 @@ class WMO_PT_material(bpy.types.Panel):
 
         layout.prop(context.material.wow_wmo_material, "emissive_color")
         layout.prop(context.material.wow_wmo_material, "diff_color")
-        layout.enabled = context.material.wow_wmo_material.enabled
 
     @classmethod
     def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
+        return (panel_poll(cls, context)
                 and context.material is not None
                 and context.material.wow_wmo_material.enabled
         )
@@ -111,6 +110,7 @@ def update_diff_texture_2(self, context):
 
     if bpy.context.scene.render.engine in ('CYCLES', 'BLENDER_EEVEE') and self.diff_texture_2:
         self.self_pointer.node_tree.nodes['DiffuseTexture2'].image = self.diff_texture_2
+
 
 @on_release()
 def update_emissive_color(self, context):

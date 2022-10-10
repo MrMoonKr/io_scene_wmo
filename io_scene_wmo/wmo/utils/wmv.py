@@ -1,15 +1,15 @@
 from typing import Union
 
-from ...ui import get_addon_prefs
+from ...ui.preferences import get_project_preferences
 
 
 def wmv_get_last_wmo() -> Union[None, str]:
     """Get the path of last WMO model from WoWModelViewer or similar log."""
 
-    addon_preferences = get_addon_prefs()
-    if addon_preferences.wmv_path:
+    project_preferences = get_project_preferences()
+    if project_preferences.wmv_path:
 
-        lines = open(addon_preferences.wmv_path).readlines()
+        lines = open(project_preferences.wmv_path).readlines()
 
         for line in reversed(lines):
             if 'Loading WMO' in line:
@@ -19,10 +19,10 @@ def wmv_get_last_wmo() -> Union[None, str]:
 def wmv_get_last_m2() -> Union[None, str]:
     """Get the path of last M2 model from WoWModelViewer or similar log."""
 
-    addon_preferences = get_addon_prefs()
-    if addon_preferences.wmv_path:
+    project_preferences = get_project_preferences()
+    if project_preferences.wmv_path:
 
-        lines = open(addon_preferences.wmv_path).readlines()
+        lines = open(project_preferences.wmv_path).readlines()
 
         for line in reversed(lines):
             if 'Loading model:' in line:
@@ -32,10 +32,10 @@ def wmv_get_last_m2() -> Union[None, str]:
 def wmv_get_last_texture() -> Union[None, str]:
     """Get the path of last texture from WoWModelViewer or similar log."""
 
-    addon_preferences = get_addon_prefs()
-    if addon_preferences.wmv_path:
+    project_preferences = get_project_preferences()
+    if project_preferences.wmv_path:
 
-        lines = open(addon_preferences.wmv_path).readlines()
+        lines = open(project_preferences.wmv_path).readlines()
 
         for line in reversed(lines):
             if 'Loading texture' in line:

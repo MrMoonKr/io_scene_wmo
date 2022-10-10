@@ -13,7 +13,7 @@ from .utils.fogs import create_fog_object
 from .utils.materials import load_texture, add_ghost_material
 from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
-from ..ui import get_addon_prefs
+from ..ui.preferences import get_project_preferences
 from ..utils.misc import find_nearest_object
 from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
 
@@ -44,10 +44,10 @@ class BlenderWMOScene:
     def load_materials(self, texture_dir=None):
         """ Load materials from WoW WMO root file """
 
-        addon_prefs = get_addon_prefs()
+        project_preferences = get_project_preferences()
 
         if texture_dir is None:
-            texture_dir = addon_prefs.cache_dir_path
+            texture_dir = project_preferences.cache_dir_path
 
         self.bl_materials = {0xFF : add_ghost_material()}
 

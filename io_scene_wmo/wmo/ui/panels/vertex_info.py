@@ -1,5 +1,8 @@
 import bpy
 
+from ..custom_objects import WoWWMOGroup
+from .common import panel_poll
+
 
 class WMO_PT_vertex_info(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
@@ -17,12 +20,10 @@ class WMO_PT_vertex_info(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.data is not None
-                and isinstance(context.object.data,bpy.types.Mesh)
-                and context.object.wow_wmo_group.enabled
+        obj = context.object
+        return (panel_poll(cls, context)
+                and obj is not None
+                and WoWWMOGroup.match(obj)
                 )
 
 
@@ -36,7 +37,6 @@ class WowVertexInfoPropertyGroup(bpy.types.PropertyGroup):
         default=2500, min=1,
         soft_max=5000
         )
-
 
 
 def register():

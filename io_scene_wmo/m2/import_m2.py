@@ -4,13 +4,13 @@ from ..utils.misc import load_game_data
 import importlib
 from . import m2_scene
 from ..pywowlib.m2_file import M2File, M2Versions
-from ..ui import get_addon_prefs
+from ..ui.preferences import get_project_preferences
 
 
 def import_m2(version, filepath, is_local_file=False):
 
     # get global variables
-    addon_preferences = get_addon_prefs()
+    project_preferences = get_project_preferences()
 
     try:
         game_data = load_game_data()
@@ -22,7 +22,7 @@ def import_m2(version, filepath, is_local_file=False):
     m2 = m2_file.root
     m2.filepath = filepath  # TODO: HACK
 
-    extract_dir = os.path.dirname(filepath) if is_local_file else addon_preferences.cache_dir_path
+    extract_dir = os.path.dirname(filepath) if is_local_file else project_preferences.cache_dir_path
 
     if not extract_dir:
         raise Exception('Error: cache directory is not specified. Check addon settings.')
@@ -64,7 +64,7 @@ def import_m2(version, filepath, is_local_file=False):
     print("\n\n### Importing M2 model ###")
 
     importlib.reload(m2_scene)
-    bl_m2 = m2_scene.BlenderM2Scene(m2_file, addon_preferences)
+    bl_m2 = m2_scene.BlenderM2Scene(m2_file, project_preferences)
 
     bl_m2.load_armature()
     bl_m2.load_animations()

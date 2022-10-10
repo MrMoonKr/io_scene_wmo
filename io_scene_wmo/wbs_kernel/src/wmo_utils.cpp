@@ -4,15 +4,12 @@
 {
     "distutils": {
         "depends": [
-            "src\\bl_utils\\math_utils.hpp",
-            "src\\bl_utils\\mesh\\wmo\\batch_geometry.hpp"
+            "src/bl_utils/math_utils.hpp",
+            "src/bl_utils/mesh/wmo/batch_geometry.hpp"
         ],
         "extra_compile_args": [
-            "/std:c++17",
-            "/Zi"
-        ],
-        "extra_link_args": [
-            "/DEBUG:FULL"
+            "-std=c++17",
+            "-O3"
         ],
         "include_dirs": [
             "src",
@@ -23,6 +20,7 @@
             "src/bl_src/source/blender/blenlib/",
             "src/bl_src/source/blender/makesdna/",
             "src/bl_src/source/blender/makesrna/",
+            "src/bl_src/intern/guardedalloc/",
             "src/"
         ],
         "language": "c++",
@@ -1015,7 +1013,7 @@ static const char *__pyx_filename;
 
 
 static const char *__pyx_f[] = {
-  "src\\wmo_utils.pyx",
+  "src/wmo_utils.pyx",
   "stringsource",
 };
 /* NoFastGil.proto */
@@ -1658,7 +1656,7 @@ static const char __pyx_k_material_mapping[] = "material_mapping";
 static const char __pyx_k_use_vertex_color[] = "use_vertex_color";
 static const char __pyx_k_LOOSE_MATERIAL_ID[] = "LOOSE_MATERIAL_ID";
 static const char __pyx_k_mesh_matrix_world[] = "mesh_matrix_world";
-static const char __pyx_k_src_wmo_utils_pyx[] = "src\\wmo_utils.pyx";
+static const char __pyx_k_src_wmo_utils_pyx[] = "src/wmo_utils.pyx";
 static const char __pyx_k_LiquidExportParams[] = "LiquidExportParams";
 static const char __pyx_k_cline_in_traceback[] = "cline_in_traceback";
 static const char __pyx_k_use_custom_normals[] = "use_custom_normals";

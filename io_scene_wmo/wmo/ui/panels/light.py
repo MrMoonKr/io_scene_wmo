@@ -1,21 +1,17 @@
 import bpy
+
 from ..enums import *
+from ..custom_objects import WoWWMOLight
+from ....ui.panels import WBS_PT_object_properties_common
+from ....ui.enums import WoWSceneTypes
 
 
-class WMO_PT_light(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "data"
+class WMO_PT_light(WBS_PT_object_properties_common, bpy.types.Panel):
     bl_label = "WMO Light"
+    bl_context = "data"
 
-    def draw_header(self, context):
-        row = self.layout.row()
-        row.alignment = 'RIGHT'
-        op = row.operator('scene.wow_wmo_destroy_wow_property', text='', icon='X', emboss=False)
-        op.prop_group = 'wow_wmo_light'
-
-        if bpy.context.scene.wow_wmo_root_elements.lights.find(context.object.name) < 0:
-            row.label(text='', icon='ERROR')
+    __wbs_custom_object_type__ = WoWWMOLight
+    __wbs_scene_type__ = WoWSceneTypes.WMO
 
     def draw(self, context):
         self.layout.use_property_split = True
@@ -26,20 +22,10 @@ class WMO_PT_light(bpy.types.Panel):
         self.layout.prop(context.object.wow_wmo_light, "attenuation_start")
         self.layout.prop(context.object.wow_wmo_light, "attenuation_end")
 
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.data is not None
-                and context.object.type == 'LIGHT'
-                and context.object.wow_wmo_light.enabled
-                )
-
 
 class WowLightPropertyGroup(bpy.types.PropertyGroup):
 
-    enabled:  bpy.props.BoolProperty()
+    enabled: bpy.props.BoolProperty()
 
     light_type:  bpy.props.EnumProperty(
         items=light_type_enum,
@@ -54,12 +40,12 @@ class WowLightPropertyGroup(bpy.types.PropertyGroup):
 
     use_attenuation:  bpy.props.BoolProperty(
         name="Use attenuation",
-        description="True if lamp use attenuation"
+        description="True if lamp uses attenuation"
         )
 
     padding:  bpy.props.BoolProperty(
         name="Padding",
-        description="True if lamp use padding"
+        description="True if lamp uses padding"
         )
 
     color:  bpy.props.FloatVectorProperty(

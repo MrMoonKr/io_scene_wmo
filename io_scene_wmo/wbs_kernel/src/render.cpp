@@ -4,18 +4,15 @@
 {
     "distutils": {
         "depends": [
-            "src\\render\\m2_drawing_batch.hpp",
-            "src\\render\\m2_drawing_mesh.hpp",
-            "src\\render\\opengl_utils.hpp",
-            "src\\render\\wmo_drawing_batch.hpp",
-            "src\\render\\wmo_drawing_mesh.hpp"
+            "src/render/m2_drawing_batch.hpp",
+            "src/render/m2_drawing_mesh.hpp",
+            "src/render/opengl_utils.hpp",
+            "src/render/wmo_drawing_batch.hpp",
+            "src/render/wmo_drawing_mesh.hpp"
         ],
         "extra_compile_args": [
-            "/std:c++17",
-            "/Zi"
-        ],
-        "extra_link_args": [
-            "/DEBUG:FULL"
+            "-std=c++17",
+            "-O3"
         ],
         "include_dirs": [
             "src",
@@ -32,7 +29,7 @@
         ],
         "language": "c++",
         "libraries": [
-            "opengl32"
+            "glu"
         ],
         "name": "render",
         "sources": [
@@ -1025,7 +1022,7 @@ static const char *__pyx_filename;
 
 
 static const char *__pyx_f[] = {
-  "src\\render.pyx",
+  "src/render.pyx",
   "stringsource",
 };
 
@@ -1563,7 +1560,7 @@ static const char __pyx_k_stringsource[] = "stringsource";
 static const char __pyx_k_reduce_cython[] = "__reduce_cython__";
 static const char __pyx_k_CM2DrawingMesh[] = "CM2DrawingMesh";
 static const char __pyx_k_draw_batch_ptr[] = "draw_batch_ptr";
-static const char __pyx_k_src_render_pyx[] = "src\\render.pyx";
+static const char __pyx_k_src_render_pyx[] = "src/render.pyx";
 static const char __pyx_k_CM2DrawingBatch[] = "CM2DrawingBatch";
 static const char __pyx_k_pyx_PickleError[] = "__pyx_PickleError";
 static const char __pyx_k_setstate_cython[] = "__setstate_cython__";

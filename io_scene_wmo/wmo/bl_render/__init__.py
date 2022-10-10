@@ -77,6 +77,6 @@ def update_wmo_mat_node_tree(bl_mat):
               '\nIncompatible render engine \""{}"\"'.format(bl_mat.name, render_engine))
 
     # sync scene lighting properties
-    bpy.context.scene.wow_render_settings.ext_ambient_color= bpy.context.scene.wow_render_settings.ext_ambient_color
+    bpy.context.scene.wow_render_settings.ext_ambient_color = bpy.context.scene.wow_render_settings.ext_ambient_color
     bpy.context.scene.wow_render_settings.ext_dir_color = bpy.context.scene.wow_render_settings.ext_dir_color
     bpy.context.scene.wow_render_settings.sidn_scalar = bpy.context.scene.wow_render_settings.sidn_scalar

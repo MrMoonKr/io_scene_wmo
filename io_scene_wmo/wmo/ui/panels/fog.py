@@ -1,16 +1,21 @@
+from ....ui.panels import WBS_PT_object_properties_common
+from ....ui.enums import WoWSceneTypes
+from ..custom_objects import WoWWMOFog
+
+
 import bpy
 
 
-class WMO_PT_fog(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "object"
+class WMO_PT_fog(WBS_PT_object_properties_common, bpy.types.Panel):
     bl_label = "WMO Fog"
+    bl_context = "object"
+
+    __wbs_custom_object_type__ = WoWWMOFog
+    __wbs_scene_type__ = WoWSceneTypes.WMO
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        layout.enabled = context.object.wow_wmo_fog.enabled
 
         self.layout.prop(context.object.wow_wmo_fog, "ignore_radius")
         self.layout.prop(context.object.wow_wmo_fog, "unknown")
@@ -21,16 +26,6 @@ class WMO_PT_fog(bpy.types.Panel):
         self.layout.prop(context.object.wow_wmo_fog, "end_dist2")
         self.layout.prop(context.object.wow_wmo_fog, "start_factor2")
         self.layout.prop(context.object.wow_wmo_fog, "color2")
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.data is not None
-                and context.object.type == 'MESH'
-                and context.object.wow_wmo_fog.enabled
-                )
 
 
 def update_fog_color(self, context):

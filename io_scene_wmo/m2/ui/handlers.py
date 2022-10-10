@@ -139,7 +139,7 @@ def on_depsgraph_update(_):
                                 slot_idx = root_comps.wow_m2_events.find(act_obj.name)
                                 root_comps.cur_event = slot_idx
 
-                        elif act_obj.type == 'LAMP':
+                        elif act_obj.type == 'LIGHT':
                             if act_obj.wow_m2_light.enabled:
                                 slot_idx = root_comps.lights.find(act_obj.name)
                                 root_comps.cur_light = slot_idx

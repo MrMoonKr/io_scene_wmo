@@ -4,7 +4,7 @@ import mathutils
 from ..panels.toolbar import switch_doodad_set, get_doodad_sets
 from ...utils.doodads import import_doodad
 from ...utils.wmv import wmv_get_last_m2
-from ....ui import get_addon_prefs
+from ....ui.preferences import get_project_preferences
 from ....utils.misc import find_nearest_object
 from ....third_party.tqdm import tqdm
 
@@ -18,7 +18,7 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
     def execute(self, context):
 
         m2_path = wmv_get_last_m2()
-        cache_path = get_addon_prefs().cache_dir_path
+        cache_path = get_project_preferences().cache_dir_path
 
         root = context.scene.wow_wmo_root_elements
 

@@ -1,5 +1,6 @@
 import bpy
 
+
 class WMO_OT_add_light(bpy.types.Operator):
     bl_idname = 'scene.wow_add_light'
     bl_label = 'Add light'
@@ -12,9 +13,6 @@ class WMO_OT_add_light(bpy.types.Operator):
 
         light.color = (1.0, 0.565, 0.0)
         light.energy = 1.0
-
-        # slot = bpy.context.scene.wow_wmo_root_elements.lights.add()
-        # slot.pointer = obj
 
         # move lights to collection
         scn = bpy.context.scene
@@ -34,8 +32,6 @@ class WMO_OT_add_light(bpy.types.Operator):
         # light.falloff_type = 'INVERSE_LINEAR'
         
         obj.location = bpy.context.scene.cursor.location
-
-
 
         self.report({'INFO'}, "Successfully created WoW light: " + obj.name)
         return {'FINISHED'}

@@ -153,7 +153,6 @@ def main(debug: bool):
         libraries=[glew],
         requires=['Cython'])
 
-
     print_succes("\nSuccessfully built WBS kernel.")
 
 

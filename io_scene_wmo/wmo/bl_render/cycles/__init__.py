@@ -16,7 +16,6 @@ def update_wmo_mat_node_tree_cycles(bl_mat):
     img_2 = bl_mat.wow_wmo_material.diff_texture_2 if bl_mat.wow_wmo_material.diff_texture_2 else None
 
     # create nodes
-
     ng_wmo_shader = bpy.data.node_groups['MO_WMOShader']
 
     blendmap = tree_builder.add_node('ShaderNodeAttribute', 'Blendmap', 0, 0)
@@ -43,9 +42,7 @@ def update_wmo_mat_node_tree_cycles(bl_mat):
 
     output = tree_builder.add_node('ShaderNodeOutputMaterial', 'Output', 3, 1)
 
-
     # set node links
-
     links.new(blendmap.outputs['Color'], shader.inputs['Blendmap'])
     links.new(uvmap.outputs['UV'], diffuse_tex1.inputs['Vector'])
     links.new(uvmap2.outputs['UV'], diffuse_tex2.inputs['Vector'])

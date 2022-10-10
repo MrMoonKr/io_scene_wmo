@@ -49,43 +49,6 @@ ui_icons = {}
 pcoll = None
 
 
-class WMOPreferences(bpy.types.AddonPreferences):
-    bl_idname = __package__
-
-    wow_path: StringProperty(
-        name="WoW Client Path",
-        subtype='DIR_PATH'
-    )
-
-    fileinfo_path: StringProperty(
-        name="Path to fileinfo.exe",
-        subtype='FILE_PATH'
-    )
-
-    wmv_path: StringProperty(
-        name="WoW Model Viewer Log Path",
-        subtype='FILE_PATH'
-    )
-
-    cache_dir_path: StringProperty(
-        name="Cache Directory Path",
-        description="Any folder that can be used to store exporter content",
-        subtype="DIR_PATH"
-    )
-
-    project_dir_path: StringProperty(
-        name="Project Directory Path",
-        description="A directory blender saves WoW files to and treats as top-priority patch.",
-        subtype="DIR_PATH"
-    )
-
-    def draw(self, context):
-        self.layout.prop(self, "wow_path")
-        self.layout.prop(self, "wmv_path")
-        # self.layout.prop(self, "fileinfo_path")
-        self.layout.prop(self, "cache_dir_path")
-        self.layout.prop(self, "project_dir_path")
-
 
 def register():
     global pcoll
@@ -102,8 +65,6 @@ def register():
         ui_icons[name] = icon_file.icon_id
 
     auto_load.init()
-
-    bpy.utils.register_class(WMOPreferences)
 
     try:
         auto_load.register()
@@ -126,9 +87,6 @@ def unregister():
 
     global ui_icons
     ui_icons = {}
-
-    bpy.utils.unregister_class(WMOPreferences)
-
 
 
 if __name__ == "__main__":

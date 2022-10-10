@@ -1,27 +1,20 @@
-import bpy
-
-from collections import namedtuple
-
-from .utils import is_obj_unused
 from .liquid import WMO_PT_liquid
 from ..enums import *
+from ..custom_objects import WoWWMOGroup
+from ....ui.panels import WBS_PT_object_properties_common
+from ....ui.enums import WoWSceneTypes
 
 
-class WMO_PT_wmo_group(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "object"
+from collections import namedtuple
+import bpy
+
+
+class WMO_PT_wmo_group(WBS_PT_object_properties_common, bpy.types.Panel):
     bl_label = "WMO Group"
+    bl_context = "object"
 
-    def draw_header(self, context):
-        row = self.layout.row()
-        row.alignment = 'RIGHT'
-        op = row.operator('scene.wow_wmo_destroy_wow_property', text='', icon='X', emboss=False)
-        op.prop_group = 'wow_wmo_group'
-
-        if bpy.context.scene.wow_wmo_root_elements.groups.find(context.object.name) < 0:
-            row.label(text='', icon='ERROR')
-            row.alert = True
+    __wbs_custom_object_type__ = WoWWMOGroup
+    __wbs_scene_type__ = WoWSceneTypes.WMO
 
     def draw(self, context):
         self.layout.use_property_split = True
@@ -30,7 +23,6 @@ class WMO_PT_wmo_group(bpy.types.Panel):
         col.prop(context.object.wow_wmo_group, "description")
 
         col.separator()
-        col.prop(context.object.wow_wmo_group, "place_type")
         col.prop(context.object.wow_wmo_group, "flags")
 
         col.separator()
@@ -54,42 +46,6 @@ class WMO_PT_wmo_group(bpy.types.Panel):
 
         box.prop(context.object.wow_wmo_group, "collision_mesh")
 
-        self.layout.enabled = context.object.wow_wmo_group.enabled
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.data is not None
-                and context.object.type == 'MESH'
-                and context.object.wow_wmo_group.enabled
-                )
-
-
-class WowWMOMODRStore(bpy.types.PropertyGroup):
-    value:  bpy.props.IntProperty(name="Doodads Ref")
-
-
-class WowWMOPortalRel(bpy.types.PropertyGroup):
-    id:  bpy.props.StringProperty()
-
-
-class WowWMOLightRel(bpy.types.PropertyGroup):
-    id:  bpy.props.IntProperty()
-
-
-class WowWMODoodadRel(bpy.types.PropertyGroup):
-    id:  bpy.props.IntProperty()
-
-
-class WowWMOGroupRelations(bpy.types.PropertyGroup):
-    """Used for export internally"""
-    portals:  bpy.props.CollectionProperty(type=WowWMOPortalRel)
-    lights:  bpy.props.CollectionProperty(type=WowWMOLightRel)
-    liquid:  bpy.props.StringProperty()
-    doodads:  bpy.props.CollectionProperty(type=WowWMODoodadRel)
-
 
 def fog_validator(self, context):
     if self.fog1 and (not self.fog1.wow_wmo_fog.enabled or self.fog1.name not in bpy.context.scene.objects):
@@ -103,16 +59,6 @@ def fog_validator(self, context):
 
     if self.fog4 and (not self.fog4.wow_wmo_fog.enabled or self.fog4.name not in bpy.context.scene.objects):
         self.fog4 = None
-
-
-def update_collision(self, context):
-    if not self.collision_mesh:
-        return
-
-    if self.collision_mesh.type != 'MESH':
-        self.collision_mesh = None
-
-    self.collision_mesh.wow_wmo_collision_rel = context.object
 
 
 def update_place_type(self, context):
@@ -157,41 +103,17 @@ def update_flags(self, context):
         obj.pass_index &= ~0x4
 
 
-def is_liquid_unused(obj):
-
-    root_elements = bpy.context.scene.wow_wmo_root_elements
-
-    for group in root_elements.groups:
-        if group.pointer and group.pointer.wow_wmo_group.liquid_mesh == obj:
-            return False
-
-    return True
-
 class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
 
-    description:  bpy.props.StringProperty(name="Description")
-
-    enabled:  bpy.props.BoolProperty(
-        name="",
-        description="Enable wow WMO group properties"
-        )
+    description:  bpy.props.StringProperty(
+        name="Description",
+        description='Saved in the WMO file.'
+    )
 
     flags:  bpy.props.EnumProperty(
         items=group_flag_enum,
         options={'ENUM_FLAG'},
         update=update_flags
-        )
-
-    place_type:  bpy.props.EnumProperty(
-        items=place_type_enum,
-        name="Place Type",
-        description="Group is indoor or outdoor",
-        update=update_place_type
-        )
-
-    group_id:  bpy.props.IntProperty(
-        name="",
-        description="Group identifier used for export"
         )
 
     group_dbc_id:  bpy.props.IntProperty(
@@ -237,25 +159,19 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
         type=bpy.types.Object,
         name='Collision',
         description='Invisible collision geometry of this group',
-        poll=lambda self, obj: is_obj_unused(obj) and obj.type == 'MESH',
-        update=update_collision
+        poll=lambda self, obj: obj.type == 'MESH'
     )
 
     liquid_mesh: bpy.props.PointerProperty(
         type=bpy.types.Object,
         name='Liquid',
         description='Liquid plane linked to this group',
-        poll=lambda self, obj: obj.type == 'MESH' and obj.wow_wmo_liquid.enabled and is_liquid_unused(obj)
+        poll=lambda self, obj: obj.type == 'MESH' and obj.wow_wmo_liquid.enabled
     )
-
-    modr:  bpy.props.CollectionProperty(type=WowWMOMODRStore)
-
-    relations:  bpy.props.PointerProperty(type=WowWMOGroupRelations)
 
 
 def register():
     bpy.types.Object.wow_wmo_group = bpy.props.PointerProperty(type=WowWMOGroupPropertyGroup)
-    bpy.types.Object.wow_wmo_collision_rel = bpy.props.PointerProperty(type=bpy.types.Object)
 
 
 def unregister():

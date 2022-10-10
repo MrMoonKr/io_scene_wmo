@@ -1,5 +1,7 @@
 import bpy
 
+from .common import panel_poll
+
 
 class WMO_PT_texture(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
@@ -15,10 +17,7 @@ class WMO_PT_texture(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.image is not None
-        )
+        return panel_poll(cls, context) and context.image is not None
 
 
 class WowWMOTexturePropertyGroup(bpy.types.PropertyGroup):

@@ -3,15 +3,15 @@ from . import m2_scene
 from .operations import m2_export_warnings
 import importlib
 
-from ..ui import get_addon_prefs
+from ..ui.preferences import get_project_preferences
 
 def create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale):
     print("\n\n### Exporting M2 model ###")
-    addon_prefs = get_addon_prefs()
+    proj_prefs = get_project_preferences()
     m2 = M2File(version)
     importlib.reload(m2_scene)
     importlib.reload(m2_export_warnings)
-    bl_m2 = m2_scene.BlenderM2Scene(m2, addon_prefs)
+    bl_m2 = m2_scene.BlenderM2Scene(m2, proj_prefs)
 
     print("\nPreparing Axis Settings")
     bl_m2.prepare_export_axis(forward_axis, scale)

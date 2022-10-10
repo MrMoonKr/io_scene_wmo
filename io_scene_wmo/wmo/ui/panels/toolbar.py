@@ -1,6 +1,8 @@
 import bpy
 from ..enums import *
 
+from .common import panel_poll
+
 
 def update_wow_visibility(self, context):
     values = self.wow_visibility
@@ -104,7 +106,7 @@ class WMO_PT_tools_object_mode_display(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene is not None and context.scene.wow_scene.type == 'WMO'
+        return panel_poll(cls, context)
 
 
 class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
@@ -148,7 +150,7 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene is not None and context.scene.wow_scene.type == 'WMO'
+        return panel_poll(cls, context)
 
 
 class WMO_PT_tools_object_mode_actions(bpy.types.Panel):
@@ -188,10 +190,7 @@ class WMO_PT_tools_object_mode_doodads(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and bpy.context.selected_objects
-               )
+        return panel_poll(cls, context) and bpy.context.selected_objects
 
     def draw(self, context):
         layout = self.layout.split()

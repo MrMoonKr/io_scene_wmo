@@ -1,21 +1,17 @@
-import bpy
 from ..enums import *
+from ..custom_objects import WoWWMOPortal
+from ....ui.panels import WBS_PT_object_properties_common
+from ....ui.enums import WoWSceneTypes
+
+import bpy
 
 
-class WMO_PT_portal(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "object"
+class WMO_PT_portal(WBS_PT_object_properties_common, bpy.types.Panel):
     bl_label = "WMO Portal"
+    bl_context = "object"
 
-    def draw_header(self, context):
-        row = self.layout.row()
-        row.alignment = 'RIGHT'
-        op = row.operator('scene.wow_wmo_destroy_wow_property', text='', icon='X', emboss=False)
-        op.prop_group = 'wow_wmo_portal'
-
-        if bpy.context.scene.wow_wmo_root_elements.portals.find(context.object.name) < 0:
-            row.label(text='', icon='ERROR')
+    __wbs_custom_object_type__ = WoWWMOPortal
+    __wbs_scene_type__ = WoWSceneTypes.WMO
 
     def draw(self, context):
         layout = self.layout
@@ -33,18 +29,6 @@ class WMO_PT_portal(bpy.types.Panel):
         col.separator()
         col.prop(context.object.wow_wmo_portal, "algorithm", expand=True)
 
-        layout.enabled = context.object.wow_wmo_portal.enabled
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.data is not None
-                and context.object.type == 'MESH'
-                and context.object.wow_wmo_portal.enabled
-                )
-
 
 def portal_validator(self, context):
     if self.second and not self.second.wow_wmo_group.enabled:
@@ -55,8 +39,6 @@ def portal_validator(self, context):
 
 
 class WowPortalPlanePropertyGroup(bpy.types.PropertyGroup):
-
-    enabled:  bpy.props.BoolProperty()
 
     first:  bpy.props.PointerProperty(
         type=bpy.types.Object,

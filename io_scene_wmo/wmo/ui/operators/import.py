@@ -1,11 +1,8 @@
 import bpy
-import os
 import traceback
-import struct
 
 from ...import_wmo import import_wmo_to_blender_scene_gamedata
 from ...utils.wmv import wmv_get_last_wmo
-from ....ui import get_addon_prefs
 from ....utils.misc import load_game_data
 
 

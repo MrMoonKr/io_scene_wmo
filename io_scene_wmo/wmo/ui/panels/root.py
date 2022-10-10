@@ -1,6 +1,7 @@
 import bpy
 from ..enums import *
 from ....utils.callbacks import on_release
+from .common import panel_poll
 
 
 class WMO_PT_root(bpy.types.Panel):
@@ -27,7 +28,7 @@ class WMO_PT_root(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene is not None and context.scene.wow_scene.type == 'WMO'
+        return panel_poll(cls, context)
 
 
 @on_release()
@@ -46,7 +47,6 @@ def update_ambient_color(self, context):
 
 
 class WowRootPropertyGroup(bpy.types.PropertyGroup):
-
 
     flags:  bpy.props.EnumProperty(
         name="Root flags",

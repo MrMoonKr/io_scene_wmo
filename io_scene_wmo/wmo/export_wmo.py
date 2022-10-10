@@ -1,14 +1,11 @@
-import bpy
-import time
-
 from ..pywowlib import WoWVersionManager
 from ..pywowlib.wmo_file import WMOFile
-
 from ..third_party.tqdm import tqdm
-
 from .wmo_scene import BlenderWMOScene
+from ..ui.preferences import get_project_preferences
 
-from ..ui import get_addon_prefs
+import bpy
+import time
 
 
 def export_wmo_from_blender_scene(filepath, client_version, export_selected, export_method):
@@ -25,7 +22,7 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
 
     wmo = WMOFile(client_version, filepath)
     wmo.export = export_method != 'PARTIAL'
-    bl_scene = BlenderWMOScene(wmo, get_addon_prefs())
+    bl_scene = BlenderWMOScene(wmo, get_project_preferences())
 
     bl_scene.build_references(export_selected, export_method)
 

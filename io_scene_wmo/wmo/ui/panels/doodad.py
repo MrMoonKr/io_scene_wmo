@@ -1,13 +1,17 @@
+from ....ui.locks import DepsgraphLock
+from ....ui.panels import WBS_PT_object_properties_common
+from ....ui.enums import WoWSceneTypes
+from ..custom_objects import WoWWMODoodad
+
 import bpy
-from ....utils.callbacks import on_release
-from ..handlers import DepsgraphLock
 
 
-class WMO_PT_doodad(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "object"
+class WMO_PT_doodad(WBS_PT_object_properties_common, bpy.types.Panel):
     bl_label = "WMO Doodad"
+    bl_context = "object"
+
+    __wbs_custom_object_type__ = WoWWMODoodad
+    __wbs_scene_type__ = WoWSceneTypes.WMO
 
     def draw(self, context):
         layout = self.layout
@@ -17,21 +21,10 @@ class WMO_PT_doodad(bpy.types.Panel):
 
         col = layout.column()
         col.prop(context.object.wow_wmo_doodad, "flags")
-        layout.enabled = context.object.wow_wmo_doodad.enabled
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.wow_wmo_doodad.enabled
-                and (context.object.type == 'MESH'
-                     or context.object.type == 'EMPTY')
-        )
 
 
 def update_doodad_color(self, context):
-    mesh = self.self_pointer.data
+    mesh = self.id_data
 
     with DepsgraphLock():
         for mat in mesh.materials:
@@ -43,8 +36,9 @@ def update_doodad_color(self, context):
 class WoWDoodadPropertyGroup(bpy.types.PropertyGroup):
 
     enabled:  bpy.props.BoolProperty()
+    """ Set by operators. To make an object a doodad. """
 
-    path:  bpy.props.StringProperty(name="Path")
+    path:  bpy.props.StringProperty(name="Path", description='Path of doodad in WoW filesystem.')
 
     color:  bpy.props.FloatVectorProperty(
         name="Color",
@@ -57,16 +51,14 @@ class WoWDoodadPropertyGroup(bpy.types.PropertyGroup):
     )
 
     flags:  bpy.props.EnumProperty(
-        name="Flags",
-        description="WoW doodad instance flags",
+        name="Settings",
+        description="WoW doodad instance settings",
         items=[("1", "Accept Projected Tex.", ""),
                ("2", "Adjust lighting", ""),
                ("4", "Unknown", ""),
                ("8", "Unknown", "")],
         options={"ENUM_FLAG"}
     )
-
-    self_pointer: bpy.props.PointerProperty(type=bpy.types.Object)
 
 
 def register():

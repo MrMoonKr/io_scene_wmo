@@ -1,19 +1,14 @@
 import bpy
 import mathutils
 import bmesh
-import sys
-import inspect
 
-from math import pi, ceil, floor, isclose
-from logging import exception
-from typing import Tuple, Optional, Union
+from typing import Tuple
 
 from ..pywowlib.file_formats.wmo_format_root import MOHDFlags, PortalRelation
-from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex
+from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, BSPPlaneType
 from ..pywowlib.wmo_file import WMOGroupFile
-from .bsp_tree import *
 from .bl_render import BlenderWMOObjectRenderFlags
-from ..pywowlib import WoWVersionManager, WoWVersions
+from ..pywowlib import WoWVersions
 from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams, LiquidExportParams
 from ..utils.colors import srgb_to_linear as linear
 
@@ -429,7 +424,6 @@ class BlenderWMOSceneGroup:
             batch_material_map[(batch.start_triangle // 3,
                                 (batch.start_triangle + group.moba.batches[i].n_triangles) // 3)] = batch.material_id
 
-
         # set layer data
         for i, loop in enumerate(mesh.loops):
 
@@ -472,17 +466,6 @@ class BlenderWMOSceneGroup:
                 uv1.data[i].image = img
  
         '''
-
-        # DEBUG BSP
-        """for iNode in range(len(group.mobn.Nodes)):
-            bsp_node_indices = group.GetBSPNodeIndices(iNode, group.mobn.Nodes, group.mobr.Faces, group.movi.Indices)
-            bsp_node_vg = nobj.vertex_groups.new("debug_bsp")
- 
-            #for i in bsp_n1_indices:
-            #    bsp_n1_GroupIndices.append(i)
- 
-            bsp_node_vg.add(bsp_node_indices, 1.0, 'ADD')"""
-        # DEBUG BSP
 
         # add collision vertex group
         collision_indices = self.get_collision_indices()

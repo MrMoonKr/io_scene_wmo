@@ -9,7 +9,7 @@ from .wmo_scene import BlenderWMOScene
 from ..pywowlib import WoWVersionManager
 from ..pywowlib.wmo_file import WMOFile
 
-from ..ui import get_addon_prefs
+from ..ui.preferences import get_project_preferences
 from .ui.handlers import DepsgraphLock
 
 
@@ -22,22 +22,22 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int):
 
     print("\nImporting WMO")
 
-    addon_prefs = get_addon_prefs()
+    project_preferences = get_project_preferences()
     game_data = load_game_data()
 
     if not bpy.wow_game_data.files:
         raise Exception("WoW game data is not loaded. Check settings.")
     
-    if not addon_prefs.cache_dir_path:
+    if not project_preferences.cache_dir_path:
         raise Exception("Cache directory is not set, textures might not work. Check settings.")
 
     with DepsgraphLock():
         wmo = WMOFile(client_version, filepath=filepath)
         wmo.read()
-        wmo_scene = BlenderWMOScene(wmo=wmo, prefs=addon_prefs)
+        wmo_scene = BlenderWMOScene(wmo=wmo, prefs=project_preferences)
 
         # extract textures to cache folder
-        game_data.extract_textures_as_png(addon_prefs.cache_dir_path, wmo.motx.get_all_strings())
+        game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
 
         # load all WMO components
         wmo_scene.load_materials()
@@ -63,8 +63,8 @@ def import_wmo_to_blender_scene_gamedata(filepath: str, client_version: int):
     if not game_data or not game_data.files:
         raise FileNotFoundError("Game data is not loaded.")
 
-    addon_prefs = get_addon_prefs()
-    cache_dir = addon_prefs.cache_dir_path
+    project_preferences = get_project_preferences()
+    cache_dir = project_preferences.cache_dir_path
 
     game_data.extract_file(cache_dir, filepath)
 

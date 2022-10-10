@@ -6,7 +6,7 @@ import os
 from bpy.types import Menu
 from functools import partial
 
-from ....ui import get_addon_prefs
+from ....ui.preferences import get_project_preferences
 from ....utils.misc import load_game_data
 from ...utils.wmv import wmv_get_last_texture
 from ...utils.materials import load_texture
@@ -146,7 +146,7 @@ class WMO_OT_import_texture_from_wmv(bpy.types.Operator):
 
     def execute(self, context):
 
-        addon_prefs = get_addon_prefs()
+        project_preferences = get_project_preferences()
         game_data = load_game_data()
 
         if not game_data:
@@ -159,8 +159,8 @@ class WMO_OT_import_texture_from_wmv(bpy.types.Operator):
             self.report({'ERROR'}, "WMV log does not contain any texture paths.")
             return {'CANCELLED'}
 
-        game_data.extract_textures_as_png(addon_prefs.cache_dir_path, (path,))
-        texture = load_texture({}, path, addon_prefs.cache_dir_path)
+        game_data.extract_textures_as_png(project_preferences.cache_dir_path, (path,))
+        texture = load_texture({}, path, project_preferences.cache_dir_path)
 
         mat = bpy.data.materials.new(name=path.split('\\')[-1][:-4] + '.PNG')
         mat.wow_wmo_material.self_pointer = mat

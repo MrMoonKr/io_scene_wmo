@@ -1,27 +1,21 @@
+from ..custom_objects import WoWWMOLiquid
+from ....ui.panels import WBS_PT_object_properties_common
+from ....ui.enums import WoWSceneTypes
+
 import bpy
 
-
-class WMO_PT_liquid(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "object"
+class WMO_PT_liquid(WBS_PT_object_properties_common, bpy.types.Panel):
     bl_label = "WMO Liquid"
+    bl_context = "object"
+
+    __wbs_custom_object_type__ = WoWWMOLiquid
+    __wbs_scene_type__ = WoWSceneTypes.WMO
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
 
         layout.prop(context.object.wow_wmo_liquid, "color")
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'WMO'
-                and context.object is not None
-                and context.object.data is not None
-                and context.object.type == 'MESH'
-                and context.object.wow_wmo_liquid.enabled
-                )
 
 
 class WowLiquidPropertyGroup(bpy.types.PropertyGroup):
@@ -31,12 +25,11 @@ class WowLiquidPropertyGroup(bpy.types.PropertyGroup):
     color:  bpy.props.FloatVectorProperty(
         name="Color",
         subtype='COLOR',
-        default=(0.08, 0.08, 0.08, 1),
+        default=(0.08, 0.08, 0.08, 1.0),
         size=4,
         min=0.0,
         max=1.0
         )
-
 
 
 def register():

@@ -139,7 +139,7 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
 
         self.active_tool = 'select'
 
-        DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = True
+        DepsgraphLock().push()
 
         bpy.ops.mesh.select_mode(bpy.context.copy(), type='VERT', action='ENABLE', use_extend=True)
         bpy.ops.mesh.select_mode(bpy.context.copy(), type='EDGE', action='ENABLE', use_extend=True)
@@ -195,7 +195,7 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
         self.manipulator_hide()
         self._space.show_gizmo = True
         self.panels_hide()
-        self.region_darken()
+        #self.region_darken()
 
     def update_ui(self):
         self.ui_main.dirty('update', parent=True, children=True)
@@ -308,7 +308,6 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
         ui.button(label='Sculpt liquid', title="Sculpt the Liquid mesh, locked in Z edit.", parent=ui_tools,
                   on_mouseclick=self.activate_sculpt_mode)
 
-
     def set_editable_flag(self, flag): # TODO : come up with a better solution
 
         if flag == 1:
@@ -336,7 +335,6 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
             else:
                 self.flag_checkboxes[0].checked = False
                 self.flag_checkboxes[1].checked = False
-
 
     def get_grid_size(self):
 
@@ -430,7 +428,6 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
         for viewport in self.viewports:
             viewport.spaces[0].shading.type = self.shading_type
             viewport.spaces[0].shading.color_type = self.color_type
-        DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = False
         self.done(cancel=False)
         return
 
@@ -504,8 +501,7 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
                 viewport.spaces[0].shading.type = self.shading_type
                 viewport.spaces[0].shading.color_type = self.color_type
 
-            DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = False
-
+            DepsgraphLock().pop()
             self.done(cancel=False)
             return 'finished'
 
@@ -530,8 +526,6 @@ class WMO_OT_edit_liquid(CookieCutter, bpy.types.Operator):
 
             self.done(cancel=False)
             return 'finished'
-
-
 
     @CookieCutter.FSM_State('grab')
     def modal_grab(self):
@@ -771,36 +765,35 @@ class WMO_OT_add_liquid(bpy.types.Operator):
     )
 
     def execute(self, context):
-        with DepsgraphLock():
-            bpy.ops.mesh.primitive_grid_add(x_subdivisions=self.x_planes,
-                                            y_subdivisions=self.y_planes,
-                                            size=4.1666625
-                                            )
-            water = bpy.context.view_layer.objects.active
-            bpy.ops.transform.resize(value=(self.x_planes, self.y_planes, 1.0))
-            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        bpy.ops.mesh.primitive_grid_add(x_subdivisions=self.x_planes,
+                                        y_subdivisions=self.y_planes,
+                                        size=4.1666625
+                                        )
+        water = bpy.context.view_layer.objects.active
+        bpy.ops.transform.resize(value=(self.x_planes, self.y_planes, 1.0))
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
-            water.name += "_Liquid"
+        water.name += "_Liquid"
 
-            mesh = water.data
+        mesh = water.data
 
-            bit = 1
-            counter = 0
-            while bit <= 0x80:
-                vc_layer = mesh.vertex_colors.new(name="flag_{}".format(counter))
+        bit = 1
+        counter = 0
+        while bit <= 0x80:
+            vc_layer = mesh.vertex_colors.new(name="flag_{}".format(counter))
 
-                # set flag 7 which is very likely related to swimming and not fishing (it's enabled in most liquids, even lava)
-                if bit == 0x40:
-                    for poly in mesh.polygons:
-                        for loop in poly.loop_indices:
-                            vc_layer.data[loop].color = (0, 0, 255, 255)
+            # set flag 7 which is very likely related to swimming and not fishing (it's enabled in most liquids, even lava)
+            if bit == 0x40:
+                for poly in mesh.polygons:
+                    for loop in poly.loop_indices:
+                        vc_layer.data[loop].color = (0, 0, 255, 255)
 
-                counter += 1
-                bit <<= 1
+            counter += 1
+            bit <<= 1
 
-            water.wow_wmo_liquid.enabled = True
+        water.wow_wmo_liquid.enabled = True
 
-            water.hide_set(False if "4" in bpy.context.scene.wow_visibility else True)
+        water.hide_set(False if "4" in bpy.context.scene.wow_visibility else True)
 
         self.report({'INFO'}, "Successfully created WoW liquid: {}".format(water.name))
         return {'FINISHED'}

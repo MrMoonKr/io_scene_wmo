@@ -1,6 +1,45 @@
 import bpy
 from .. import ui_icons
 from ..utils.callbacks import on_release
+from ..utils.custom_object import CustomObject
+from .enums import WoWSceneTypes
+
+from typing import Type
+
+
+class WBS_PT_object_properties_common:
+    """ Common base for all bpy.types.Object property panels. """
+    bl_region_type = 'WINDOW'
+    bl_space_type = 'PROPERTIES'
+
+    __wbs_custom_object_type__: Type[CustomObject]
+    """ Type of custom object associated with the panel. """
+
+    __wbs_scene_type__: WoWSceneTypes
+    """ Type of WoW scene. """
+
+    _required = {'bl_context', 'bl_label', '__wbs_custom_object_type__', '__wbs_scene_type__'}
+    """ Required fields to override in derived classes. """
+
+    def __init_subclass__(cls, **kwargs):
+        for requirement in cls._required:
+            if not hasattr(cls, requirement):
+                raise NotImplementedError(f'"{cls.__name__}" must override "{requirement}".')
+
+        super().__init_subclass__(**kwargs)
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context):
+        """
+        Used to identify if the panel should be rendered in a given context.
+        :param context: Current context.
+        :return: True if should be rendered, else False.
+        """
+        return (context.scene is not None
+                and context.scene.wow_scene.type == cls.__wbs_scene_type__.name
+                and context.object
+                and cls.__wbs_custom_object_type__.match(context.object)
+                )
 
 
 class WBS_PT_wow_scene(bpy.types.Panel):
