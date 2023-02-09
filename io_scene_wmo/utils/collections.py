@@ -143,12 +143,7 @@ def create_wow_model_collection(scene: bpy.types.Scene
     """
 
     col = bpy.data.collections.new(id_prop) # just name it 'wow_wmo' ?
-    if (id_prop == 'wow_wmo'):
-        col.wow_wmo.enabled = True
-    elif (id_prop == 'wow_m2'):
-        col.wow_m2.enabled = True
-    elif (id_prop == 'wow_adt'):
-        col.wow_adt.enabled = True
+    getattr(col, id_prop).enabled = True
 
     # scene.collection = col
     bpy.context.scene.collection.children.link(col)
