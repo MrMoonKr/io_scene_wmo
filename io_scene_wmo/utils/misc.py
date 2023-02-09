@@ -8,7 +8,7 @@ from collections import namedtuple
 from ..pywowlib import WoWVersionManager
 from ..pywowlib.archives.wow_filesystem import WoWFileData
 from .. import PACKAGE_NAME
-
+from ..ui.preferences import get_project_preferences
 
 SequenceRecord = namedtuple('SequenceRecord', ['name', 'value', 'index'])
 
@@ -107,8 +107,11 @@ def load_game_data() -> WoWFileData:
 
     if not hasattr(bpy, 'wow_game_data'):
 
-        addon_preferences = bpy.context.preferences.addons[PACKAGE_NAME].preferences
-        bpy.wow_game_data = WoWFileData(addon_preferences.wow_path, addon_preferences.project_dir_path)
+        # addon_preferences = bpy.context.preferences.addons[PACKAGE_NAME].preferences
+        # bpy.wow_game_data = WoWFileData(addon_preferences.wow_path, addon_preferences.project_dir_path)
+
+        project_preferences = get_project_preferences()
+        bpy.wow_game_data = WoWFileData(project_preferences.wow_path, project_preferences.project_dir_path)
 
         if not bpy.wow_game_data.files:
             raise UserWarning("WoW game data is not loaded. Check settings.")
