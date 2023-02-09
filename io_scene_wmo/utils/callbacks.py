@@ -123,6 +123,15 @@ def string_filter_internal_dir(string: str) -> None | str:
     if any(char == '.' for char in string):
         show_message_box("Path must not contain '.' characters.", "Error", 'ERROR')
         return ""
+    
+    if any(char == ':' for char in string):
+        print("Path must not contain ':' characters. Path was probably added on import from a full disk filepath.")
+        return ""
+    
+    # TODO: some characters like \ / : * ? " < > | are not valid path characters in windows
+    if any(char in ('*', '?', '"', '<', '>', '|') for char in string):
+        show_message_box("""Path must not contain * ? " < > | characters.""", "Error", 'ERROR')
+        return ""
 
     try:
         string.encode('ascii')
