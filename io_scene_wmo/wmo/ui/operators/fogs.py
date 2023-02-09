@@ -1,6 +1,7 @@
 import bpy
 
 from ...utils.fogs import create_fog_object
+from ...ui.collections import get_wmo_collection, SpecialCollections
 
 
 class WMO_OT_add_fog(bpy.types.Operator):
@@ -14,10 +15,7 @@ class WMO_OT_add_fog(bpy.types.Operator):
 
         # move fogs to collection
         scn = bpy.context.scene
-        fog_collection = bpy.data.collections.get("Fogs")
-        if not fog_collection:
-            fog_collection = bpy.data.collections.new("Fogs")
-            scn.collection.children.link(fog_collection)
+        fog_collection = get_wmo_collection(scn, SpecialCollections.Fogs)
         fog_collection.objects.link(fog_obj)
         bpy.context.view_layer.objects.active = fog_obj
         # applying object properties

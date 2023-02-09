@@ -24,10 +24,11 @@ class WMO_PT_doodad(WBS_PT_object_properties_common, bpy.types.Panel):
 
 
 def update_doodad_color(self, context):
-    mesh = self.id_data
-
+    mesh = self.id_data.data
+    # print(mesh) # <bpy_struct, Object("BOOTSLEATHERBROWN01.011") at 0x0000017A1A837208>
+    # print(type(mesh)) # <class 'bpy_types.Object'>
     with DepsgraphLock():
-        for mat in mesh.materials:
+        for mat in mesh.materials: # TODO : this broke somehow
             # mat.node_tree.nodes['DoodadColor'].outputs[0].default_value = self.color
             mat.node_tree.nodes['DoodadColor'].attribute_type = 'OBJECT'
             mat.node_tree.nodes['DoodadColor'].attribute_name = 'wow_wmo_doodad.color'

@@ -7,6 +7,7 @@ from ....utils.misc import resolve_texture_path, load_game_data
 from ...utils.materials import load_texture
 from ....ui.preferences import get_project_preferences
 from ...ui.handlers import DepsgraphLock
+from ..custom_objects import WoWWMOGroup
 
 
 class WMO_OT_generate_materials(bpy.types.Operator):
@@ -26,7 +27,7 @@ class WMO_OT_generate_materials(bpy.types.Operator):
 
         if context.selected_objects:
             for obj in context.selected_objects:
-                if not obj.wow_wmo_group.enabled:
+                if not WoWWMOGroup.match(obj):
                     continue
 
                 materials.extend(obj.data.materials)
@@ -45,13 +46,14 @@ class WMO_OT_generate_materials(bpy.types.Operator):
 
             with DepsgraphLock():
 
-                if context.scene.wow_wmo_root_elements.materials.find(mat.name) < 0:
+                # if context.scene.wow_wmo_root_elements.materials.find(mat.name) < 0:
+                if bpy.data.materials.find(mat.name) < 0:
                     mat.wow_wmo_material.self_pointer = mat
 
                     mat.wow_wmo_material.diff_texture_1 = tex
 
-                    slot = context.scene.wow_wmo_root_elements.materials.add()
-                    slot.pointer = mat
+                    # slot = context.scene.wow_wmo_root_elements.materials.add()
+                    # slot.pointer = mat
 
         return {'FINISHED'}
 
@@ -66,17 +68,20 @@ class WMO_OT_material_assign(bpy.types.Operator):
 
         mesh = context.view_layer.objects.active.data
         bm = bmesh.from_edit_mesh(mesh)
-        mat = context.scene.wow_wmo_root_elements.materials[context.scene.wow_wmo_root_elements.cur_material]
+        # mat = context.scene.wow_wmo_root_elements.materials[context.scene.wow_wmo_root_elements.cur_material]
 
-        if not mat.pointer:
-            self.report({'ERROR'}, "Cannot assign an empty material")
-            return {'CANCELLED'}
+        # TODO : cur material in new system?
+        mat = bpy.data.materials[cur_material]
 
-        mat_index = mesh.materials.find(mat.pointer.name)
+        # if not mat.pointer:
+        #     self.report({'ERROR'}, "Cannot assign an empty material")
+        #     return {'CANCELLED'}
+
+        mat_index = mesh.materials.find(mat.name)
 
         if mat_index < 0:
             mat_index = len(mesh.materials)
-            mesh.materials.append(mat.pointer)
+            mesh.materials.append(mat)
 
         for face in bm.faces:
             if not face.select:
@@ -99,13 +104,16 @@ class WMO_OT_material_select(bpy.types.Operator):
 
         mesh = context.view_layer.objects.active.data
         bm = bmesh.from_edit_mesh(mesh)
-        mat = context.scene.wow_wmo_root_elements.materials[context.scene.wow_wmo_root_elements.cur_material]
+        
+        #mat = context.scene.wow_wmo_root_elements.materials[context.scene.wow_wmo_root_elements.cur_material]
+        # TODO : cur material in new system
+        mat = bpy.data.materials[cur_material]
 
-        if not mat.pointer:
-            self.report({'ERROR'}, "Cannot select an empty material")
-            return {'CANCELLED'}
+        # if not mat.pointer:
+        #     self.report({'ERROR'}, "Cannot select an empty material")
+        #     return {'CANCELLED'}
 
-        mat_index = mesh.materials.find(mat.pointer.name)
+        mat_index = mesh.materials.find(mat.name)
 
         for face in bm.faces:
             if face.material_index == mat_index:
@@ -126,13 +134,14 @@ class WMO_OT_material_deselect(bpy.types.Operator):
 
         mesh = context.view_layer.objects.active.data
         bm = bmesh.from_edit_mesh(mesh)
-        mat = context.scene.wow_wmo_root_elements.materials[context.scene.wow_wmo_root_elements.cur_material]
+        # mat = context.scene.wow_wmo_root_elements.materials[context.scene.wow_wmo_root_elements.cur_material]
+        # TODO
+        mat = bpy.data.materials[cur_material]
+        # if not mat.pointer:
+        #     self.report({'ERROR'}, "Cannot deselect an empty material")
+        #     return {'CANCELLED'}
 
-        if not mat.pointer:
-            self.report({'ERROR'}, "Cannot deselect an empty material")
-            return {'CANCELLED'}
-
-        mat_index = mesh.materials.find(mat.pointer.name)
+        mat_index = mesh.materials.find(mat.name)
 
         for face in bm.faces:
             if face.material_index == mat_index:
@@ -151,7 +160,7 @@ class WMO_OT_fill_textures(bpy.types.Operator):
 
     def execute(self, context):
 
-        for ob in filter(lambda o: o.wow_wmo_group.enabled, bpy.context.selected_objects):
+        for ob in filter(lambda o: WoWWMOGroup.match(o), bpy.context.selected_objects):
             mesh = ob.data
             for material in mesh.materials:
                 if not material.wow_wmo_material.enabled:
@@ -203,8 +212,8 @@ class WMO_OT_import_texture(bpy.types.Operator):
         load_wmo_shader_dependencies()
         update_wmo_mat_node_tree(mat)
 
-        slot = context.scene.wow_wmo_root_elements.materials.add()
-        slot.pointer = mat
+        # slot = context.scene.wow_wmo_root_elements.materials.add()
+        # slot.pointer = mat
         mat.wow_wmo_material.enabled = True
 
         return {'FINISHED'}

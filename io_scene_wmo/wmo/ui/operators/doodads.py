@@ -7,6 +7,7 @@ from ...utils.wmv import wmv_get_last_m2
 from ....ui.preferences import get_project_preferences
 from ....utils.misc import find_nearest_object
 from ....third_party.tqdm import tqdm
+from ..custom_objects import WoWWMODoodad, WoWWMOGroup
 
 
 class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
@@ -20,12 +21,13 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
         m2_path = wmv_get_last_m2()
         cache_path = get_project_preferences().cache_dir_path
 
-        root = context.scene.wow_wmo_root_elements
+        # root = context.scene.wow_wmo_root_elements
 
-        if not len(root.doodad_sets) or len(root.doodad_sets) < root.cur_doodad_set:
-            self.report({'ERROR'}, "Failed to import doodad. No active doodad set is selected.")
-            return {'CANCELLED'}
+        # if not len(root.doodad_sets) or len(root.doodad_sets) < root.cur_doodad_set:
+        #     self.report({'ERROR'}, "Failed to import doodad. No active doodad set is selected.")
+        #     return {'CANCELLED'}
 
+        # TODO : figure out active doodad set system for collections.
         doodad_set_obj = root.doodad_sets[root.cur_doodad_set].pointer
 
         if not m2_path:
@@ -106,7 +108,7 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
 
         flags = bpy.context.scene.wow_wmo_root.flags
 
-        if "2" in flags and group.wow_wmo_group.place_type == '8192':
+        if "2" in flags and WoWWMOGroup.is_indoor(obj):
             final_color += mathutils.Vector(tuple([c / 2 for c in bpy.context.scene.wow_wmo_root.ambient_color]))
 
         return final_color
@@ -115,10 +117,10 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
 
         doodad_counter = 0
 
-        groups = [obj for obj in bpy.context.scene.objects if obj.wow_wmo_group.enabled]
+        groups = [obj for obj in bpy.context.scene.objects if WoWWMOGroup.match(obj)]
 
         for index, obj in enumerate(tqdm(bpy.context.selected_objects, desc='Baking doodad colors', ascii=True)):
-            if obj.wow_wmo_doodad.enabled:
+            if WoWWMODoodad.match(obj):
 
                 group = find_nearest_object(obj, groups)
 
@@ -167,7 +169,7 @@ class WMO_OT_doodad_set_color(bpy.types.Operator):
 
         success = False
         for obj in bpy.context.selected_objects:
-            if obj.wow_wmo_doodad.enabled:
+            if WoWWMODoodad.match(obj):
                 obj.wow_wmo_doodad.color = self.color
                 success = True
 

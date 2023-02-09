@@ -3,7 +3,8 @@ from ..enums import *
 from ..custom_objects import WoWWMOGroup
 from ....ui.panels import WBS_PT_object_properties_common
 from ....ui.enums import WoWSceneTypes
-
+from ..custom_objects import *
+from ..collections import get_wmo_collection, SpecialCollections
 
 from collections import namedtuple
 import bpy
@@ -48,21 +49,23 @@ class WMO_PT_wmo_group(WBS_PT_object_properties_common, bpy.types.Panel):
 
 
 def fog_validator(self, context):
-    if self.fog1 and (not self.fog1.wow_wmo_fog.enabled or self.fog1.name not in bpy.context.scene.objects):
+    # if self.fog1 and (not self.fog1.wow_wmo_fog.enabled or self.fog1.name not in bpy.context.scene.objects):
+    scn = bpy.context.scene
+    if self.fog1 and (not WoWWMOFog.match(self.fog1) or self.fog1.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog1 = None
 
-    if self.fog2 and (not self.fog2.wow_wmo_fog.enabled or self.fog2.name not in bpy.context.scene.objects):
+    if self.fog2 and (not WoWWMOFog.match(self.fog2) or self.fog2.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog2 = None
 
-    if self.fog3 and (not self.fog3.wow_wmo_fog.enabled or self.fog3.name not in bpy.context.scene.objects):
+    if self.fog3 and (not WoWWMOFog.match(self.fog3) or self.fog3.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog3 = None
 
-    if self.fog4 and (not self.fog4.wow_wmo_fog.enabled or self.fog4.name not in bpy.context.scene.objects):
+    if self.fog4 and (not WoWWMOFog.match(self.fog4) or self.fog4.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog4 = None
 
 
 def update_place_type(self, context):
-
+    # TODO with new collection system, replace by some collection object handler
     obj = context.object
 
     if not obj:
@@ -72,6 +75,7 @@ def update_place_type(self, context):
         return
 
     if self.place_type == '8':
+    # if WoWWMOGroup.is_outdoor(obj):
         obj.pass_index |= 0x1 # BlenderWMOObjectRenderFlags.IsOutdoor
         obj.pass_index &= ~0x2 # BlenderWMOObjectRenderFlags.IsIndoor
     else:
@@ -130,28 +134,28 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
     fog1:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #1",
-        poll=lambda self, obj: obj.wow_wmo_fog.enabled and obj.name in bpy.context.scene.objects,
+        poll=lambda self, obj: WoWWMOFog.match(self.fog1) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
     fog2:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #2",
-        poll=lambda self, obj: obj.wow_wmo_fog.enabled and obj.name in bpy.context.scene.objects,
+        poll=lambda self, obj: WoWWMOFog.match(self.fog2) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
     fog3:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #3",
-        poll=lambda self, obj: obj.wow_wmo_fog.enabled and obj.name in bpy.context.scene.objects,
+        poll=lambda self, obj: WoWWMOFog.match(self.fog3) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
     fog4:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #4",
-        poll=lambda self, obj: obj.wow_wmo_fog.enabled and obj.name in bpy.context.scene.objects,
+        poll=lambda self, obj: WoWWMOFog.match(self.fog4) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
@@ -166,7 +170,7 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
         type=bpy.types.Object,
         name='Liquid',
         description='Liquid plane linked to this group',
-        poll=lambda self, obj: obj.type == 'MESH' and obj.wow_wmo_liquid.enabled
+        poll=lambda self, obj: obj.type == 'MESH' and WoWWMOLiquid.match(obj)
     )
 
 

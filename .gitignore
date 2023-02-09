@@ -7,3 +7,6 @@ io_scene_wmo/wbs_kernel/build/
 io_scene_wmo/wbs_kernel/src/wbs_kernel.cpp
 
 *.pyd
+/io_scene_wmo/.vscode/settings.json
+/io_scene_wmo/wbs_kernel/src/render.cpp
+/io_scene_wmo/wbs_kernel/src/wmo_utils.cpp

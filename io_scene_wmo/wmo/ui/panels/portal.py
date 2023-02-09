@@ -2,6 +2,10 @@ from ..enums import *
 from ..custom_objects import WoWWMOPortal
 from ....ui.panels import WBS_PT_object_properties_common
 from ....ui.enums import WoWSceneTypes
+from ....wmo.ui.custom_objects import WoWWMOGroup
+from ....wmo.ui.collections import get_wmo_groups_list
+from ...ui.enums import SpecialCollections
+from ...ui.collections import get_wmo_collection
 
 import bpy
 
@@ -31,11 +35,27 @@ class WMO_PT_portal(WBS_PT_object_properties_common, bpy.types.Panel):
 
 
 def portal_validator(self, context):
-    if self.second and not self.second.wow_wmo_group.enabled:
+    if self.second and not WoWWMOGroup.match(self.second):
         self.second = None
 
-    if self.first and not self.first.wow_wmo_group.enabled:
+    if self.first and not WoWWMOGroup.match(self.first):
         self.first = None
+
+def build_first_group_list(self, context):
+    obj_list = []
+    # print(bpy.data.collections.get('Outdoor').objects)
+    scn = bpy.context.scene
+    for outdoor_obj in list(get_wmo_collection(scn, SpecialCollections.Outdoor).objects):
+        # print(outdoor_obj)
+        if self.second != outdoor_obj and outdoor_obj.name:
+            obj_list.append(outdoor_obj)
+    
+    for indoor_obj in list(get_wmo_collection(scn, SpecialCollections.Indoor).objects):
+        print(indoor_obj)
+        if self.second != indoor_obj and indoor_obj.name:
+            obj_list.append(indoor_obj)
+    
+    return obj_list
 
 
 class WowPortalPlanePropertyGroup(bpy.types.PropertyGroup):
@@ -43,14 +63,18 @@ class WowPortalPlanePropertyGroup(bpy.types.PropertyGroup):
     first:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="First group",
-        poll=lambda self, obj: obj.wow_wmo_group.enabled and self.second != obj and obj.name in bpy.context.scene.objects,
+        poll=lambda self, obj: WoWWMOGroup.match(obj) and self.second != obj and obj.name in bpy.context.scene.objects,
+
         update=portal_validator
     )
 
     second:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Second group",
-        poll=lambda self, obj: obj.wow_wmo_group.enabled and self.first != obj and obj.name in bpy.context.scene.objects,
+        # doesn't work
+        # poll=lambda self, obj: WoWWMOGroup.match(obj) and self.first != obj and obj.name 
+        #     in get_wmo_groups_list(bpy.context.scene),
+        poll=lambda self, obj: WoWWMOGroup.match(obj) and self.first != obj and obj.name in bpy.context.scene.objects,
         update=portal_validator
     )
 

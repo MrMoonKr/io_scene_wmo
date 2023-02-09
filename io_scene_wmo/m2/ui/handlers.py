@@ -4,6 +4,7 @@ import bmesh
 from bpy.app.handlers import persistent
 from .drivers import register as register_m2_driver_utils
 from ...utils.misc import show_message_box, singleton
+from ...ui.enums import WoWSceneTypes
 
 __reload_order_index__ = 0
 
@@ -72,7 +73,7 @@ def load_handler(dummy):
 
 @persistent
 def on_depsgraph_update(_):
-    if DepsgraphLock().DEPSGRAPH_UPDATE_LOCK:
+    if bpy.context.scene.wow_scene.type != WoWSceneTypes.M2.name or DepsgraphLock().DEPSGRAPH_UPDATE_LOCK:
         return
 
     delete = False

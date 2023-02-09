@@ -4,6 +4,7 @@ import os
 import struct
 
 from ..utils.misc import load_game_data
+from ..utils.collections import get_current_wow_model_collection, create_wmo_model_collection, SpecialCollection
 from .wmo_scene import BlenderWMOScene
 
 from ..pywowlib import WoWVersionManager
@@ -11,6 +12,7 @@ from ..pywowlib.wmo_file import WMOFile
 
 from ..ui.preferences import get_project_preferences
 from .ui.handlers import DepsgraphLock
+from .ui.collections import WMO_SPECIAL_COLLECTION_TYPES
 
 
 def import_wmo_to_blender_scene(filepath: str, client_version: int):
@@ -35,6 +37,12 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int):
         wmo = WMOFile(client_version, filepath=filepath)
         wmo.read()
         wmo_scene = BlenderWMOScene(wmo=wmo, prefs=project_preferences)
+
+        # set wmo model collection
+        wow_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+        if not wow_model_collection:
+            wow_model_collection = create_wmo_model_collection(bpy.context.scene, filepath)
+        SpecialCollection.verify_root_collection_integrity(wow_model_collection, WMO_SPECIAL_COLLECTION_TYPES)
 
         # extract textures to cache folder
         game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())

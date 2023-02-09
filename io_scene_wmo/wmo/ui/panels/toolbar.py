@@ -2,6 +2,9 @@ import bpy
 from ..enums import *
 
 from .common import panel_poll
+from ..custom_objects import *
+from ...ui.enums import SpecialCollections
+from ...ui.collections import get_wmo_collection
 
 
 def update_wow_visibility(self, context):
@@ -15,10 +18,10 @@ def update_wow_visibility(self, context):
             continue
 
         if obj.type == "MESH":
-            if obj.wow_wmo_group.enabled:
-                if obj.wow_wmo_group.place_type == '8':
+            if WoWWMOGroup.match(obj):
+                if WoWWMOGroup.is_outdoor(obj):
                     obj.hide_set('0' not in values)
-                else:
+                elif WoWWMOGroup.is_indoor(obj):
                     obj.hide_set('1' not in values)
 
                 if obj.wow_wmo_group.collision_mesh:
@@ -33,13 +36,13 @@ def update_wow_visibility(self, context):
                     col.hide_set('6' not in values)
                     col['wow_hide'] = col.hide_get()
 
-            elif obj.wow_wmo_portal.enabled:
+            elif WoWWMOPortal.match(obj):
                 obj.hide_set('2' not in values)
-            elif obj.wow_wmo_fog.enabled:
+            elif WoWWMOFog.match(obj):
                 obj.hide_set('3' not in values)
-            elif obj.wow_wmo_liquid.enabled:
+            elif WoWWMOLiquid.match(obj):
                 obj.hide_set('4' not in values)
-        elif obj.type == "LIGHT" and obj.wow_wmo_light.enabled:
+        elif obj.type == "LIGHT" and WoWWMOLight.match(obj):
             obj.hide_set('5' not in values)
 
         obj['wow_hide'] = obj.hide_get()
@@ -47,18 +50,25 @@ def update_wow_visibility(self, context):
 
 def get_doodad_sets(self, context):
     has_global = False
-    doodad_set_objects = set()
+    doodad_set_collections = set()
     doodad_sets = []
 
-    for obj in bpy.context.scene.objects:
-        if obj.wow_wmo_doodad.enabled and obj.parent:
-            if obj.parent.name != "Set_$DefaultGlobal":
-                doodad_set_objects.add(obj.parent)
-            else:
-                has_global = True
+    # for obj in bpy.context.scene.objects:
+    for set_collection in get_wmo_collection(bpy.context.scene, SpecialCollections.Doodads).children:
+    # for obj in bpy.data.collections.get('Doodads').objects:
+    #     if WoWWMODoodad.match(obj) and obj.parent:
+    #         if obj.parent.name != "Set_$DefaultGlobal":
+    #             doodad_set_objects.add(obj.parent)
+    #         else:
+    #             has_global = True
 
-    for index, obj in enumerate(sorted(doodad_set_objects, key=lambda x: x.name), 1 + has_global):
-        doodad_sets.append((obj.name, obj.name, "", 'SCENE_DATA', index))
+        if set_collection.name != "Set_$DefaultGlobal":
+            doodad_set_collections.add(set_collection)
+        else:
+            has_global = True
+
+    for index, set_collection in enumerate(sorted(doodad_set_collections, key=lambda x: x.name), 1 + has_global):
+        doodad_sets.append((set_collection.name, set_collection.name, "", 'SCENE_DATA', index))
 
     doodad_sets.insert(0, ("None", "No set", "", 'X', 0))
     if has_global:
@@ -70,13 +80,26 @@ def get_doodad_sets(self, context):
 def switch_doodad_set(self, context):
     set = self.wow_doodad_visibility
 
-    for obj in bpy.context.scene.objects:
-        if obj.wow_wmo_doodad.enabled:
-            if obj.parent:
-                name = obj.parent.name
-                obj.hide_set(set == "None" or name != set and name != "Set_$DefaultGlobal")
-            else:
-                obj.hide_set(True)
+    # for obj in bpy.context.scene.objects:
+    # for obj in bpy.data.collections.get('Doodads').objects:
+    #     if WoWWMODoodad.match(obj):
+    #         if obj.parent:
+    #             name = obj.parent.name
+    #             obj.hide_set(set == "None" or name != set and name != "Set_$DefaultGlobal")
+    #         else:
+    #             obj.hide_set(True)
+    for set_collection in get_wmo_collection(bpy.context.scene, SpecialCollections.Doodads).children:
+        # if set_collection.parent:
+        #     name = set_collection.name
+        #     set_collection.hide_select = (set == "None" or name != set and name != "Set_$DefaultGlobal")
+        # else:
+        #     set_collection.hide_select = True
+
+        # name = set_collection.name
+        # set_collection.hide_select = (set == "None" or name != set and name != "Set_$DefaultGlobal")
+        name = set_collection.name
+        for obj in set_collection.objects:
+            obj.hide_set(set == "None" or name != set and name != "Set_$DefaultGlobal")
 
 
 class WMO_PT_tools_object_mode_display(bpy.types.Panel):
@@ -166,7 +189,8 @@ class WMO_PT_tools_object_mode_actions(bpy.types.Panel):
         col.separator()
         box_col = col.column(align=True)
         box_col.operator("scene.wow_wmo_generate_minimaps", text='Generate minimaps', icon='SHADING_RENDERED')
-        box_col.operator("scene.wow_wmo_purge_references", text='Purge invalid references', icon='TOOL_SETTINGS')
+        # could still be useful for materials pointers ?
+        # box_col.operator("scene.wow_wmo_purge_references", text='Purge invalid references', icon='TOOL_SETTINGS')
 
         if bpy.context.selected_objects:
             box_col.operator("scene.wow_wmo_generate_materials", text='Generate materials', icon='MATERIAL')

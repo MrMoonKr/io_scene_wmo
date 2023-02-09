@@ -1,4 +1,4 @@
-from ...utils.collections import SpecialCollection, obj_swap_collections, collection_swap_parent_collection
+from ...utils.collections import SpecialCollection, obj_swap_collections, collection_swap_parent_collection, get_or_create_collection, get_current_wow_model_collection
 from ...utils.bl_id_types_utils import match_id_name
 from ...ui.message_stack import MessageStack
 from .enums import SpecialCollections
@@ -8,6 +8,29 @@ from .custom_objects import WoWWMOGroup, WoWWMOLight, WoWWMOFog\
 from typing import Iterable
 import bpy
 
+def get_wmo_collection(scene: bpy.types.Scene,
+                        collection_type: SpecialCollections) -> bpy.types.Collection:
+    return get_or_create_collection(get_current_wow_model_collection(scene, 'wow_wmo'), collection_type.name)
+
+
+def iter_wmo_groups(scene: bpy.types.Scene) -> bpy.types.Object:
+    """ Iterate and return each Object in Indoor and Outdor group collections 
+        How to use : 'for each in iter_wmo_groups(scene):
+                        print(each)'
+    """
+    for each in get_wmo_collection(scene, SpecialCollections.Outdoor).objects:
+        yield each
+    
+    for each in get_wmo_collection(scene, SpecialCollections.Indoor).objects:
+        yield each
+
+def get_wmo_groups_list(scene: bpy.types.Scene) -> list:
+    groups_list = []
+
+    for each in iter_wmo_groups(scene):
+        groups_list.append(each)
+
+    return groups_list
 
 class _WMOCollection:
     """ Base class for all WMO collections. """
