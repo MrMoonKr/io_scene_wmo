@@ -257,7 +257,7 @@ class BlenderWMOScene:
                 # anchor.lock_rotation = (True, True, True)
                 # anchor.lock_scale = (True, True, True)
 
-                doodadset_coll.hide_select = True
+                # doodadset_coll.hide_select = True
                 doodadset_coll.color_tag = 'COLOR_04'
                 # doodadset_coll.hide_viewport = True
 
