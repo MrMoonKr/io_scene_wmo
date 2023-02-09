@@ -1,5 +1,6 @@
 import bpy
 import json
+import os
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -8,6 +9,8 @@ from ..wmo.export_wmo import export_wmo_from_blender_scene
 from ..m2.import_m2 import import_m2
 from ..m2.export_m2 import export_m2, create_m2
 from ..utils.misc import load_game_data
+from ..utils.collections import get_current_wow_model_collection, SpecialCollection
+from ..ui.preferences import get_project_preferences
 
 #############################################################
 ######                 Common operators                ######
@@ -61,6 +64,54 @@ class WBS_OT_reload_game_data(bpy.types.Operator):
         self.report({'INFO'}, "WoW game data is reloaded.")
 
         return {'FINISHED'}
+
+class WBS_OT_save_current_wmo(bpy.types.Operator):
+    bl_idname = 'scene.save_current_wmo_collection'
+    bl_label = 'Save current WMO object'
+    bl_description = "Save the currently selected WMO collection as a .wmo file using the collection's [Directory Path] in the Project Folder."
+    bl_options = {'REGISTER'}
+
+    # will save the first wmo collection found for now until wmo scene is changed to an export class
+    def execute(self, context):
+        scene = context.scene
+        if scene and scene.wow_scene.type == 'WMO':
+
+            version = int(scene.wow_scene.version)
+
+            wmo_collection = get_current_wow_model_collection(scene, 'wow_wmo')
+            if not bpy.context.collection:
+                self.report({'ERROR'}, 'No Collection selected.')
+                return {'CANCELLED'}
+            
+            # act_col: bpy.types.Collection = bpy.context.collection
+            # SpecialCollection._get_root_collection(context.scene)
+
+            if not wmo_collection:
+                self.report({'ERROR'}, 'Could not find a WoW WMO collection.')
+                return {'CANCELLED'}
+            
+            if not wmo_collection.wow_wmo.dir_path:
+                self.report({'WARNING'}, 'WMO Collection ' + wmo_collection.name + ' has empty WoW directory path. \
+                                            \nWMO will be saved at the root of the project.')
+            
+            project_preferences = get_project_preferences()
+            if not project_preferences.project_dir_path:
+                self.report({'ERROR'}, 'Project path in addon preferences is empty.')
+                return {'CANCELLED'}
+
+            # TODO : doesn't work if wow_wmo.dir_path is a full path with Disk name etc, happens if WMO has been imported from local file.
+            # dir_path = os.path.join(project_preferences.project_dir_path, wmo_collection.wow_wmo.dir_path) # DON'T USE
+            dir_path = project_preferences.project_dir_path # temporary so we don't override the old file
+            filename = wmo_collection.name
+            filepath = os.path.join(dir_path, filename)
+
+            print("saving wmo to : " + filepath)
+            export_wmo_from_blender_scene(filepath, version, False, 'FULL')
+            return {'FINISHED'}
+
+        self.report({'ERROR'}, 'Invalid scene type.')
+        return {'CANCELLED'}
+
 
 
 #############################################################

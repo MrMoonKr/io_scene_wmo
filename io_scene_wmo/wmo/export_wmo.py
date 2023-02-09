@@ -39,5 +39,5 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
         wmo.write()
 
 
-    print("\nExport finished successfully. "
+    print("\nExport finished successfully. Saved WMO to " + filepath +
           "\nTotal export time: ", time.strftime("%M minutes %S seconds\a", time.gmtime(time.time() - start_time)))
