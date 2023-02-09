@@ -68,7 +68,7 @@ class WBS_OT_reload_game_data(bpy.types.Operator):
 class WBS_OT_save_current_wmo(bpy.types.Operator):
     bl_idname = 'scene.save_current_wmo_collection'
     bl_label = 'Save current WMO object'
-    bl_description = "Save the currently selected WMO collection as a .wmo file using the collection's [Directory Path] in the Project Folder."
+    bl_description = "Save the currently selected WMO collection to the Project Folder as a .wmo file using the collection's [Directory Path]."
     bl_options = {'REGISTER'}
 
     # will save the first wmo collection found for now until wmo scene is changed to an export class
