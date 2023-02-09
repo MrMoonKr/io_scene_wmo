@@ -328,6 +328,10 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     const MLoopTri* _bl_col_looptris;
     const float(*_bl_col_vertex_normals)[3];
 
+    // other attribute layers
+
+    std::int32_t* _mesh_materials_per_poly;
+
     BSPTree* _bsp_tree;
     LiquidExporter* _liquid_exporter;
 

@@ -48,8 +48,6 @@ def main(debug: bool):
             extra_compile_args = ['-std=c++17', '-O3']
             extra_link_args = []
 
-    glew = ('glew', {'sources': ["src/extern/glew/src/glew.c"], 'include_dirs': ["src/extern/glew/include/"]})
-
     common_include_dirs = [
         "src/bl_src/source/blender/blenkernel/",
         "src/bl_src/source/blender/blenlib/",
@@ -75,24 +73,8 @@ def main(debug: bool):
         "src/bl_utils/wmo"
     ]
 
-    render_sources = [
-        "src/render.pyx",
-        "src/render/m2_drawing_batch.cpp",
-        "src/render/m2_drawing_mesh.cpp",
-        "src/render/wmo_drawing_mesh.cpp",
-        "src/render/wmo_drawing_batch.cpp",
-        "src/render/opengl_utils.cpp",
-    ]
-
-    render_include_dirs = [
-       "src/render/",
-       "src/extern/glew/include/GL/",
-       "src/extern/glm/",
-       "src/extern/"
-    ]
-
-    sources = wmo_utils_sources + render_sources
-    include_dirs = common_include_dirs + wmo_utils_include_dirs + render_include_dirs
+    sources = wmo_utils_sources
+    include_dirs = common_include_dirs + wmo_utils_include_dirs
 
     formatted_includes = '\n'.join([f"${{CMAKE_SOURCE_DIR}}/{include_dir}" for include_dir in include_dirs])
     formatted_sources = '\n'.join([f"${{CMAKE_SOURCE_DIR}}/{source_file}"
@@ -134,23 +116,6 @@ def main(debug: bool):
                 extra_link_args=extra_link_args
             )]
         ),
-        requires=['Cython'])
-
-    setup(
-        name='WBS kernel : render',
-        ext_modules=cythonize([
-            Extension(
-                "render",
-                sources=render_sources,
-                include_dirs=render_include_dirs + common_include_dirs,
-                language="c++",
-                extra_compile_args=extra_compile_args,
-                extra_link_args=extra_link_args,
-                libraries=['opengl32'] if platform.system() == 'Windows' else []
-            )
-        ]
-        ),
-        libraries=[glew],
         requires=['Cython'])
 
     print_succes("\nSuccessfully built WBS kernel.")

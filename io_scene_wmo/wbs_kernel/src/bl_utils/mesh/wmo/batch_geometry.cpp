@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <limits>
 
+#include <BKE_mesh_types.h>
 #include <DNA_mesh_types.h>
 #include <DNA_meshdata_types.h>
 #include <DNA_material_types.h>
@@ -52,8 +53,8 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _bl_loops(_mesh->mloop)
 , _bl_verts(_mesh->mvert)
 , _bl_polygons(_mesh->mpoly)
-, _bl_looptris(_mesh->runtime.looptris.array)
-, _bl_vertex_normals(reinterpret_cast<const float(*)[3]>(_mesh->runtime.vert_normals))
+, _bl_looptris(_mesh->runtime->looptris.array)
+, _bl_vertex_normals(reinterpret_cast<const float(*)[3]>(_mesh->runtime->vert_normals))
 , _has_collision_vg(_vg_collision_index >= 0)
 , _bl_batch_map_trans(_mesh, "BatchmapTrans")
 , _bl_batch_map_int(_mesh, "BatchmapInt")
@@ -65,21 +66,22 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _last_error(WMOGeometryBatcherError::NO_ERROR)
 , _collision_mesh(nullptr)
 , _material_ids(material_mapping)
+, _mesh_materials_per_poly(static_cast<std::int32_t*>(WBS_CustomData_get_layer_named(&_mesh->pdata, eCustomDataType::CD_PROP_INT32, "material_index")))
 {
-  assert(!_mesh->runtime.vert_normals_dirty && "Vertex normals were not calculated for group mesh.");
-  assert(!_mesh->runtime.poly_normals_dirty && "Poly normals were not calculated for group mesh.");
+  assert(!_mesh->runtime->vert_normals_dirty && "Vertex normals were not calculated for group mesh.");
+  assert(!_mesh->runtime->poly_normals_dirty && "Poly normals were not calculated for group mesh.");
 
   if (collision_mesh_ptr)
   {
     _collision_mesh = reinterpret_cast<Mesh*>(collision_mesh_ptr);
 
-    assert(!_collision_mesh->runtime.vert_normals_dirty && "Vertex normals were not calculated for collision mesh.");
-    assert(!_collision_mesh->runtime.poly_normals_dirty && "Poly normals were not calculated for collision mesh.");
+    assert(!_collision_mesh->runtime->vert_normals_dirty && "Vertex normals were not calculated for collision mesh.");
+    assert(!_collision_mesh->runtime->poly_normals_dirty && "Poly normals were not calculated for collision mesh.");
 
     _bl_col_loops = _collision_mesh->mloop;
     _bl_col_verts = _collision_mesh->mvert;
-    _bl_col_vertex_normals = reinterpret_cast<const float(*)[3]>(_collision_mesh->runtime.vert_normals);
-    _bl_col_looptris = _collision_mesh->runtime.looptris.array;
+    _bl_col_vertex_normals = reinterpret_cast<const float(*)[3]>(_collision_mesh->runtime->vert_normals);
+    _bl_col_looptris = _collision_mesh->runtime->looptris.array;
 
     assert(collision_mesh_matrix_world && "Collision is present but its world matrix is nullptr.");
     _collision_mtx_world = glm::make_mat4(collision_mesh_matrix_world);
@@ -115,14 +117,13 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   {
     polys_per_mat[i] = std::make_pair(&_bl_looptris[i], WMOGeometryBatcher::get_batch_type(&_bl_looptris[i]));
   }
-
-
+  
   // presort faces by their batch type and material_id forming the batches
   std::sort(polys_per_mat.begin(), polys_per_mat.end(),
       [this](std::pair<const MLoopTri*, BatchType> const& lhs, std::pair<const MLoopTri*, BatchType> const& rhs) -> bool
       {
-        return std::tie(lhs.second, _bl_polygons[lhs.first->poly].mat_nr)
-          < std::tie(rhs.second, _bl_polygons[rhs.first->poly].mat_nr);
+        return std::tie(lhs.second, _mesh_materials_per_poly[lhs.first->poly])
+          < std::tie(rhs.second, _mesh_materials_per_poly[rhs.first->poly]);
       });
 
   MOBABatch* cur_batch = nullptr;
@@ -134,7 +135,7 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     if (WMOGeometryBatcher::_needs_new_batch(cur_batch, looptri, cur_batch_type,
                                              batch_type, cur_batch_mat_id))
     {
-      _create_new_batch(_material_ids[_bl_polygons[looptri->poly].mat_nr],
+      _create_new_batch(_material_ids[_mesh_materials_per_poly[looptri->poly]],
                         batch_type, cur_batch, cur_batch_mat_id, cur_batch_type);
     }
 
@@ -384,7 +385,7 @@ bool WMOGeometryBatcher::_needs_new_batch(MOBABatch* cur_batch
     , std::uint16_t cur_batch_mat_id)
 {
   return !cur_batch || cur_batch_type != cur_poly_batch_type
-    || _material_ids[_bl_polygons[cur_tri->poly].mat_nr] != cur_batch_mat_id;
+    || _material_ids[_mesh_materials_per_poly[cur_tri->poly]] != cur_batch_mat_id;
 }
 
 unsigned char WMOGeometryBatcher::_get_grayscale_factor(RGBA const& color)
