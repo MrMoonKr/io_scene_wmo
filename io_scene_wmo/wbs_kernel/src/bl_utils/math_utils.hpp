@@ -7,6 +7,8 @@
 #include <extern/glm/vec3.hpp>
 #include <extern/glm/vec4.hpp>
 
+#include <DNA_meshdata_types.h>
+#include <BLI_vector.hh>
 #include <BKE_mesh_mapping.h>
 
 namespace wbs_kernel::bl_utils::math_utils

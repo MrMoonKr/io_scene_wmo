@@ -169,7 +169,7 @@ def get_panels():
     return panels
 
 
-def register():
+""" def register():
     # Register the RenderEngine
     bpy.utils.register_class(WoWRenderEngine)
 
@@ -186,4 +186,4 @@ def unregister():
 
 
 if __name__ == "__main__":
-    register()
+    register() """
