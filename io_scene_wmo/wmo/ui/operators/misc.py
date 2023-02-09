@@ -7,6 +7,7 @@ from ....utils.misc import load_game_data
 from ....pywowlib.blp import PNG2BLP
 # from ....pywowlib.io_utils.types import *
 from ...ui.custom_objects import *
+from ..collections import get_wmo_collection, SpecialCollections
 
 from ....third_party.tqdm import tqdm
 
@@ -141,12 +142,48 @@ class WMO_OT_select_entity(bpy.types.Operator):
     def execute(self, context):
         
         # can optimise by selecting by collection
+        scene = bpy.context.scene
+        if self.entity == "Outdoor":
+            for obj in get_wmo_collection(scene, SpecialCollections.Outdoor).objects:
+                obj.select_set(True)
+
+        elif self.entity == "Indoor":
+            for obj in get_wmo_collection(scene, SpecialCollections.Indoor).objects:
+                obj.select_set(True)
+
+        elif self.entity == "wow_wmo_portal":
+            for obj in get_wmo_collection(scene, SpecialCollections.Portals).objects:
+                obj.select_set(True)
+
+        elif self.entity == "wow_wmo_liquid":
+            for obj in get_wmo_collection(scene, SpecialCollections.Liquids).objects:
+                obj.select_set(True)
+
+        elif self.entity == "wow_wmo_fog":
+            for obj in get_wmo_collection(scene, SpecialCollections.Fogs).objects:
+                obj.select_set(True)
+
+        elif self.entity == "wow_wmo_light":
+            for obj in get_wmo_collection(scene, SpecialCollections.Lights).objects:
+                obj.select_set(True)
+
+        elif self.entity == "wow_wmo_doodad":
+            for obj in get_wmo_collection(scene, SpecialCollections.Doodads).all_objects:
+                if not obj.hide_get():
+                    obj.select_set(True)
+                
+        elif self.entity == "Collision":
+            for obj in get_wmo_collection(scene, SpecialCollections.Collision).objects:
+                obj.select_set(True)
+
+
+        return {'FINISHED'}
+
 
         for obj in bpy.context.scene.objects:
             if obj.hide_get():
                 continue
 
-            print("Checking object :" + obj.name + " -----------\n")
             if obj.type == 'MESH':
                 if WoWWMOGroup.match(obj):
                     if self.entity == "Outdoor" and WoWWMOGroup.is_outdoor(obj):
