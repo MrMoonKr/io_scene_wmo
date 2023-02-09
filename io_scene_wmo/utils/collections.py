@@ -20,8 +20,7 @@ def get_collection(model_collection: bpy.types.Collection
 
     # check if parent collection exists
     if not model_collection:
-        raise Exception("get_collection() called with Null WoW Model Collection.")
-        return col
+        raise KeyError("get_collection() called with Null WoW Model Collection.")
     
     # attempt regular search
     if (col := model_collection.children.get(col_name)) is not None:
@@ -48,7 +47,7 @@ def get_or_create_collection(model_collection: bpy.types.Collection
     # check if model_collection exists
     if not model_collection:
         # print("Error : WoW Model collection doesn't exist.")
-        raise Exception("get_or_create_collection() called with Null WoW Model Collection.")
+        raise KeyError("get_or_create_collection() called with Null WoW Model Collection.")
         # can't create it because we don't have the type (wmo/m2/adt)
         # This shouldn't fail if it is called with model_collection = get_current_wow_model_collection().
 
@@ -72,13 +71,14 @@ def obj_swap_collections(obj: bpy.types.Object, col_from: bpy.types.Collection, 
     """
     try:
         col_from.objects.unlink(obj)
-    except RuntimeError:
-        pass
-
+    except RuntimeError as e:
+        print(f"Error: exception occured while swapping object \"{obj.name}\" from collection \"{col_from.name}\" to"
+              "collection \"{col_to.name}\".\n{e}")
     try:
         col_to.objects.link(obj)
-    except RuntimeError:
-        pass
+    except RuntimeError as e:
+        print(f"Error: exception occured while swapping object \"{obj.name}\" from collection \"{col_from.name}\" to"
+              "collection \"{col_to.name}\".\n{e}")
 
 
 def collection_swap_parent_collection(col: bpy.types.Collection
@@ -94,12 +94,14 @@ def collection_swap_parent_collection(col: bpy.types.Collection
     try:
         col_from.children.unlink(col)
     except RuntimeError:
-        pass
+        print(f"Error: exception occured while swapping parent of collection \"{col.name}\" from collection"
+               "\"{col_from.name}\" to collection \"{col_to.name}\".\n{e}")
 
     try:
         col_to.children.link(col)
     except RuntimeError:
-        pass
+        print(f"Error: exception occured while swapping parent of collection \"{col.name}\" from collection"
+               "\"{col_from.name}\" to collection \"{col_to.name}\".\n{e}")
 
 
 def unlink_nested_collections(parent_col: bpy.types.Collection
@@ -176,7 +178,8 @@ def get_current_wow_model_collection(scene: bpy.types.Scene
     if act_col.name in scene.collection.children:
         if getattr(act_col, id_prop).enabled:
             return act_col
-        print("Error: Couldn't find current WoW model collection: Active collection is not enabled to be a WoW Collection.")
+        print("Error: Couldn't find current WoW model collection: Active collection is not enabled to be a WoW "
+              "Collection.")
         return None
         # return create_wow_model_collection(scene, id_prop)
 
