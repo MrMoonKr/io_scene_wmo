@@ -108,7 +108,7 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
 
         flags = bpy.context.scene.wow_wmo_root.flags
 
-        if "2" in flags and group.wow_wmo_group.place_type == '8192':
+        if "2" in flags and WoWWMOGroup.is_indoor(obj):
             final_color += mathutils.Vector(tuple([c / 2 for c in bpy.context.scene.wow_wmo_root.ambient_color]))
 
         return final_color

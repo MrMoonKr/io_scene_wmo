@@ -935,7 +935,12 @@ class BlenderWMOSceneGroup:
         if '5' in obj.wow_wmo_group.flags:
             self.wmo_group.mogp.flags |= MOGPFlags.UseExteriorSky
 
-        self.wmo_group.mogp.flags |= int(obj.wow_wmo_group.place_type)
+        if WoWWMOGroup.is_outdoor(obj):
+            self.wmo_group.mogp.flags |= MOGPFlags.Outdoor
+        elif WoWWMOGroup.is_indoor(obj):
+            self.wmo_group.mogp.flags |= MOGPFlags.Indoor
+        else:
+            raise Exception('\nThe group \"{}\" is not in a valid outdoor or indoor collection'.format(obj.name))
 
         if self.has_blending:
             self.wmo_group.mogp.flags |= MOGPFlags.HasTwoMOCV

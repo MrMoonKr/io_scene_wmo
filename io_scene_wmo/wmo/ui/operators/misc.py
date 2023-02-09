@@ -296,9 +296,7 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
         def iterate_groups():
             wmo_outdoor_collection = bpy.data.collections.get('Outdoor')
             wmo_indoor_collection = bpy.data.collections.get('Indoor')
-            # place_type '8' = Outdoor, place_type '8192' = Indoor
             for i, wmo_group in enumerate(list(wmo_outdoor_collection.objects) + list(wmo_indoor_collection.objects)):
-                # if wmo_group.pointer.wow_wmo_group.place_type == '8192':
                 if WoWWMOGroup.is_indoor():
                     # group_id = wmo_group.pointer.wow_wmo_group.group_id
                     render_images(wmo_group.pointer, i)

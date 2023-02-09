@@ -65,7 +65,7 @@ def fog_validator(self, context):
 
 
 def update_place_type(self, context):
-    # TODO with new collection system
+    # TODO with new collection system, replace by some collection object handler
     obj = context.object
 
     if not obj:
@@ -75,6 +75,7 @@ def update_place_type(self, context):
         return
 
     if self.place_type == '8':
+    # if WoWWMOGroup.is_outdoor(obj):
         obj.pass_index |= 0x1 # BlenderWMOObjectRenderFlags.IsOutdoor
         obj.pass_index &= ~0x2 # BlenderWMOObjectRenderFlags.IsIndoor
     else:
