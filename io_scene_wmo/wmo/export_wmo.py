@@ -38,10 +38,6 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
     for _ in tqdm(range(1), desc='Writing WMO files', ascii=True):
         wmo.write()
 
-    bpy.context.scene.wow_wmo_root_elements.is_update_critical = False
-
-    for group in bpy.context.scene.wow_wmo_root_elements.groups:
-        group.export = False
 
     print("\nExport finished successfully. "
           "\nTotal export time: ", time.strftime("%M minutes %S seconds\a", time.gmtime(time.time() - start_time)))

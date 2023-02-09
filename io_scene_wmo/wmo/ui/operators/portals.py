@@ -1,5 +1,6 @@
 import bpy
 from ..enums import portal_dir_alg_enum
+from ..custom_objects import WoWWMOPortal
 
 
 class WMO_OT_bake_portal_relations(bpy.types.Operator):
@@ -30,10 +31,10 @@ class WMO_OT_bake_portal_relations(bpy.types.Operator):
 
         success = False
 
-        groups = tuple(x for x in bpy.context.scene.objects if x.wow_wmo_group.enabled and not x.hide_get())
+        groups = tuple(x for x in bpy.context.scene.objects if WoWWMOPortal.match(x) and not x.hide_get())
 
         for obj in bpy.context.selected_objects:
-            if obj.wow_wmo_portal.enabled:
+            if WoWWMOPortal.match(obj):
                 direction = find_nearest_objects_pair(obj, groups)
                 obj.wow_wmo_portal.first = direction[0] if direction[0] else ""
                 obj.wow_wmo_portal.second = direction[1] if direction[1] else ""
@@ -61,7 +62,7 @@ class WMO_OT_invert_portals(bpy.types.Operator):
     def execute(self, context):
         success = False
         for ob in bpy.context.selected_objects:
-            if ob.wow_wmo_portal.enabled:
+            if WoWWMOPortal.match(ob):
                 ob.wow_wmo_portal.algorithm = self.algorithm
                 success = True
 

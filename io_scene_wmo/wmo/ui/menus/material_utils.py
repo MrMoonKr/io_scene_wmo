@@ -48,8 +48,8 @@ class WMO_OT_assign_material(bpy.types.Operator):
                 load_wmo_shader_dependencies()
                 update_wmo_mat_node_tree(mat)
 
-                slot = context.scene.wow_wmo_root_elements.materials.add()
-                slot.pointer = mat
+                # slot = context.scene.wow_wmo_root_elements.materials.add()
+                # slot.pointer = mat
                 mat.wow_wmo_material.enabled = True
 
             mat_index = -1
@@ -119,8 +119,8 @@ class WMO_OT_import_texture_from_filepath(bpy.types.Operator):
         load_wmo_shader_dependencies()
         update_wmo_mat_node_tree(mat)
 
-        slot = context.scene.wow_wmo_root_elements.materials.add()
-        slot.pointer = mat
+        # slot = context.scene.wow_wmo_root_elements.materials.add()
+        # slot.pointer = mat
         mat.wow_wmo_material.self_pointer = mat
         mat.wow_wmo_material.enabled = True
 
@@ -169,8 +169,8 @@ class WMO_OT_import_texture_from_wmv(bpy.types.Operator):
         load_wmo_shader_dependencies()
         update_wmo_mat_node_tree(mat)
 
-        slot = context.scene.wow_wmo_root_elements.materials.add()
-        slot.pointer = mat
+        # slot = context.scene.wow_wmo_root_elements.materials.add()
+        # slot.pointer = mat
         mat.wow_wmo_material.enabled = True
 
         global display_material_select_pie
@@ -275,9 +275,8 @@ def set_image(self, value):
 
 def get_more_materials_list(self, context):
     scene = bpy.context.scene
-    materials = list([mat for mat in scene.wow_wmo_root_elements.materials
-                      if mat.pointer
-                      and mat.pointer.wow_wmo_material.diff_texture_1 == scene.wow_last_selected_images[-1].pointer])
+    materials = list([mat for mat in bpy.data.materials
+                      if  mat.wow_wmo_material.diff_texture_1 == scene.wow_last_selected_images[-1].pointer])
 
     return list([(mat.name, mat.name, mat.name, 'MATERIAL', i) for i, mat in enumerate(materials[5:])]) if len(
         materials) > 6 else []
@@ -300,9 +299,8 @@ class VIEW3D_MT_wmo_select_material(Menu):
         op = pie.operator("mesh.wow_assign_material", text='New material', icon='ADD')
         op.action = 'NEW'
 
-        materials = list([mat for mat in scene.wow_wmo_root_elements.materials
-                          if mat.pointer
-                          and mat.pointer.wow_wmo_material.diff_texture_1 == scene.wow_last_selected_images[-1].pointer])
+        materials = list([mat for mat in bpy.data.materials
+                          if mat.wow_wmo_material.diff_texture_1 == scene.wow_last_selected_images[-1].pointer])
 
         if len(materials) > 6:
             for mat in materials[:5]:

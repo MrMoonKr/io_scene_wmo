@@ -1,6 +1,7 @@
 import hashlib
 import bpy
 import bmesh
+import typing
 
 from mathutils import Vector, Matrix
 from bmesh.types import BMVert
@@ -16,6 +17,7 @@ from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui.preferences import get_project_preferences
 from ..utils.misc import find_nearest_object
 from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
+from .ui.collections import get_wmo_collection, SpecialCollections, get_wmo_groups_list
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
@@ -40,6 +42,11 @@ class BlenderWMOScene:
         self.bl_doodad_sets: Dict[str, bpy.types.Object] = {}
         self.groups_eval: List[bpy.types.Mesh] = []
         self.group_batch_params: List[WMOGeometryBatcherMeshParams] = []
+        # used for export:
+        self.portals_relations: Dict[str, List[str]] = {}
+        self.lights_relations: Dict[str, List[int]] = {}
+        self.doodads_relations: Dict[str, List[int]] = {}
+        self.export_group_ids: Dict[str, List[int]] = {}
 
     def load_materials(self, texture_dir=None):
         """ Load materials from WoW WMO root file """
@@ -140,13 +147,14 @@ class BlenderWMOScene:
 
             mat.pass_index = pass_index
 
-            slot = bpy.context.scene.wow_wmo_root_elements.materials.add()
-            slot.pointer = mat
 
     def load_lights(self):
         """ Load WoW WMO MOLT lights """
 
         bl_light_types = ['POINT', 'SPOT', 'SUN', 'POINT']
+        
+        scn = bpy.context.scene
+        light_collection = get_wmo_collection(scn, SpecialCollections.Lights) 
 
         for i, wmo_light in tqdm(list(enumerate(self.wmo.molt.lights)), desc='Importing lights', ascii=True):
 
@@ -183,18 +191,12 @@ class BlenderWMOScene:
             self.bl_lights.append(light)
 
             # move lights to collection
-            scn = bpy.context.scene
-
-            light_collection = bpy.data.collections.get("Lights")
-
-            if not light_collection:
-                light_collection = bpy.data.collections.new("Lights")
-                scn.collection.children.link(light_collection)
-
             light_collection.objects.link(obj)
 
     def load_fogs(self):
         """ Load fogs from WMO Root File"""
+
+        fog_collection = get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs)
 
         for i, wmo_fog in tqdm(list(enumerate(self.wmo.mfog.fogs)), desc='Importing fogs', ascii=True):
 
@@ -210,13 +212,6 @@ class BlenderWMOScene:
 
             fog_obj.scale = (wmo_fog.big_radius,wmo_fog.big_radius,wmo_fog.big_radius)
             # move fogs to collection
-            scn = bpy.context.scene
-
-            fog_collection = bpy.data.collections.get("Fogs")
-            if not fog_collection:
-                fog_collection = bpy.data.collections.new("Fogs")
-                scn.collection.children.link(fog_collection)
-
             fog_collection.objects.link(fog_obj)
             bpy.context.view_layer.objects.active = fog_obj
 
@@ -245,33 +240,26 @@ class BlenderWMOScene:
         doodad_prototypes = {}
 
         scene = bpy.context.scene
+        doodad_collection = get_wmo_collection(scene, SpecialCollections.Doodads)
 
         with tqdm(self.wmo.modd.definitions, desc='Importing doodads', ascii=True) as progress:
             for doodad_set in self.wmo.mods.sets:
+                # replace anchor object by collections
+                doodadset_coll = bpy.data.collections.get(doodad_set.name)
+                if not doodadset_coll:
+                    doodadset_coll = bpy.data.collections.new(doodad_set.name)
+                    doodad_collection.children.link(doodadset_coll)
 
-                anchor = bpy.data.objects.new(doodad_set.name, None)
-                anchor.empty_display_type = 'SPHERE'
+                # anchor.name = doodad_set.name
+                # anchor.hide_set(True)
+                # anchor.hide_select = True
+                # anchor.lock_location = (True, True, True)
+                # anchor.lock_rotation = (True, True, True)
+                # anchor.lock_scale = (True, True, True)
 
-                anchor.wow_wmo_doodad_set.enabled = True
-                slot = scene.wow_wmo_root_elements.doodad_sets.add()
-                slot.pointer = anchor
-
-                # move doodads to collection
-                doodad_collection = bpy.data.collections.get("Doodads")
-
-                if not doodad_collection:
-                    doodad_collection = bpy.data.collections.new("Doodads")
-                    scene.collection.children.link(doodad_collection)
-
-                if anchor:
-                    doodad_collection.objects.link(anchor)
-
-                anchor.name = doodad_set.name
-                anchor.hide_set(True)
-                anchor.hide_select = True
-                anchor.lock_location = (True, True, True)
-                anchor.lock_rotation = (True, True, True)
-                anchor.lock_scale = (True, True, True)
+                doodadset_coll.hide_select = True
+                doodadset_coll.color_tag = 'COLOR_04'
+                # doodadset_coll.hide_viewport = True
 
                 for i in range(doodad_set.start_doodad, doodad_set.start_doodad + doodad_set.n_doodads):
                     doodad = self.wmo.modd.definitions[i]
@@ -291,8 +279,12 @@ class BlenderWMOScene:
                         # for j, mat in enumerate(nobj.data.materials):
                         #     nobj.data.materials[j] = mat.copy()
 
-                    nobj.parent = anchor
-                    bpy.context.collection.objects.link(nobj)
+                    # nobj.parent = anchor
+                    # bpy.context.collection.objects.link(nobj)
+
+                    # also link to base collection ?
+                    doodadset_coll.objects.link(nobj)
+
                     bpy.context.view_layer.objects.active = nobj
 
                     nobj.wow_wmo_doodad.self_pointer = nobj
@@ -321,15 +313,14 @@ class BlenderWMOScene:
                                                 doodad.rotation[1],
                                                 doodad.rotation[2])
                     nobj.hide_set(True)
-                    slot = scene.wow_wmo_root_elements.doodad_sets[-1].doodads.add()
-                    slot.pointer = nobj
 
-                    doodad_collection.objects.link(nobj)
+                    # doodad_collection.objects.link(nobj)
 
                     progress.update(1)
 
     def load_portals(self):
         """ Load WoW WMO portal planes """
+        portal_collection = get_wmo_collection(bpy.context.scene, SpecialCollections.Portals)
 
         vert_count = 0
         for index, portal in tqdm(list(enumerate(self.wmo.mopt.infos)), desc='Importing portals', ascii=True):
@@ -372,13 +363,6 @@ class BlenderWMOScene:
             obj.data.materials.append(portal_mat)
 
             # move portals to collection
-            scn = bpy.context.scene
-
-            portal_collection = bpy.data.collections.get("Portals")
-            if not portal_collection:
-                portal_collection = bpy.data.collections.new("Portals")
-                scn.collection.children.link(portal_collection)
-
             portal_collection.objects.link(obj)
 
     def load_portal_relations(self):
@@ -455,91 +439,122 @@ class BlenderWMOScene:
     def build_references(self, export_selected, export_method):
         """ Build WMO references in Blender scene """
 
-        root_elements = bpy.context.scene.wow_wmo_root_elements
 
         # process materials
-        for i, slot in tqdm(enumerate(root_elements.materials), desc='Building material references', ascii=True):
-            if not slot.pointer:
-                raise ReferenceError('\nError: Material slot does not point to a valid material.')
-
-            self.bl_materials[i] = slot.pointer
+#        for i, slot in tqdm(enumerate(root_elements.materials), desc='Building material references', ascii=True):
+#            if not slot.pointer:
+#                raise ReferenceError('\nError: Material slot does not point to a valid material.')
+#
+#            self.bl_materials[i] = slot.pointer
+        for i, material in tqdm(enumerate(bpy.data.materials), desc='Building material references', ascii=True):
+            if material.wow_wmo_material.enabled:
+                self.bl_materials[i] = material
 
         # process groups
+        # self.groups_relations.clear()
+        self.portals_relations.clear()
+        self.lights_relations.clear()
+        self.doodads_relations.clear()
+        self.export_group_ids.clear()
+
         group_objects = []
-        for i, slot in tqdm(enumerate(root_elements.groups), desc='Building group references', ascii=True):
+        scn = bpy.context.scene
 
-            if not slot.pointer:
-                raise ReferenceError('\nError: Group slot \"#{}\" is empty or pointing to an invalid object.')
-
-            if (export_selected and not slot.pointer.select_get()) or slot.pointer.hide_get():
+        for i, group_object in tqdm(enumerate(get_wmo_groups_list(scn)), desc='Building group references', ascii=True):
+        # for i, group_object in tqdm(enumerate(wmo_outdoor_collection.objects), desc='Building group references(Outdoor)', ascii=True):
+            if (export_selected and not group_object.select_get()) or group_object.hide_get():
                 continue
+            
+            # group_object.wow_wmo_group.group_id = i # TODO
+            # group_object.wow_wmo_group.group_id = group_id
+            self.export_group_ids[group_object.name] = i
 
-            slot.pointer.wow_wmo_group.group_id = i
-
-            slot.pointer.wow_wmo_group.relations.doodads.clear()
-            slot.pointer.wow_wmo_group.relations.lights.clear()
-            slot.pointer.wow_wmo_group.relations.portals.clear()
+            # self.groups_relations[group_object.name, relations]
+            self.portals_relations[group_object.name] = []
+            self.lights_relations[group_object.name] = []
+            self.doodads_relations[group_object.name] = []
 
             group = self.wmo.add_group()
-            self.bl_groups.append(BlenderWMOSceneGroup(self, group, obj=slot.pointer))
-            group_objects.append(slot.pointer)
+            self.bl_groups.append(BlenderWMOSceneGroup(self, group, obj=group_object))
+            group_objects.append(group_object)
 
-            group.export = not (export_method == 'PARTIAL' and not slot.export)
+            group.export = not (export_method == 'PARTIAL' and not group_object.export)
+
 
         # process portals
-        for i, slot in tqdm(enumerate(root_elements.portals), desc='Building portal references', ascii=True):
-            self.bl_portals.append(slot.pointer)
-            slot.pointer.wow_wmo_portal.portal_id = i
+        # for i, slot in tqdm(enumerate(root_elements.portals), desc='Building portal references', ascii=True):
+        for i, portal_object in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Portals).objects), desc='Building portal references', ascii=True):
+            # self.bl_portals.append(slot.pointer)
+            # slot.pointer.wow_wmo_portal.portal_id = i
+            self.bl_portals.append(portal_object)
+            portal_object.wow_wmo_portal.portal_id = i
 
-            if slot.pointer.wow_wmo_portal.first:
-                rel = slot.pointer.wow_wmo_portal.first.wow_wmo_group.relations.portals.add()
-                rel.id = slot.pointer.name  # TODO: store pointer instead?
+            # if portal_object.wow_wmo_portal.first:
+            #     rel = portal_object.wow_wmo_portal.first.wow_wmo_group.relations.portals.add()
+            #     rel.id = portal_object.name  # TODO: store pointer instead?
 
-            if slot.pointer.wow_wmo_portal.second:
-                rel = slot.pointer.wow_wmo_portal.second.wow_wmo_group.relations.portals.add()
-                rel.id = slot.pointer.name  # TODO: store pointer instead?
+            # if portal_object.wow_wmo_portal.second:
+            #     rel = portal_object.wow_wmo_portal.second.wow_wmo_group.relations.portals.add()
+            #     rel.id = portal_object.name  # TODO: store pointer instead?
+            
+            # new system
+            if portal_object.wow_wmo_portal.first:
+                # self.groups_relations[portal_object.wow_wmo_portal.first.name].portals.append(portal_object.name)
+                self.portals_relations[portal_object.wow_wmo_portal.first.name].append(portal_object.name)
+            
+            if portal_object.wow_wmo_portal.second:
+                # self.groups_relations[portal_object.wow_wmo_portal.second.name].portals.append(portal_object.name)
+                self.portals_relations[portal_object.wow_wmo_portal.second.name].append(portal_object.name)
 
         # process fogs
-        for i, slot in tqdm(enumerate(root_elements.fogs), desc='Building fog references', ascii=True):
-            self.bl_fogs.append(slot.pointer)
-            slot.pointer.wow_wmo_fog.fog_id = i
+        # for i, slot in tqdm(enumerate(root_elements.fogs), desc='Building fog references', ascii=True):
+        for i, fog_object in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Fogs).objects), desc='Building fog references', ascii=True):
+            self.bl_fogs.append(fog_object)
+            fog_object.wow_wmo_fog.fog_id = i
 
         # process lights
-        for i, slot in tqdm(enumerate(root_elements.lights), desc='Building light references', ascii=True):
-            group = find_nearest_object(slot.pointer, group_objects)
-            rel = group.wow_wmo_group.relations.lights.add()
-            rel.id = i
+        # for i, slot in tqdm(enumerate(root_elements.lights), desc='Building light references', ascii=True):
+        for i, light_object in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Lights).objects), desc='Building light references', ascii=True):
+            group = find_nearest_object(light_object, group_objects)
+            # rel = group.wow_wmo_group.relations.lights.add()
+            # rel.id = i
+            # self.groups_relations[group.name].lights.append(i) # new system
+            self.lights_relations[group.name].append(i)
 
-            self.bl_lights.append(slot.pointer)
+            self.bl_lights.append(light_object)
 
         # process doodads
         doodad_counter = 0
-        for i, slot in tqdm(enumerate(root_elements.doodad_sets), desc='Building doodad references', ascii=True):
+        # for i, slot in tqdm(enumerate(root_elements.doodad_sets), desc='Building doodad references', ascii=True):
+        # for i, doodad_set_object in tqdm(enumerate(bpy.data.collections.get('Doodads').objects), desc='Building doodad references', ascii=True):
+        for i, doodad_set_collection in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Doodads).children), desc='Building doodad references', ascii=True):
 
             doodads = []
-            for doodad in slot.doodads:
-                if not doodad.pointer:
-                    raise Exception("Error : Doodad reference is linked with a non existing object, "
-                                    "check and fix your doodad references.")
-                    
-                group = find_nearest_object(doodad.pointer, group_objects)
-                rel = group.wow_wmo_group.relations.doodads.add()
-                rel.id = doodad_counter
+
+            # print(doodad_set_collection.name)
+
+            # for doodad in doodad_set_object.doodads:
+            for doodad in doodad_set_collection.objects:
+                group = find_nearest_object(doodad, group_objects)
+                # rel = group.wow_wmo_group.relations.doodads.add()
+                # rel.id = doodad_counter
+                # self.groups_relations[group.name].doodads.append(doodad_counter) # new system
+                self.doodads_relations[group.name].append(doodad_counter)
+
                 doodad_counter += 1
 
-                doodads.append(doodad.pointer)
+                doodads.append(doodad)
 
-            self.bl_doodad_sets[slot.name] = doodads
+            self.bl_doodad_sets[doodad_set_collection.name] = doodads
 
     def save_materials(self):
         """ Add material if not already added, then return index in root file """
 
-        for i, mat_slot in tqdm(enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
+        # for i, mat_slot in tqdm(enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
+        for i, mat in tqdm(enumerate(self.bl_materials)
                                 , desc='Saving materials'
                                 , ascii=True
                                 ):
-
-            mat = mat_slot.pointer
 
             if not mat.wow_wmo_material.diff_texture_1:
                 raise ReferenceError('\nError:  Material \"{}\" must have a diffuse texture.'.format(mat.name))
@@ -732,11 +747,14 @@ class BlenderWMOScene:
         for bl_group, group_mesh_eval in tqdm(zip(self.bl_groups, self.groups_eval), desc='Saving portals', ascii=True):
 
             group_obj = bl_group.bl_object
-            portal_relations = group_obj.wow_wmo_group.relations.portals
+            # portal_relations = group_obj.wow_wmo_group.relations.portals
+            # portal_relations = self.groups_relations[group_obj.name].portals
+            portal_relations = self.portals_relations[group_obj.name]
             bl_group.wmo_group.mogp.portal_start = len(self.wmo.mopr.relations)
 
             for relation in portal_relations:
-                portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
+                # portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
+                portal_obj = bpy.context.scene.objects[relation].evaluated_get(depsgraph)
                 portal_index = portal_obj.original.wow_wmo_portal.portal_id
                 portal_mesh = portal_obj.data
 
@@ -797,8 +815,9 @@ class BlenderWMOScene:
                 # calculating portal relation
                 relation = PortalRelation()
                 relation.portal_index = portal_index
-                relation.group_index = second.wow_wmo_group.group_id if first.name == group_obj.original.name \
-                    else first.wow_wmo_group.group_id
+
+                relation.group_index = self.export_group_ids[second.name] if first.name == group_obj.original.name \
+                    else self.export_group_ids[first.name]
 
                 relation.side = bl_group.get_portal_direction(portal_obj, group_obj.evaluated_get(depsgraph))
 
@@ -813,7 +832,14 @@ class BlenderWMOScene:
                 self.groups_eval.append(mesh)
                 self.group_batch_params.append(params)
 
+                bl_group.doodads_relations = self.doodads_relations[bl_group.bl_object.name]
+                bl_group.lights_relations = self.lights_relations[bl_group.bl_object.name]
+
+
     def save_groups(self):
+        print(len(self.group_batch_params))
+        print(self.group_batch_params[0])
+        print(dir(self.group_batch_params[0]))
         for _ in tqdm(range(1), desc='Processing group geometry', ascii=True):
             batcher = CWMOGeometryBatcher(self.group_batch_params)
 

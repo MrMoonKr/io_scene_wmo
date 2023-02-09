@@ -6,6 +6,7 @@ from .... import PACKAGE_NAME
 from ....utils.misc import load_game_data
 from ....pywowlib.blp import PNG2BLP
 # from ....pywowlib.io_utils.types import *
+from ...ui.custom_objects import *
 
 from ....third_party.tqdm import tqdm
 
@@ -83,7 +84,7 @@ class WMO_OT_quick_collision(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         for ob in tqdm(selected_objects, desc='Generating collision', ascii=True):
 
-            if ob.wow_wmo_group.enabled:
+            if WoWWMOGroup.match(ob):
 
                 bpy.context.view_layer.objects.active = ob
 
@@ -138,98 +139,39 @@ class WMO_OT_select_entity(bpy.types.Operator):
     )
 
     def execute(self, context):
+        
+        # can optimise by selecting by collection
 
         for obj in bpy.context.scene.objects:
             if obj.hide_get():
                 continue
 
+            print("Checking object :" + obj.name + " -----------\n")
             if obj.type == 'MESH':
-                if obj.wow_wmo_group.enabled:
-                    if self.entity == "Outdoor" and obj.wow_wmo_group.place_type == '8':
+                if WoWWMOGroup.match(obj):
+                    if self.entity == "Outdoor" and WoWWMOGroup.is_outdoor(obj):
                         obj.select_set(True)
-                    elif self.entity == "Indoor" and obj.wow_wmo_group.place_type == '8192':
+                    elif self.entity == "Indoor" and WoWWMOGroup.is_indoor(obj):
                         obj.select_set(True)
 
-                    if obj.wow_wmo_group.collision_mesh:
+                    if self.entity == "Collision" and obj.wow_wmo_group.collision_mesh:
                         obj.wow_wmo_group.collision_mesh.select_set(True)
 
-                elif self.entity not in ("wow_wmo_light", "Outdoor", "Indoor", "Collision"):
-                    if getattr(obj, self.entity).enabled:
-                        obj.select_set(True)
+                # could also do : elif self.entity == "Collision" and WoWWMOCollision.match(obj):
+                elif self.entity == "wow_wmo_doodad" and WoWWMODoodad.match(obj):
+                    print(obj.name + " is doodad")
+                    obj.select_set(True)
+                elif self.entity == "wow_wmo_fog" and WoWWMOFog.match(obj):
+                    print(obj.name + " is fog")
+                    obj.select_set(True)
+                elif self.entity == "wow_wmo_liquid" and WoWWMOLiquid.match(obj):
+                    obj.select_set(True)
+                elif self.entity == "wow_wmo_portal" and WoWWMOPortal.match(obj):
+                    print(obj.name + " is portal")
+                    obj.select_set(True)
 
-            elif obj.type == 'LIGHT' and self.entity == "wow_wmo_light":
+            elif obj.type == 'LIGHT' and self.entity == "wow_wmo_light" and WoWWMOLight.match(obj):
                 obj.select_set(True)
-
-        return {'FINISHED'}
-
-
-class WMO_OT_purge_references(bpy.types.Operator):
-    bl_idname = 'scene.wow_wmo_purge_references'
-    bl_label = 'Purge invalid references'
-    bl_description = 'Remove all invalid WMO components references from the scene(deosn\'t remove objects)'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.scene.wow_scene.type == 'WMO'
-
-    def execute(self, context):
-
-        # ids seem to not update, so rerun the function on each update
-        # splitting them for performance reasons
-
-        def purge_portals():
-            for i, portalslot in enumerate(bpy.context.scene.wow_wmo_root_elements.portals):
-                if portalslot.pointer is None:
-                    bpy.context.scene.wow_wmo_root_elements.portals.remove(i)
-                    purge_portals()
-                    break
-        # groups
-        def purge_groups():
-            for i, groupslot in enumerate(bpy.context.scene.wow_wmo_root_elements.groups):
-                if groupslot.pointer is None:
-                    bpy.context.scene.wow_wmo_root_elements.groups.remove(i)
-                    purge_groups()
-                    break
-        # fogs
-        def purge_fogs():
-            for i, fogslot in enumerate(bpy.context.scene.wow_wmo_root_elements.fogs):
-                if fogslot.pointer is None:
-                    bpy.context.scene.wow_wmo_root_elements.fogs.remove(i)
-                    purge_fogs()
-                    break
-        # material
-        def purge_materials():
-            for i, matslot in enumerate(bpy.context.scene.wow_wmo_root_elements.materials):
-                if matslot.pointer is None:
-                    bpy.context.scene.wow_wmo_root_elements.materials.remove(i)
-                    purge_materials()
-                    break
-        def purge_lights():
-            for i, lightslot in enumerate(bpy.context.scene.wow_wmo_root_elements.lights):
-                if lightslot.pointer is None:
-                    bpy.context.scene.wow_wmo_root_elements.lights.remove(i)
-                    purge_lights()
-                    break
-        def purge_doodads():
-            for i, doodadsetslot in enumerate(bpy.context.scene.wow_wmo_root_elements.doodad_sets):
-                if doodadsetslot.pointer is None:
-                    bpy.context.scene.wow_wmo_root_elements.doodad_sets.remove(i)
-                    purge_doodads()
-                    break
-                else:
-                    for ii, doodadslot in enumerate(doodadsetslot.doodads):
-                        if doodadslot.pointer is None:
-                            doodadsetslot.doodads.remove(ii)
-                            purge_doodads()
-                            break
-        
-        purge_portals()
-        purge_groups()
-        purge_fogs()
-        purge_materials()
-        purge_lights()
-        purge_doodads()
 
         return {'FINISHED'}
 
@@ -288,7 +230,8 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
             bpy.data.scenes["Scene"].camera = bpy.data.objects['MinimapsCamera']
 
         def set_mat_backface_culling():
-            for wmo_mat in bpy.data.scenes["Scene"].wow_wmo_root_elements.materials:
+            # for wmo_mat in bpy.data.scenes["Scene"].wow_wmo_root_elements.materials:
+            for wmo_mat in bpy.data.materials:
                 wmo_mat.pointer.use_backface_culling = True
 
 
@@ -314,10 +257,12 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
 
         def iterate_groups():
+            wmo_outdoor_collection = bpy.data.collections.get('Outdoor')
+            wmo_indoor_collection = bpy.data.collections.get('Indoor')
             # place_type '8' = Outdoor, place_type '8192' = Indoor
-            for i, wmo_group in enumerate(bpy.data.scenes["Scene"].wow_wmo_root_elements.groups):
-                print(wmo_group.pointer.wow_wmo_group.place_type)
-                if wmo_group.pointer.wow_wmo_group.place_type == '8192':
+            for i, wmo_group in enumerate(list(wmo_outdoor_collection.objects) + list(wmo_indoor_collection.objects)):
+                # if wmo_group.pointer.wow_wmo_group.place_type == '8192':
+                if WoWWMOGroup.is_indoor():
                     # group_id = wmo_group.pointer.wow_wmo_group.group_id
                     render_images(wmo_group.pointer, i)
 

@@ -120,9 +120,9 @@ class CustomObject:
         # make sure we are not in a prohibited mode
         if obj.mode != 'OBJECT' and obj.mode not in cls.__wbs_allowed_modes__:
             with ActiveObjectOverride(obj):
-                bpy.ops.object.mode_set(mode='OBJECT')
                 MessageStack().push_message(msg=f'Object "{obj.name}" of custom type "{cls.__name__}" '
                                                 f'cannot use mode \'{obj.mode}\'', icon='ERROR')
+                bpy.ops.object.mode_set(mode='OBJECT')
 
             cls.on_mode_change_failure(update, obj.mode)
 

@@ -2,7 +2,7 @@ import bpy
 import mathutils
 import bmesh
 
-from typing import Tuple
+from typing import Tuple, Dict, List
 
 from ..pywowlib.file_formats.wmo_format_root import MOHDFlags, PortalRelation
 from ..pywowlib.file_formats.wmo_format_group import MOGPFlags, LiquidVertex, BSPPlaneType
@@ -11,7 +11,8 @@ from .bl_render import BlenderWMOObjectRenderFlags
 from ..pywowlib import WoWVersions
 from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams, LiquidExportParams
 from ..utils.colors import srgb_to_linear as linear
-
+from .ui.custom_objects import WoWWMOGroup
+from .ui.collections import get_wmo_collection, SpecialCollections
 
 class BlenderWMOSceneGroup:
     def __init__(self, wmo_scene, wmo_group, obj=None):
@@ -20,6 +21,11 @@ class BlenderWMOSceneGroup:
         self.bl_object: bpy.types.Object = obj
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
         self.has_blending: bool = False
+
+        # self.portals_relations: List[str] = []
+        self.lights_relations: List[int] = []
+        # self.liquid_relations:  str = ''
+        self.doodads_relations:  List[int] = []
 
     @staticmethod
     def get_material_viewport_image(material):
@@ -245,10 +251,7 @@ class BlenderWMOSceneGroup:
         obj.location = pos
 
         scn = bpy.context.scene
-        liquid_collection = bpy.data.collections.get("Collision")
-        if not liquid_collection:
-            liquid_collection = bpy.data.collections.new("Collision")
-            scn.collection.children.link(liquid_collection)
+        liquid_collection = get_wmo_collection(scn, SpecialCollections.Liquids)
 
         liquid_collection.objects.link(obj)
 
@@ -476,7 +479,6 @@ class BlenderWMOSceneGroup:
             nobj.wow_wmo_vertex_info.vertex_group = collision_vg.name
 
         # add WMO group properties
-        nobj.wow_wmo_group.enabled = True
         nobj.wow_wmo_group.description = self.wmo_scene.wmo.mogn.get_string(group.mogp.desc_group_name_ofs)
         nobj.wow_wmo_group.group_dbc_id = int(group.mogp.group_id)
 
@@ -486,10 +488,8 @@ class BlenderWMOSceneGroup:
         nobj.wow_wmo_group.fog4 = self.wmo_scene.bl_fogs[group.mogp.fog_indices[3]]
 
         if group.mogp.flags & MOGPFlags.Indoor:
-            nobj.wow_wmo_group.place_type = str(0x2000)
             pass_index |= BlenderWMOObjectRenderFlags.IsIndoor
         else:
-            nobj.wow_wmo_group.place_type = str(0x8)
             pass_index |= BlenderWMOObjectRenderFlags.IsOutdoor
 
         flag_set = nobj.wow_wmo_group.flags
@@ -515,20 +515,13 @@ class BlenderWMOSceneGroup:
 
         # move objects to collection
 
-        wmo_outdoor_collection = bpy.data.collections.get("Outdoor")
-        if not wmo_outdoor_collection:
-            wmo_outdoor_collection = bpy.data.collections.new("Outdoor")
-            scn.collection.children.link(wmo_outdoor_collection)
+        wmo_outdoor_collection = get_wmo_collection(scn, SpecialCollections.Outdoor)
+        wmo_indoor_collection = get_wmo_collection(scn, SpecialCollections.Indoor)
 
-        wmo_indoor_collection = bpy.data.collections.get("Indoor")
-        if not wmo_indoor_collection:
-            wmo_indoor_collection = bpy.data.collections.new("Indoor")
-            scn.collection.children.link(wmo_indoor_collection)
-
-        if nobj.wow_wmo_group.place_type == '8':
+        if group.mogp.flags & MOGPFlags.Outdoor:
             wmo_outdoor_collection.objects.link(nobj)
 
-        if nobj.wow_wmo_group.place_type == '8192':
+        if group.mogp.flags & MOGPFlags.Indoor:
             wmo_indoor_collection.objects.link(nobj)
 
         self.bl_object = nobj
@@ -578,16 +571,11 @@ class BlenderWMOSceneGroup:
 
             c_obj = bpy.data.objects.new(c_mesh.name, c_mesh)
             nobj.wow_wmo_group.collision_mesh = c_obj
-            c_obj.wow_wmo_collision_rel = nobj
 
-            collision_collection = bpy.data.collections.get("Collision")
-            if not collision_collection:
-                collision_collection = bpy.data.collections.new("Collision")
-                scn.collection.children.link(collision_collection)
-
+            collision_collection = get_wmo_collection(scn, SpecialCollections.Collision)
             collision_collection.objects.link(c_obj)
 
-        # assign ghost material
+        # assign ghost material for visual only
         if nobj.wow_wmo_group.collision_mesh:
             mat = bpy.data.materials.get("WowMaterial_ghost")
             nobj.wow_wmo_group.collision_mesh.data.materials.append(mat)
@@ -789,8 +777,9 @@ class BlenderWMOSceneGroup:
 
         if len(mesh.materials) > 0:
             if mesh.materials[0].wow_wmo_material.enabled:
-                material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
-                    mesh.materials[0].name)
+                # material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+                #     mesh.materials[0].name)
+                material_id = bpy.data.materials.find(mesh.materials[0].name)
             else:
                 material_id = create_default_liquid_mat()
         else:
@@ -845,7 +834,7 @@ class BlenderWMOSceneGroup:
             group.add_blendmap_chunks()
 
         use_vertex_color = '0' in obj.wow_wmo_group.flags \
-                           or (obj.wow_wmo_group.place_type == '8192' and '1' not in obj.wow_wmo_group.flags)
+                            or (WoWWMOGroup.is_indoor(obj) and '1' not in obj.wow_wmo_group.flags) # 7 = indoor, 1 = nolocallightning
 
         vg_collision_index = -1
 
@@ -858,7 +847,8 @@ class BlenderWMOSceneGroup:
         material_mapping = []
 
         for material in mesh.materials:
-            mat_id = scene.wow_wmo_root_elements.materials.find(material.name)
+            # mat_id = scene.wow_wmo_root_elements.materials.find(material.name)
+            mat_id = bpy.data.materials.find(material.name)
 
             if mat_id < 0:
                 raise Exception('Error: Assigned material \"{}\" is not registered as WoW Material.'.format(
@@ -964,11 +954,13 @@ class BlenderWMOSceneGroup:
                                   fogs[2].wow_wmo_fog.fog_id if fogs[2] else 0,
                                   fogs[3].wow_wmo_fog.fog_id if fogs[3] else 0)
         # save lamps
-        lamps = obj.wow_wmo_group.relations.lights
+        # lamps = obj.wow_wmo_group.relations.lights
+        lamps = self.lights_relations
         if lamps:
             has_lights = True
-            for lamp in lamps:
-                self.wmo_group.molr.light_refs.append(lamp.id)
+            for lamp_id in lamps:
+                # self.wmo_group.molr.light_refs.append(lamp.id)
+                self.wmo_group.molr.light_refs.append(lamp_id)
 
         self.wmo_group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)
         group_info = self.wmo_scene.add_group_info(self.wmo_group.mogp.flags,
@@ -984,17 +976,22 @@ class BlenderWMOSceneGroup:
             for doodad in obj.wow_wmo_group.modr:
                 self.wmo_group.modr.doodad_refs.append(doodad.value)
             self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
-        elif obj.wow_wmo_group.relations.doodads:
-            for doodad in obj.wow_wmo_group.relations.doodads:
-                self.wmo_group.modr.doodad_refs.append(doodad.id)
+        # elif obj.wow_wmo_group.relations.doodads:
+        #     for doodad in obj.wow_wmo_group.relations.doodads:
+        #         self.wmo_group.modr.doodad_refs.append(doodad.id)
+        #     self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
+        elif self.doodads_relations:
+            for doodad in self.doodads_relations:
+                self.wmo_group.modr.doodad_refs.append(doodad)
             self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
         else:
             self.wmo_group.modr = None
 
-        if '0' not in obj.wow_wmo_group.flags:
-            if obj.wow_wmo_group.place_type == '8192':
+        if '0' not in obj.wow_wmo_group.flags: # HasVertexColor
+            
+            if WoWWMOGroup.is_indoor(obj): # Indoor # TODO : get from collection type
                 if '1' in obj.wow_wmo_group.flags \
-                        and not len(obj.data.vertex_colors):
+                        and not len(obj.data.vertex_colors): # DoNotUseLocalLighting
                     self.wmo_group.mocv = None
                 else:
                     self.wmo_group.mogp.flags |= MOGPFlags.HasVertexColor

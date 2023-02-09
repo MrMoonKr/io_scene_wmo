@@ -1,5 +1,5 @@
 import bpy
-
+from ..custom_objects import *
 
 class WMO_OT_pie_menu_manager(bpy.types.Operator):
     bl_idname = 'wm.wmo_pie_menu_manager'
@@ -12,14 +12,14 @@ class WMO_OT_pie_menu_manager(bpy.types.Operator):
             return {'FINISHED'}
 
         if context.object.type == 'MESH':
-            if context.object.wow_wmo_group.enabled:
+            if WoWWMOGroup.match(context.object):
                 if context.object.mode == 'EDIT':
                     bpy.ops.wm.call_menu_pie(name='VIEW3D_MT_wmo_select_texture')
                 elif context.object.mode == 'OBJECT':
                     bpy.ops.wm.call_menu_pie(name='VIEW3D_MT_wmo_group_actions')
-            elif context.object.wow_wmo_doodad.enabled:
+            elif WoWWMODoodad.match(context.object):
                 bpy.ops.wm.call_menu_pie(name='VIEW3D_MT_wmo_doodad_actions')
-            elif context.object.wow_wmo_portal.enabled:
+            elif WoWWMOPortal.match(context.object):
                 bpy.ops.wm.call_menu_pie(name='VIEW3D_MT_wmo_portal_actions')
 
         return {'FINISHED'}

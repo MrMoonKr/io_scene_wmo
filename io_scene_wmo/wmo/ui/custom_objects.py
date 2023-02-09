@@ -32,6 +32,26 @@ class WoWWMOGroup(CustomObject):
         return super().match(obj) \
            and any(match_id_name(col.name, 'Indoor')
                    or match_id_name(col.name, 'Outdoor') for col in obj.users_collection)
+                   
+    @classmethod
+    def is_indoor(cls, obj: bpy.types.Object) -> bool:
+        if WoWWMOGroup.match(obj):
+            for col in obj.users_collection:
+                if match_id_name(col.name, 'Indoor'):
+                    return True
+            return False
+        else:
+            return False
+
+    @classmethod
+    def is_outdoor(cls, obj: bpy.types.Object) -> bool:
+        if WoWWMOGroup.match(obj):
+            for col in obj.users_collection:
+                if match_id_name(col.name, 'Outdoor'):
+                    return True
+            return False
+        else:
+            return False
 
     @classmethod
     def handle_object_if_matched(cls
