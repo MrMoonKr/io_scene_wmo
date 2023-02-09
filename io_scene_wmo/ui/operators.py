@@ -100,8 +100,8 @@ class WBS_OT_save_current_wmo(bpy.types.Operator):
                 return {'CANCELLED'}
 
             # TODO : doesn't work if wow_wmo.dir_path is a full path with Disk name etc, happens if WMO has been imported from local file.
-            # dir_path = os.path.join(project_preferences.project_dir_path, wmo_collection.wow_wmo.dir_path) # DON'T USE
-            dir_path = project_preferences.project_dir_path # temporary so we don't override the old file
+            dir_path = os.path.join(project_preferences.project_dir_path, wmo_collection.wow_wmo.dir_path) # DON'T USE
+            # dir_path = project_preferences.project_dir_path # temporary so we don't override the old file
             filename = wmo_collection.name
             filepath = os.path.join(dir_path, filename)
 
