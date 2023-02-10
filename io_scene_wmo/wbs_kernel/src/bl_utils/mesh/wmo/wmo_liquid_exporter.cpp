@@ -25,6 +25,9 @@ LiquidExporter::LiquidExporter(std::uintptr_t liquid_mesh
     , unsigned mat_id
     , bool is_water)
 : _liquid_mesh(reinterpret_cast<Mesh*>(liquid_mesh))
+, _bl_verts(static_cast<MVert*>(WBS_CustomData_get_layer(&_liquid_mesh->vdata, eCustomDataType::CD_MVERT)))
+, _bl_polygons(static_cast<MPoly*>(WBS_CustomData_get_layer(&_liquid_mesh->pdata, eCustomDataType::CD_MPOLY)))
+, _bl_loops(static_cast<MLoop*>(WBS_CustomData_get_layer(&_liquid_mesh->ldata, eCustomDataType::CD_MLOOP)))
 , _liquid_mesh_matrix_world(glm::make_mat4(liquid_mesh_matrix_world))
 , _mliq_header()
 , _mliq_vertices()
@@ -37,7 +40,7 @@ LiquidExporter::LiquidExporter(std::uintptr_t liquid_mesh
   _mliq_header.liquid_verts.y = y_tiles + 1;
   _mliq_header.liquid_mat_id = mat_id;
 
-  const MVert* vertex = &_liquid_mesh->mvert[0];
+  const MVert* vertex = &_bl_verts[0];
   glm::vec4 vertex_co4 = {vertex->co[0], vertex->co[1], vertex->co[2], 1.f};
   glm::vec3 vertex_co = _liquid_mesh_matrix_world * vertex_co4;
   _mliq_header.liquid_corner = Vector3D{vertex_co.x, vertex_co.y, vertex_co.z};
@@ -52,7 +55,7 @@ void LiquidExporter::_process_mesh_data()
   // find liquid corner
   for (int i = 0; i < _liquid_mesh->totvert; ++i)
   {
-    const MVert* vertex = &_liquid_mesh->mvert[i];
+    const MVert* vertex = &_bl_verts[i];
     glm::vec4 vertex_co4 = {vertex->co[0], vertex->co[1], vertex->co[2], 1.f};
     glm::vec3 vertex_co = _liquid_mesh_matrix_world * vertex_co4;
 
@@ -71,7 +74,7 @@ void LiquidExporter::_process_mesh_data()
     for (std::size_t i = 0; i < _mliq_header.liquid_verts.x * _mliq_header.liquid_verts.y; ++i)
     {
       auto& water_vertex = _mliq_vertices.emplace_back();
-      const MVert* vertex = &_liquid_mesh->mvert[i];
+      const MVert* vertex = &_bl_verts[i];
       glm::vec4 vertex_co4 = {vertex->co[0], vertex->co[1], vertex->co[2], 1.f};
       glm::vec3 vertex_co = _liquid_mesh_matrix_world * vertex_co4;
 
@@ -98,7 +101,7 @@ void LiquidExporter::_process_mesh_data()
 
       for (int j = 0; j < poly->totloop; ++j)
       {
-        const MLoop* loop = &_liquid_mesh->mloop[poly->loopstart + j];
+        const MLoop* loop = &_bl_loops[poly->loopstart + j];
 
         const MLoopUV* uv = &uv_map[poly->loopstart + j];
 
@@ -126,7 +129,7 @@ void LiquidExporter::_process_mesh_data()
 
   for (std::size_t i = 0; i < _liquid_mesh->totpoly; ++i)
   {
-    const MPoly* poly = &_liquid_mesh->mpoly[i];
+    const MPoly* poly = &_bl_polygons[i];
 
     SMOLTile& tile_flags = _mliq_tiles.emplace_back();
     tile_flags.flags_raw = 0;

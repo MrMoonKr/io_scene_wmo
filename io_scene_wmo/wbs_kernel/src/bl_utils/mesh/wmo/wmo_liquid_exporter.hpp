@@ -7,6 +7,9 @@
 #include <vector>
 
 struct Mesh;
+struct MVert;
+struct MPoly;
+struct MLoop;
 
 namespace wbs_kernel::bl_utils::mesh::wmo
 {
@@ -85,6 +88,9 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     void _process_mesh_data();
 
     Mesh* _liquid_mesh;
+    MVert* _bl_verts;
+    MPoly* _bl_polygons;
+    MLoop *_bl_loops;
     glm::mat4 _liquid_mesh_matrix_world;
 
     MLIQHeader _mliq_header;
