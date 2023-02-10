@@ -50,9 +50,9 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
 , _bounding_box_max(Vector3D{std::numeric_limits<float>::lowest()
                               , std::numeric_limits<float>::lowest()
                               , std::numeric_limits<float>::lowest()})
-, _bl_loops(_mesh->mloop)
-, _bl_verts(_mesh->mvert)
-, _bl_polygons(_mesh->mpoly)
+, _bl_loops(static_cast<MLoop*>(WBS_CustomData_get_layer(&_mesh->ldata, eCustomDataType::CD_MLOOP)))
+, _bl_verts(static_cast<MVert*>(WBS_CustomData_get_layer(&_mesh->vdata, eCustomDataType::CD_MVERT)))
+, _bl_polygons(static_cast<MPoly*>(WBS_CustomData_get_layer(&_mesh->pdata, eCustomDataType::CD_MPOLY)))
 , _bl_looptris(_mesh->runtime->looptris.array)
 , _bl_vertex_normals(reinterpret_cast<const float(*)[3]>(_mesh->runtime->vert_normals))
 , _has_collision_vg(_vg_collision_index >= 0)
@@ -117,14 +117,17 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
   {
     polys_per_mat[i] = std::make_pair(&_bl_looptris[i], WMOGeometryBatcher::get_batch_type(&_bl_looptris[i]));
   }
-  
+
   // presort faces by their batch type and material_id forming the batches
-  std::sort(polys_per_mat.begin(), polys_per_mat.end(),
-      [this](std::pair<const MLoopTri*, BatchType> const& lhs, std::pair<const MLoopTri*, BatchType> const& rhs) -> bool
-      {
-        return std::tie(lhs.second, _mesh_materials_per_poly[lhs.first->poly])
-          < std::tie(rhs.second, _mesh_materials_per_poly[rhs.first->poly]);
-      });
+  if (_mesh_materials_per_poly)
+  {
+    std::sort(polys_per_mat.begin(), polys_per_mat.end(),
+        [this](std::pair<const MLoopTri*, BatchType> const& lhs, std::pair<const MLoopTri*, BatchType> const& rhs) -> bool
+        {
+          return std::tie(lhs.second, _mesh_materials_per_poly[lhs.first->poly])
+            < std::tie(rhs.second, _mesh_materials_per_poly[rhs.first->poly]);
+        });
+  }
 
   MOBABatch* cur_batch = nullptr;
   std::uint16_t cur_batch_mat_id = 0;
@@ -135,10 +138,10 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     if (WMOGeometryBatcher::_needs_new_batch(cur_batch, looptri, cur_batch_type,
                                              batch_type, cur_batch_mat_id))
     {
-      _create_new_batch(_material_ids[_mesh_materials_per_poly[looptri->poly]],
+      _create_new_batch(_material_ids[_get_poly_material_index(looptri->poly)],
                         batch_type, cur_batch, cur_batch_mat_id, cur_batch_type);
     }
-
+    
     _create_new_render_triangle(looptri, cur_batch);
   }
 
@@ -385,7 +388,7 @@ bool WMOGeometryBatcher::_needs_new_batch(MOBABatch* cur_batch
     , std::uint16_t cur_batch_mat_id)
 {
   return !cur_batch || cur_batch_type != cur_poly_batch_type
-    || _material_ids[_mesh_materials_per_poly[cur_tri->poly]] != cur_batch_mat_id;
+    || _material_ids[_get_poly_material_index(cur_tri->poly)] != cur_batch_mat_id;
 }
 
 unsigned char WMOGeometryBatcher::_get_grayscale_factor(RGBA const& color)
@@ -438,6 +441,11 @@ BatchType WMOGeometryBatcher::get_batch_type(const MLoopTri* poly)
   {
     return BatchType::EXT;
   }
+}
+
+std::int32_t WMOGeometryBatcher::_get_poly_material_index(std::size_t poly_index) const
+{
+  return _mesh_materials_per_poly ? _mesh_materials_per_poly[poly_index] : 0;
 }
 
 void WMOGeometryBatcher::_create_new_batch(std::uint16_t mat_id
