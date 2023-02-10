@@ -268,6 +268,8 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     [[nodiscard]]
     BatchType get_batch_type(const MLoopTri* poly);
 
+    [[nodiscard]] 
+    std::int32_t _get_poly_material_index(std::size_t poly_index) const;
 
     Mesh* _mesh;
     Mesh* _collision_mesh;
@@ -322,7 +324,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     MLoopUV* _bl_uv2;
     MDeformVert* _bl_vg_data;
 
-    // collision mesh data
+    // collision mesh data  
     const MLoop* _bl_col_loops;
     const MVert* _bl_col_verts;
     const MLoopTri* _bl_col_looptris;
@@ -330,7 +332,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     // other attribute layers
 
-    std::int32_t* _mesh_materials_per_poly;
+    std::int32_t* _mesh_materials_per_poly; // may be null, then mat_id is always 0 
 
     BSPTree* _bsp_tree;
     LiquidExporter* _liquid_exporter;

@@ -19,7 +19,8 @@ MODULES_TO_IGNORE = (
     "test",
     "developer_utils",
     "pywowlib",
-    "wbs_kernel"
+    "wbs_kernel",
+    "render"
 )
 
 modules = None

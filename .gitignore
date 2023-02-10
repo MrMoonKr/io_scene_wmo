@@ -6,6 +6,7 @@ io_scene_wmo/third_party/
 io_scene_wmo/bpy_boost/
 io_scene_wmo/wbs_kernel/build/
 io_scene_wmo/wbs_kernel/src/wbs_kernel.cpp
+build/
 
 *.pyd
 /io_scene_wmo/.vscode/settings.json
