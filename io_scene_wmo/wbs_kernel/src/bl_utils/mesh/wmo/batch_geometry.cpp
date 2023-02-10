@@ -78,8 +78,8 @@ WMOGeometryBatcher::WMOGeometryBatcher(std::uintptr_t mesh_ptr
     assert(!_collision_mesh->runtime->vert_normals_dirty && "Vertex normals were not calculated for collision mesh.");
     assert(!_collision_mesh->runtime->poly_normals_dirty && "Poly normals were not calculated for collision mesh.");
 
-    _bl_col_loops = _collision_mesh->mloop;
-    _bl_col_verts = _collision_mesh->mvert;
+    _bl_col_loops = static_cast<MLoop *>(WBS_CustomData_get_layer(&_collision_mesh->ldata, eCustomDataType::CD_MLOOP));
+    _bl_col_verts = static_cast<MVert*>(WBS_CustomData_get_layer(&_collision_mesh->vdata, eCustomDataType::CD_MVERT));
     _bl_col_vertex_normals = reinterpret_cast<const float(*)[3]>(_collision_mesh->runtime->vert_normals);
     _bl_col_looptris = _collision_mesh->runtime->looptris.array;
 
