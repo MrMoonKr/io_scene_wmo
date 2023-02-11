@@ -6,6 +6,7 @@ from ..ui.preferences import get_project_preferences
 
 import bpy
 import time
+from pathlib import Path
 
 
 def export_wmo_from_blender_scene(filepath, client_version, export_selected, export_method):
@@ -34,6 +35,10 @@ def export_wmo_from_blender_scene(filepath, client_version, export_selected, exp
     bl_scene.save_portals()
     bl_scene.save_groups()
     bl_scene.save_root_header()
+
+    # create directory if it doesn't exist, for the new quick save
+    file = Path(filepath)
+    file.parent.mkdir(parents=True, exist_ok=True)
 
     for _ in tqdm(range(1), desc='Writing WMO files', ascii=True):
         wmo.write()

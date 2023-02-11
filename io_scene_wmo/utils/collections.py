@@ -7,6 +7,7 @@ import re
 import os
 
 from typing import Set, Sequence, Type
+from pathlib import Path
 
 
 def get_collection(model_collection: bpy.types.Collection
@@ -121,28 +122,34 @@ def unlink_nested_collections(parent_col: bpy.types.Collection
     return has_children
 
 
-def create_wmo_model_collection(scene: bpy.types.Scene
-                                 , path: str)-> bpy.types.Collection:
-    col = bpy.data.collections.new(os.path.basename(path)) # filename (+ extension?)
+def create_wmo_model_collection(scene: bpy.types.Scene,
+                                 filepath: str, wowpath: str)-> bpy.types.Collection:
+    # col = bpy.data.collections.new(os.path.basename(wowpath)) # filename (+ extension?)
+    filename = ''
+    if wowpath:
+        filename = Path(wowpath).stem
+    else:
+        filename = Path(filepath).stem
+
+    col = bpy.data.collections.new(filename) # filename only without extension
     col.wow_wmo.enabled = True
-    col.wow_wmo.dir_path = os.path.dirname(path) # path
+    col.wow_wmo.dir_path = os.path.dirname(wowpath) # path
 
     scene.collection.children.link(col)
-    # set the colelction as active
+    # set the collection as active
     layer_collection = bpy.context.view_layer.layer_collection.children[col.name]
     bpy.context.view_layer.active_layer_collection = layer_collection
 
     print("Created new WMO model Collection:" + col.name)
     return col
 
+""""
 def create_wow_model_collection(scene: bpy.types.Scene
                                  , id_prop: str) -> bpy.types.Collection | None:
-    """
     Create a WoW model collection.
     :param scene: Current scene.
     :param id_prop: Identifier of the collection property for the given model type.
     :return: Model (M2/WMO/ADT) collection
-    """
 
     col = bpy.data.collections.new(id_prop) # just name it 'wow_wmo' ?
     getattr(col, id_prop).enabled = True
@@ -154,7 +161,7 @@ def create_wow_model_collection(scene: bpy.types.Scene
 
     print("Created new WoW model Collection:" + col.name)
     return col
-
+"""
 
 def get_current_wow_model_collection(scene: bpy.types.Scene
                                      , id_prop: str) -> bpy.types.Collection | None:

@@ -1,6 +1,7 @@
 import bpy
 import json
 import os
+from pathlib import Path
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -99,10 +100,10 @@ class WBS_OT_save_current_wmo(bpy.types.Operator):
                 self.report({'ERROR'}, 'Project path in addon preferences is empty.')
                 return {'CANCELLED'}
 
-            # TODO : doesn't work if wow_wmo.dir_path is a full path with Disk name etc, happens if WMO has been imported from local file.
-            dir_path = os.path.join(project_preferences.project_dir_path, wmo_collection.wow_wmo.dir_path) # DON'T USE
+            # Doesn't work if wow_wmo.dir_path is a full path with Disk name etc, happens if WMO has been imported from local file.
+            dir_path = os.path.join(project_preferences.project_dir_path, wmo_collection.wow_wmo.dir_path)
             # dir_path = project_preferences.project_dir_path # temporary so we don't override the old file
-            filename = wmo_collection.name
+            filename = Path(wmo_collection.name).stem + '.wmo'
             filepath = os.path.join(dir_path, filename)
 
             print("saving wmo to : " + filepath)
