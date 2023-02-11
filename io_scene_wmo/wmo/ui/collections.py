@@ -24,7 +24,7 @@ def iter_wmo_groups(scene: bpy.types.Scene) -> bpy.types.Object:
     for each in get_wmo_collection(scene, SpecialCollections.Indoor).objects:
         yield each
 
-def get_wmo_groups_list(scene: bpy.types.Scene) -> list:
+def get_wmo_groups_list(scene: bpy.types.Scene) -> list[bpy.types.Object]:
     groups_list = []
 
     for each in iter_wmo_groups(scene):

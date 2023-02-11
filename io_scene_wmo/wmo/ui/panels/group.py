@@ -49,7 +49,6 @@ class WMO_PT_wmo_group(WBS_PT_object_properties_common, bpy.types.Panel):
 
 
 def fog_validator(self, context):
-    # if self.fog1 and (not self.fog1.wow_wmo_fog.enabled or self.fog1.name not in bpy.context.scene.objects):
     scn = bpy.context.scene
     if self.fog1 and (not WoWWMOFog.match(self.fog1) or self.fog1.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog1 = None

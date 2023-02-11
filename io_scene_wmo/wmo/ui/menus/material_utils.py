@@ -41,16 +41,12 @@ class WMO_OT_assign_material(bpy.types.Operator):
 
             if self.action == 'NEW':
                 texture = context.scene.wow_last_selected_images[-1].pointer
-                mat.wow_wmo_material.self_pointer = mat
                 mat.wow_wmo_material.path = texture.wow_wmo_texture.path
                 mat.wow_wmo_material.diff_texture_1 = texture
 
                 load_wmo_shader_dependencies()
                 update_wmo_mat_node_tree(mat)
 
-                # slot = context.scene.wow_wmo_root_elements.materials.add()
-                # slot.pointer = mat
-                mat.wow_wmo_material.enabled = True
 
             mat_index = -1
 
@@ -113,16 +109,11 @@ class WMO_OT_import_texture_from_filepath(bpy.types.Operator):
         texture.name = os.path.basename(self.filepath)
 
         mat = bpy.data.materials.new(name=texture.name)
-        mat.wow_wmo_material.self_pointer = mat
         mat.wow_wmo_material.diff_texture_1 = texture
 
         load_wmo_shader_dependencies()
         update_wmo_mat_node_tree(mat)
 
-        # slot = context.scene.wow_wmo_root_elements.materials.add()
-        # slot.pointer = mat
-        mat.wow_wmo_material.self_pointer = mat
-        mat.wow_wmo_material.enabled = True
 
         global display_material_select_pie
         display_material_select_pie = False
@@ -163,7 +154,6 @@ class WMO_OT_import_texture_from_wmv(bpy.types.Operator):
         texture = load_texture({}, path, project_preferences.cache_dir_path)
 
         mat = bpy.data.materials.new(name=path.split('\\')[-1][:-4] + '.PNG')
-        mat.wow_wmo_material.self_pointer = mat
         mat.wow_wmo_material.diff_texture_1 = texture
 
         load_wmo_shader_dependencies()
@@ -171,7 +161,6 @@ class WMO_OT_import_texture_from_wmv(bpy.types.Operator):
 
         # slot = context.scene.wow_wmo_root_elements.materials.add()
         # slot.pointer = mat
-        mat.wow_wmo_material.enabled = True
 
         global display_material_select_pie
         display_material_select_pie = False

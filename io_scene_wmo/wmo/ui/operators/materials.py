@@ -48,12 +48,7 @@ class WMO_OT_generate_materials(bpy.types.Operator):
 
                 # if context.scene.wow_wmo_root_elements.materials.find(mat.name) < 0:
                 if bpy.data.materials.find(mat.name) < 0:
-                    mat.wow_wmo_material.self_pointer = mat
-
                     mat.wow_wmo_material.diff_texture_1 = tex
-
-                    # slot = context.scene.wow_wmo_root_elements.materials.add()
-                    # slot.pointer = mat
 
         return {'FINISHED'}
 
@@ -163,8 +158,8 @@ class WMO_OT_fill_textures(bpy.types.Operator):
         for ob in filter(lambda o: WoWWMOGroup.match(o), bpy.context.selected_objects):
             mesh = ob.data
             for material in mesh.materials:
-                if not material.wow_wmo_material.enabled:
-                    continue
+                if not WoWWMOGroup.match(ob) :
+                    continue 
 
                 texture = material.wow_wmo_material.diff_texture_1
 
@@ -203,7 +198,6 @@ class WMO_OT_import_texture(bpy.types.Operator):
         texture = load_texture({}, path, project_preferences.cache_dir_path)
 
         mat = bpy.data.materials.new(name=path.split('\\')[-1][:-4] + '.PNG')
-        mat.wow_wmo_material.self_pointer = mat
         mat.wow_wmo_material.diff_texture_1 = texture
         mat.wow_wmo_material.diff_color = (0.584314,0.584314,0.584314,1)
         mat.wow_wmo_material.emissive_color = (0,0,0,1)
@@ -214,7 +208,6 @@ class WMO_OT_import_texture(bpy.types.Operator):
 
         # slot = context.scene.wow_wmo_root_elements.materials.add()
         # slot.pointer = mat
-        mat.wow_wmo_material.enabled = True
 
         return {'FINISHED'}
 

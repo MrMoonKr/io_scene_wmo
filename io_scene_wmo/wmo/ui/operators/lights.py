@@ -24,7 +24,6 @@ class WMO_OT_add_light(bpy.types.Operator):
         bpy.context.view_layer.objects.active = obj
         bpy.data.objects[obj.name].select_set(True)
 
-        obj.wow_wmo_light.enabled = True
         obj.wow_wmo_light.use_attenuation = True
         obj.wow_wmo_light.color = light.color # set yellow as default
         obj.wow_wmo_light.color_alpha = 1.0

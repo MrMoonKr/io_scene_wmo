@@ -791,7 +791,6 @@ class WMO_OT_add_liquid(bpy.types.Operator):
             counter += 1
             bit <<= 1
 
-        water.wow_wmo_liquid.enabled = True
 
         water.hide_set(False if "4" in bpy.context.scene.wow_visibility else True)
 
