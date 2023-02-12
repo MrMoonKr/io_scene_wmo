@@ -1,5 +1,7 @@
 import bpy
 
+from ...ui.collections import get_wmo_collection, SpecialCollections
+
 
 class WMO_OT_add_light(bpy.types.Operator):
     bl_idname = 'scene.wow_add_light'
@@ -7,7 +9,13 @@ class WMO_OT_add_light(bpy.types.Operator):
     bl_description = 'Add a WoW light object to the scene'
 
     def execute(self, context):
-
+        
+        scn = context.scene
+        light_collection = get_wmo_collection(scn, SpecialCollections.Lights)
+        if not light_collection:
+            self.report({'WARNING'}, "Can't add WMO Light: No WMO Object Collection found in the scene.")
+            return {'FINISHED'}
+        
         light = bpy.data.lights.new(name='WoW Light', type='POINT')
         obj = bpy.data.objects.new('WoW Light', light)
 
@@ -15,11 +23,6 @@ class WMO_OT_add_light(bpy.types.Operator):
         light.energy = 1.0
 
         # move lights to collection
-        scn = bpy.context.scene
-        light_collection = bpy.data.collections.get("Lights")
-        if not light_collection:
-            light_collection = bpy.data.collections.new("Lights")
-            scn.collection.children.link(light_collection)
         light_collection.objects.link(obj)
         bpy.context.view_layer.objects.active = obj
         bpy.data.objects[obj.name].select_set(True)

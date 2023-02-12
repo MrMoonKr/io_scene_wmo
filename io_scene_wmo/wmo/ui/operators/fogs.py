@@ -10,12 +10,17 @@ class WMO_OT_add_fog(bpy.types.Operator):
     bl_description = 'Add a WoW fog object to the scene'
 
     def execute(self, context):
+        scn = context.scene
+        fog_collection = get_wmo_collection(scn, SpecialCollections.Fogs)
+        if not fog_collection:
+            self.report({'WARNING'}, "Can't add WMO Fog: No WMO Object Collection found in the scene.")
+            return {'FINISHED'}
 
         fog_obj = create_fog_object()
 
         # move fogs to collection
-        scn = bpy.context.scene
-        fog_collection = get_wmo_collection(scn, SpecialCollections.Fogs)
+
+
         fog_collection.objects.link(fog_obj)
         bpy.context.view_layer.objects.active = fog_obj
         # applying object properties
