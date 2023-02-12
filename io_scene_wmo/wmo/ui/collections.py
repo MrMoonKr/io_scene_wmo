@@ -9,8 +9,12 @@ from typing import Iterable
 import bpy
 
 def get_wmo_collection(scene: bpy.types.Scene,
-                        collection_type: SpecialCollections) -> bpy.types.Collection:
-    return get_or_create_collection(get_current_wow_model_collection(scene, 'wow_wmo'), collection_type.name)
+                        collection_type: SpecialCollections) -> bpy.types.Collection | None:
+    wow_model_collection = get_current_wow_model_collection(scene, 'wow_wmo')
+    if wow_model_collection:
+        return get_or_create_collection(wow_model_collection, collection_type.name)
+    else:
+        return None
 
 
 def iter_wmo_groups(scene: bpy.types.Scene) -> bpy.types.Object:

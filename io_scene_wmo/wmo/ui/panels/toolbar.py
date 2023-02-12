@@ -4,7 +4,7 @@ from ..enums import *
 from .common import panel_poll
 from ..custom_objects import *
 from ...ui.enums import SpecialCollections
-from ...ui.collections import get_wmo_collection
+from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection
 
 
 def update_wow_visibility(self, context):
@@ -53,19 +53,14 @@ def get_doodad_sets(self, context):
     doodad_set_collections = set()
     doodad_sets = []
 
-    # for obj in bpy.context.scene.objects:
-    for set_collection in get_wmo_collection(bpy.context.scene, SpecialCollections.Doodads).children:
-    # for obj in bpy.data.collections.get('Doodads').objects:
-    #     if WoWWMODoodad.match(obj) and obj.parent:
-    #         if obj.parent.name != "Set_$DefaultGlobal":
-    #             doodad_set_objects.add(obj.parent)
-    #         else:
-    #             has_global = True
+    wmo_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+    if wmo_model_collection:
+        for set_collection in get_or_create_collection(wmo_model_collection, SpecialCollections.Doodads.name).children:
 
-        if set_collection.name != "Set_$DefaultGlobal":
-            doodad_set_collections.add(set_collection)
-        else:
-            has_global = True
+            if set_collection.name != "Set_$DefaultGlobal":
+                doodad_set_collections.add(set_collection)
+            else:
+                has_global = True
 
     for index, set_collection in enumerate(sorted(doodad_set_collections, key=lambda x: x.name), 1 + has_global):
         doodad_sets.append((set_collection.name, set_collection.name, "", 'SCENE_DATA', index))
@@ -80,26 +75,13 @@ def get_doodad_sets(self, context):
 def switch_doodad_set(self, context):
     set = self.wow_doodad_visibility
 
-    # for obj in bpy.context.scene.objects:
-    # for obj in bpy.data.collections.get('Doodads').objects:
-    #     if WoWWMODoodad.match(obj):
-    #         if obj.parent:
-    #             name = obj.parent.name
-    #             obj.hide_set(set == "None" or name != set and name != "Set_$DefaultGlobal")
-    #         else:
-    #             obj.hide_set(True)
-    for set_collection in get_wmo_collection(bpy.context.scene, SpecialCollections.Doodads).children:
-        # if set_collection.parent:
-        #     name = set_collection.name
-        #     set_collection.hide_select = (set == "None" or name != set and name != "Set_$DefaultGlobal")
-        # else:
-        #     set_collection.hide_select = True
+    wmo_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+    if wmo_model_collection:
+        for set_collection in get_or_create_collection(wmo_model_collection, SpecialCollections.Doodads.name).children:
 
-        # name = set_collection.name
-        # set_collection.hide_select = (set == "None" or name != set and name != "Set_$DefaultGlobal")
-        name = set_collection.name
-        for obj in set_collection.objects:
-            obj.hide_set(set == "None" or name != set and name != "Set_$DefaultGlobal")
+            name = set_collection.name
+            for obj in set_collection.objects:
+                obj.hide_set(set == "None" or name != set and name != "Set_$DefaultGlobal")
 
 
 class WMO_PT_tools_object_mode_display(bpy.types.Panel):
@@ -165,7 +147,7 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
                                icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
             col1_row3.operator("scene.wow_add_scale_reference", text='Scale',
                                icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
-            col1_row4.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
+            # col1_row4.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
 
         else:
             col1_col.operator("scene.wow_add_scale_reference", text='Scale',
