@@ -79,6 +79,7 @@ class WoWWMOGroup(CustomObject):
             else:
                 obj.pass_index &= ~flag
         
+        # update shader based on current place type
         if cls.is_outdoor(obj):
             obj.pass_index |= BlenderWMOObjectRenderFlags.IsOutdoor
             obj.pass_index &= ~BlenderWMOObjectRenderFlags.IsIndoor

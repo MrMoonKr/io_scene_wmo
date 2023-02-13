@@ -228,6 +228,7 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
     # create object
     nobj = bpy.data.objects.new(m2_name, mesh)
     nobj.wow_wmo_doodad.path = filepath
+    nobj.wow_wmo_doodad.enabled = True
 
     # set textures
     for i, submesh in enumerate(submeshes):

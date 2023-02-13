@@ -11,7 +11,7 @@ from typing import Dict, List
 
 from .bl_render import update_wmo_mat_node_tree, load_wmo_shader_dependencies, BlenderWMOMaterialRenderFlags
 from .utils.fogs import create_fog_object
-from .utils.materials import load_texture, add_ghost_material
+from .utils.materials import load_texture_file, add_ghost_material, load_texture
 from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui.preferences import get_project_preferences
@@ -174,6 +174,7 @@ class BlenderWMOScene:
                 light.falloff_type = 'INVERSE_LINEAR'
                 light.distance = wmo_light.unknown4 / 2
 
+            obj.wow_wmo_light.enabled = True
             obj.wow_wmo_light.light_type = str(wmo_light.light_type)
             obj.wow_wmo_light.type = bool(wmo_light.type)
             obj.wow_wmo_light.use_attenuation = bool(wmo_light.use_attenuation)
@@ -208,11 +209,10 @@ class BlenderWMOScene:
                                         )
 
             fog_obj.scale = (wmo_fog.big_radius,wmo_fog.big_radius,wmo_fog.big_radius)
-            # move fogs to collection
-            fog_collection.objects.link(fog_obj)
-            bpy.context.view_layer.objects.active = fog_obj
 
+            # bpy.context.view_layer.objects.active = fog_obj
             # applying object properties
+            fog_obj.wow_wmo_fog.enabled = True
             fog_obj.wow_wmo_fog.ignore_radius = wmo_fog.flags & 0x01
             fog_obj.wow_wmo_fog.unknown = wmo_fog.flags & 0x10
 
@@ -227,6 +227,9 @@ class BlenderWMOScene:
             fog_obj.wow_wmo_fog.end_dist2 = wmo_fog.end_dist2
             fog_obj.wow_wmo_fog.start_factor2 = wmo_fog.start_factor2
             fog_obj.wow_wmo_fog.color2 = (wmo_fog.color2[2] / 255, wmo_fog.color2[1] / 255, wmo_fog.color2[0] / 255)
+
+            # move fogs to collection
+            fog_collection.objects.link(fog_obj)
 
             self.bl_fogs.append(fog_obj)
 

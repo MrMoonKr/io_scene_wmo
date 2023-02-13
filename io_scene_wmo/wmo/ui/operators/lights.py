@@ -22,17 +22,18 @@ class WMO_OT_add_light(bpy.types.Operator):
         light.color = (1.0, 0.565, 0.0)
         light.energy = 1.0
 
-        # move lights to collection
-        light_collection.objects.link(obj)
-        bpy.context.view_layer.objects.active = obj
-        bpy.data.objects[obj.name].select_set(True)
-
+        obj.wow_wmo_light.enabled = True
         obj.wow_wmo_light.use_attenuation = True
         obj.wow_wmo_light.color = light.color # set yellow as default
         obj.wow_wmo_light.color_alpha = 1.0
         obj.wow_wmo_light.intensity = light.energy
         # light.falloff_type = 'INVERSE_LINEAR'
         
+        # move lights to collection
+        light_collection.objects.link(obj)
+        bpy.context.view_layer.objects.active = obj
+        bpy.data.objects[obj.name].select_set(True)
+
         obj.location = bpy.context.scene.cursor.location
 
         self.report({'INFO'}, "Successfully created WoW light: " + obj.name)

@@ -767,7 +767,7 @@ class WMO_OT_add_liquid(bpy.types.Operator):
 
     def execute(self, context):
 
-        liquid_collection = get_wmo_collection(context.scene, SpecialCollections.Lights)
+        liquid_collection = get_wmo_collection(context.scene, SpecialCollections.Liquids)
         if not liquid_collection:
             self.report({'WARNING'}, "Can't add WMO Light: No WMO Object Collection found in the scene.")
             return {'FINISHED'}
@@ -785,6 +785,7 @@ class WMO_OT_add_liquid(bpy.types.Operator):
 
         mesh = water.data
 
+        water.wow_wmo_liquid.enabled = True
         # move to collection
         liquid_collection.objects.link(water)
 

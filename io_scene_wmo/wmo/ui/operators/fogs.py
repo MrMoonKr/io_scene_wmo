@@ -18,12 +18,11 @@ class WMO_OT_add_fog(bpy.types.Operator):
 
         fog_obj = create_fog_object()
 
-        # move fogs to collection
 
-
+        # applying object properties
+        fog_obj.wow_wmo_fog.enabled = True
         fog_collection.objects.link(fog_obj)
         bpy.context.view_layer.objects.active = fog_obj
-        # applying object properties
 
         fog_obj.scale = (5.0, 5.0, 5.0) # default size to 5
 
