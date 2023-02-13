@@ -259,7 +259,7 @@ def register():
             ('5', "Lights", "Display lights", 'LIGHT', 0x20),
             ('6', "Collision", "Display collision", 'CON_SIZELIMIT', 0x40)],
         options={'ENUM_FLAG'},
-        default={'0', '1', '2', '3', '4', '5', '6'},
+        default={'0', '1', '2', '3', '4', '5'},
         update=update_wow_visibility
     )
 
