@@ -9,6 +9,9 @@ from ....utils.misc import find_nearest_object
 from ....third_party.tqdm import tqdm
 from ..custom_objects import WoWWMODoodad, WoWWMOGroup
 
+from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection
+from ...ui.enums import SpecialCollections
+
 
 class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
     bl_idname = 'scene.wow_wmo_import_doodad_from_wmv'
@@ -16,19 +19,37 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
     bl_description = 'Import last M2 from WoW Model Viewer'
     bl_options = {'REGISTER', 'UNDO'}
 
+    def get_active_doodad_collection(self, scene : bpy.types.Scene) -> bpy.types.Collection | None:
+        active_doodad_set : str = scene.wow_doodad_visibility
+
+        if not active_doodad_set  or active_doodad_set == "None":
+            self.report({'ERROR'}, "Failed to import doodad. No active doodad set is selected."
+            "Select the doodad set to import the doodad to in the WMO panel")
+            return None
+        
+        active_set_collection : bpy.types.Collection = None
+        wmo_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+        if wmo_model_collection:
+            for set_collection in get_or_create_collection(wmo_model_collection, SpecialCollections.Doodads.name).children: 
+                if set_collection.name == active_doodad_set:
+                    active_set_collection = set_collection
+        else:
+            self.report({'ERROR'}, "Failed to find an active WMO model collection.")
+
+        if active_set_collection is None:
+            self.report({'ERROR'}, "Failed to find the active doodad set collection.")
+
+        return active_set_collection
+
     def execute(self, context):
 
         m2_path = wmv_get_last_m2()
         cache_path = get_project_preferences().cache_dir_path
 
-        # root = context.scene.wow_wmo_root_elements
+        active_set_collection = self.get_active_doodad_collection(context.scene)
 
-        # if not len(root.doodad_sets) or len(root.doodad_sets) < root.cur_doodad_set:
-        #     self.report({'ERROR'}, "Failed to import doodad. No active doodad set is selected.")
-        #     return {'CANCELLED'}
-
-        # TODO : figure out active doodad set system for collections.
-        doodad_set_obj = root.doodad_sets[root.cur_doodad_set].pointer
+        if active_set_collection is None:
+            return {'FINISHED'}
 
         if not m2_path:
             self.report({'ERROR'}, "WoW Model Viewer log contains no model entries."
@@ -36,10 +57,10 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
             return {'CANCELLED'}
 
         obj = import_doodad(m2_path, cache_path)
-        obj.parent = doodad_set_obj
         obj.location = context.scene.cursor.location
 
-        bpy.context.collection.objects.link(obj)
+        active_set_collection.objects.link(obj)
+
         context.view_layer.objects.active = obj
 
         return {'FINISHED'}
