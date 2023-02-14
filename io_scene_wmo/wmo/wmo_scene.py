@@ -11,7 +11,7 @@ from typing import Dict, List
 
 from .bl_render import update_wmo_mat_node_tree, load_wmo_shader_dependencies, BlenderWMOMaterialRenderFlags
 from .utils.fogs import create_fog_object
-from .utils.materials import load_texture_file, add_ghost_material, load_texture
+from .utils.materials import add_ghost_material, load_texture
 from .utils.doodads import import_doodad
 from .wmo_scene_group import BlenderWMOSceneGroup
 from ..ui.preferences import get_project_preferences
@@ -21,7 +21,7 @@ from .ui.collections import get_wmo_collection, SpecialCollections, get_wmo_grou
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
-from ..pywowlib import WoWVersionManager, WoWVersions
+from ..pywowlib import WoWVersions
 
 from ..third_party.tqdm import tqdm
 

@@ -5,6 +5,7 @@ import traceback
 import bpy
 
 from ...utils.misc import load_game_data
+from ..utils.materials import load_texture
 from ...utils.node_builder import NodeTreeBuilder
 from ...pywowlib.io_utils.types import *
 
@@ -223,7 +224,7 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
         uv_layer1.data[i].uv = (uv[0], 1 - uv[1])
 
     # unpack and convert textures
-    game_data.extract_textures_as_png(asset_dir, texture_paths)
+    # game_data.extract_textures_as_png(asset_dir, texture_paths)
 
     # create object
     nobj = bpy.data.objects.new(m2_name, mesh)
@@ -231,8 +232,10 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
     nobj.wow_wmo_doodad.enabled = True
 
     # set textures
+    textures = {}
     for i, submesh in enumerate(submeshes):
-        tex_path = os.path.splitext(texture_paths[texture_lookup_table[submesh.texture_id]])[0] + '.png'
+        # tex_path = os.path.splitext(texture_paths[texture_lookup_table[submesh.texture_id]])[0] + '.png'
+        tex_path = texture_paths[texture_lookup_table[submesh.texture_id]]
 
         # add support for unix filesystems
         if os.name != 'nt':
@@ -240,11 +243,16 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
 
         img = None
 
+        # try:
+        #     img = bpy.data.images.load(os.path.join(asset_dir, tex_path), check_existing=True)
+        # except RuntimeError:
+        #     traceback.print_exc()
+        #     print("\nFailed to load texture: <<{}>>. File is missing or corrupted.".format(tex_path))
+
         try:
-            img = bpy.data.images.load(os.path.join(asset_dir, tex_path), check_existing=True)
-        except RuntimeError:
-            traceback.print_exc()
-            print("\nFailed to load texture: <<{}>>. File is missing or corrupted.".format(tex_path))
+            img = load_texture(textures, tex_path)
+        except:
+            pass
 
         if img:
             for j in range(submesh.start_triangle // 3, (submesh.start_triangle + submesh.n_triangles) // 3):

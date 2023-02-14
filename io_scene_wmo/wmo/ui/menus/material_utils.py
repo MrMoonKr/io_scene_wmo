@@ -219,7 +219,7 @@ class VIEW3D_MT_wmo_select_texture(Menu):
                 op = col.operator("mesh.wow_select_texture_from_recent", text='', icon='ADD')
                 op.index = i
 
-        pie.operator("mesh.wow_import_texture_wmv", text='Import from WMV', icon='ADD')
+        # pie.operator("mesh.wow_import_texture_wmv", text='Import from WMV', icon='ADD')
         pie.operator("mesh.wow_import_texture_filepath", text='Import from file', icon='ADD')
 
 

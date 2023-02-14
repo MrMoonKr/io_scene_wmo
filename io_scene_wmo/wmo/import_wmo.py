@@ -45,7 +45,8 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath:
         SpecialCollection.verify_root_collection_integrity(wow_model_collection, WMO_SPECIAL_COLLECTION_TYPES)
 
         # extract textures to cache folder
-        game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
+        # game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
+
 
         # load all WMO components
         wmo_scene.load_materials()
