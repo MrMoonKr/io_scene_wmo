@@ -248,6 +248,8 @@ class BlenderWMOSceneGroup:
         # set mesh location
         obj.location = pos
 
+        liquid_collection = get_wmo_collection(bpy.context.scene, SpecialCollections.Liquids)
+        liquid_collection.objects.link(obj)
         bpy.context.view_layer.objects.active = obj
 
         bpy.ops.object.mode_set(mode='EDIT')
@@ -266,9 +268,6 @@ class BlenderWMOSceneGroup:
         wmo_group_obj = bpy.context.scene.objects[group_name]
         wmo_group_obj.wow_wmo_group.liquid_type = str(real_liquid_type)
         wmo_group_obj.wow_wmo_group.liquid_mesh = obj
-
-        liquid_collection = get_wmo_collection(bpy.context.scene, SpecialCollections.Liquids)
-        liquid_collection.objects.link(obj)
 
     # Return faces indices
     def get_bsp_node_indices(self, i_node, nodes, faces, indices):
