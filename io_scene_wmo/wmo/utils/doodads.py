@@ -8,6 +8,7 @@ from ...utils.misc import load_game_data
 from ..utils.materials import load_texture
 from ...utils.node_builder import NodeTreeBuilder
 from ...pywowlib.io_utils.types import *
+from ...ui.preferences import get_project_preferences
 
 
 # This file is implementing basic M2 geometry parsing in prodedural style for the sake of performance.
@@ -232,6 +233,7 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
     nobj.wow_wmo_doodad.enabled = True
 
     # set textures
+    texture_dir = get_project_preferences().cache_dir_path
     textures = {}
     for i, submesh in enumerate(submeshes):
         # tex_path = os.path.splitext(texture_paths[texture_lookup_table[submesh.texture_id]])[0] + '.png'
@@ -249,9 +251,11 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
         #     traceback.print_exc()
         #     print("\nFailed to load texture: <<{}>>. File is missing or corrupted.".format(tex_path))
 
+        print(textures)
         try:
-            img = load_texture(textures, tex_path)
+            img = load_texture(textures, tex_path, texture_dir)
         except:
+            print("\nFailed to load texture: <<{}>>. File is missing or corrupted.".format(tex_path))
             pass
 
         if img:

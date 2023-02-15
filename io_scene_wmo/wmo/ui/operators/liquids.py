@@ -769,7 +769,7 @@ class WMO_OT_add_liquid(bpy.types.Operator):
 
         liquid_collection = get_wmo_collection(context.scene, SpecialCollections.Liquids)
         if not liquid_collection:
-            self.report({'WARNING'}, "Can't add WMO Light: No WMO Object Collection found in the scene.")
+            self.report({'WARNING'}, "Can't add WMO Liquid: No WMO Object Collection found in the scene.")
             return {'FINISHED'}
 
         bpy.ops.mesh.primitive_grid_add(x_subdivisions=self.x_planes,

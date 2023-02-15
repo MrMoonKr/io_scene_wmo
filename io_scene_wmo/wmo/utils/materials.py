@@ -45,7 +45,6 @@ def load_texture(textures : dict, filepath : str, texture_dir : str) -> bpy.type
             tex_img = bpy.data.images.load(os.path.join(texture_dir, new_filename))
             texture = tex_img
 
-            textures[filepath] = texture
         else:
             # if not, load from game data and save it to directory.
             game_data = load_game_data()
@@ -53,6 +52,7 @@ def load_texture(textures : dict, filepath : str, texture_dir : str) -> bpy.type
             result = game_data.read_file(filepath, "", 'blp', True)
 
             if result is None:
+                print("\nFailed to load texture: <<{}>> from gamedata.".format(filepath))
                 return None
 
             tex_img: bpy.types.Image = BLP2PNG().create_image(result[0])
@@ -62,10 +62,11 @@ def load_texture(textures : dict, filepath : str, texture_dir : str) -> bpy.type
             tex_img.filepath = save_path
     
             texture = tex_img
-            textures[filepath] = texture
         
-        tex_img.wow_wmo_texture.path = filepath
-        tex_img.name = os.path.basename(new_filename)
+        texture.wow_wmo_texture.path = filepath
+        texture.name = os.path.basename(new_filename)
+
+        textures[filepath] = texture
 
     return texture
 
