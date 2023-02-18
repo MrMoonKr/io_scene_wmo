@@ -251,7 +251,6 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
         #     traceback.print_exc()
         #     print("\nFailed to load texture: <<{}>>. File is missing or corrupted.".format(tex_path))
 
-        print(textures)
         try:
             img = load_texture(textures, tex_path, texture_dir)
         except:
