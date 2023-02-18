@@ -671,6 +671,7 @@ VertexColorLayer::VertexColorLayer(const Mesh* mesh, std::string const& name)
 : _mesh(mesh)
 , _is_per_loop(false)
 , _exists(false)
+, _bl_loops(static_cast<MLoop*>(WBS_CustomData_get_layer(&_mesh->ldata, eCustomDataType::CD_MLOOP)))
 {
   int per_loop_index = WBS_CustomData_get_named_layer_index(&mesh->ldata, name.c_str());
 
@@ -722,7 +723,7 @@ RGBA VertexColorLayer::operator[](std::size_t index) const
 
   if (!_is_per_loop)
   {
-    index = _mesh->mloop[index].v;
+    index = _bl_loops[index].v;
   }
 
   if (std::holds_alternative<MLoopCol*>(_color_layer))

@@ -137,6 +137,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
     bool _exists;
     bool _is_per_loop;
     const Mesh* _mesh;
+    MLoop *_bl_loops;
     std::variant<std::monostate, MLoopCol*, MPropCol*> _color_layer;
   };
 
