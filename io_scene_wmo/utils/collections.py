@@ -7,6 +7,7 @@ import re
 import os
 
 from typing import Set, Sequence, Type
+from pathlib import Path
 
 
 def get_collection(model_collection: bpy.types.Collection
@@ -49,7 +50,7 @@ def get_or_create_collection(model_collection: bpy.types.Collection
         # print("Error : WoW Model collection doesn't exist.")
         raise KeyError("get_or_create_collection() called with Null WoW Model Collection.")
         # can't create it because we don't have the type (wmo/m2/adt)
-        # This shouldn't fail if it is called with model_collection = get_current_wow_model_collection().
+        # This shouldn't fail if it is called with model_collection = get_current_wow_model_collection() if there is an active collection.
 
     col = get_collection(model_collection, col_name)
 
@@ -121,28 +122,34 @@ def unlink_nested_collections(parent_col: bpy.types.Collection
     return has_children
 
 
-def create_wmo_model_collection(scene: bpy.types.Scene
-                                 , path: str)-> bpy.types.Collection:
-    col = bpy.data.collections.new(os.path.basename(path)) # filename (+ extension?)
+def create_wmo_model_collection(scene: bpy.types.Scene,
+                                 filepath: str, wowpath: str)-> bpy.types.Collection:
+    # col = bpy.data.collections.new(os.path.basename(wowpath)) # filename (+ extension?)
+    filename = ''
+    if wowpath:
+        filename = Path(wowpath).stem
+    else:
+        filename = Path(filepath).stem
+
+    col = bpy.data.collections.new(filename) # filename only without extension
     col.wow_wmo.enabled = True
-    col.wow_wmo.dir_path = os.path.dirname(path) # path
+    col.wow_wmo.dir_path = os.path.dirname(wowpath) # path
 
     scene.collection.children.link(col)
-    # set the colelction as active
+    # set the collection as active
     layer_collection = bpy.context.view_layer.layer_collection.children[col.name]
     bpy.context.view_layer.active_layer_collection = layer_collection
 
     print("Created new WMO model Collection:" + col.name)
     return col
 
+""""
 def create_wow_model_collection(scene: bpy.types.Scene
                                  , id_prop: str) -> bpy.types.Collection | None:
-    """
     Create a WoW model collection.
     :param scene: Current scene.
     :param id_prop: Identifier of the collection property for the given model type.
     :return: Model (M2/WMO/ADT) collection
-    """
 
     col = bpy.data.collections.new(id_prop) # just name it 'wow_wmo' ?
     getattr(col, id_prop).enabled = True
@@ -154,7 +161,7 @@ def create_wow_model_collection(scene: bpy.types.Scene
 
     print("Created new WoW model Collection:" + col.name)
     return col
-
+"""
 
 def get_current_wow_model_collection(scene: bpy.types.Scene
                                      , id_prop: str) -> bpy.types.Collection | None:
@@ -166,8 +173,9 @@ def get_current_wow_model_collection(scene: bpy.types.Scene
     """
 
     # check if there is an active collection at all
+    # don't print or it will spam when using it in panels
     if not bpy.context.collection:
-        print("Error: Couldn't find current WoW model collection: there is no active collection at all.")
+        # print("Error: Couldn't find current WoW model collection: there is no active collection at all.")
         return None
         # return create_wow_model_collection(scene, id_prop)
 
@@ -178,8 +186,8 @@ def get_current_wow_model_collection(scene: bpy.types.Scene
     if act_col.name in scene.collection.children:
         if getattr(act_col, id_prop).enabled:
             return act_col
-        print("Error: Couldn't find current WoW model collection: Active collection is not enabled to be a WoW "
-              "Collection.")
+        # print("Error: Couldn't find current WoW model collection: Active collection is not enabled to be a WoW "
+        #       "Collection.")
         return None
         # return create_wow_model_collection(scene, id_prop)
 
@@ -189,7 +197,7 @@ def get_current_wow_model_collection(scene: bpy.types.Scene
         if getattr(col, id_prop).enabled and act_col.name in col.children_recursive:
             return col
 
-    print("Error : Failed to find a WoW Model Collection.")
+    # print("Error : Failed to find a WoW Model Collection.")
     return None
     # return create_wow_model_collection(scene, id_prop)
 

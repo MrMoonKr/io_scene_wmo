@@ -49,7 +49,6 @@ class WMO_PT_wmo_group(WBS_PT_object_properties_common, bpy.types.Panel):
 
 
 def fog_validator(self, context):
-    # if self.fog1 and (not self.fog1.wow_wmo_fog.enabled or self.fog1.name not in bpy.context.scene.objects):
     scn = bpy.context.scene
     if self.fog1 and (not WoWWMOFog.match(self.fog1) or self.fog1.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog1 = None
@@ -62,25 +61,6 @@ def fog_validator(self, context):
 
     if self.fog4 and (not WoWWMOFog.match(self.fog4) or self.fog4.name not in get_wmo_collection(scn, SpecialCollections.Fogs).objects):
         self.fog4 = None
-
-
-def update_place_type(self, context):
-    # TODO with new collection system, replace by some collection object handler
-    obj = context.object
-
-    if not obj:
-        obj = context.view_layer.objects.active
-
-    if not obj:
-        return
-
-    if self.place_type == '8':
-    # if WoWWMOGroup.is_outdoor(obj):
-        obj.pass_index |= 0x1 # BlenderWMOObjectRenderFlags.IsOutdoor
-        obj.pass_index &= ~0x2 # BlenderWMOObjectRenderFlags.IsIndoor
-    else:
-        obj.pass_index &= ~0x1
-        obj.pass_index |= 0x2
 
 
 def update_flags(self, context):

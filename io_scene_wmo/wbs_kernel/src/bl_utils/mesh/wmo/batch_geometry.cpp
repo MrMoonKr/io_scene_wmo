@@ -565,17 +565,6 @@ void WMOGeometryBatcher::_calculate_bounding_for_vertex(glm::vec3 const& vertex)
   _bounding_box_max.z = std::max(_bounding_box_max.z, vertex[2]);
 }
 
-namespace
-{
-  std::int16_t round_bb_float(float x)
-  {
-    std::int16_t sign = x < 0 ? -1 : 1;
-
-    auto base = static_cast<std::int16_t>(std::ceil(std::fabs(x)));
-
-    return sign * base;
-  }
-}
 
 void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_batch, glm::vec3 const& vertex) const
 {
@@ -583,13 +572,14 @@ void WMOGeometryBatcher::_calculate_batch_bounding_for_vertex(MOBABatch* cur_bat
   if (_use_large_material_id)
     return;
 
-  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], round_bb_float(vertex[0]));
-  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], round_bb_float(vertex[1]));
-  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], round_bb_float(vertex[2]));
+  cur_batch->bb_box.min[0] = std::min(cur_batch->bb_box.min[0], static_cast<std::int16_t>(std::floor(vertex[0])));
+  cur_batch->bb_box.min[1] = std::min(cur_batch->bb_box.min[1], static_cast<std::int16_t>(std::floor(vertex[1])));
+  cur_batch->bb_box.min[2] = std::min(cur_batch->bb_box.min[2], static_cast<std::int16_t>(std::floor(vertex[2])));
 
-  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], round_bb_float(vertex[0]));
-  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], round_bb_float(vertex[1]));
-  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], round_bb_float(vertex[2]));
+  cur_batch->bb_box.max[0] = std::max(cur_batch->bb_box.max[0], static_cast<std::int16_t>(std::ceil(vertex[0])));
+  cur_batch->bb_box.max[1] = std::max(cur_batch->bb_box.max[1], static_cast<std::int16_t>(std::ceil(vertex[1])));
+  cur_batch->bb_box.max[2] = std::max(cur_batch->bb_box.max[2], static_cast<std::int16_t>(std::ceil(vertex[2])));
+
 }
 
 

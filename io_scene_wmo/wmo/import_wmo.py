@@ -15,7 +15,7 @@ from .ui.handlers import DepsgraphLock
 from .ui.collections import WMO_SPECIAL_COLLECTION_TYPES
 
 
-def import_wmo_to_blender_scene(filepath: str, client_version: int):
+def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath: str = ''):
     """ Read and import WoW WMO object to Blender scene"""
 
     start_time = time.time()
@@ -41,11 +41,12 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int):
         # set wmo model collection
         wow_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
         if not wow_model_collection:
-            wow_model_collection = create_wmo_model_collection(bpy.context.scene, filepath)
+            wow_model_collection = create_wmo_model_collection(bpy.context.scene, filepath, wowfilepath)
         SpecialCollection.verify_root_collection_integrity(wow_model_collection, WMO_SPECIAL_COLLECTION_TYPES)
 
         # extract textures to cache folder
-        game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
+        # game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
+
 
         # load all WMO components
         wmo_scene.load_materials()
@@ -90,7 +91,7 @@ def import_wmo_to_blender_scene_gamedata(filepath: str, client_version: int):
 
     game_data.extract_files(cache_dir, group_paths)
 
-    import_wmo_to_blender_scene(root_path, client_version)
+    import_wmo_to_blender_scene(root_path, client_version, filepath)
 
     # clean up unnecessary files and directories
     os.remove(root_path)

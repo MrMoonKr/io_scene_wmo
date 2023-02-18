@@ -1,6 +1,6 @@
 import bpy
 from ..enums import portal_dir_alg_enum
-from ..custom_objects import WoWWMOPortal
+from ..custom_objects import WoWWMOPortal, WoWWMOGroup
 
 
 class WMO_OT_bake_portal_relations(bpy.types.Operator):
@@ -31,7 +31,7 @@ class WMO_OT_bake_portal_relations(bpy.types.Operator):
 
         success = False
 
-        groups = tuple(x for x in bpy.context.scene.objects if WoWWMOPortal.match(x) and not x.hide_get())
+        groups = tuple(x for x in bpy.context.scene.objects if WoWWMOGroup.match(x) and not x.hide_get())
 
         for obj in bpy.context.selected_objects:
             if WoWWMOPortal.match(obj):

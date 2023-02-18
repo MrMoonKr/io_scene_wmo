@@ -240,6 +240,8 @@ def render_top_bar(self, context):
 
     layout = self.layout
     row = layout.row(align=True)
+    if context.scene.wow_scene.type == 'WMO':
+        row.operator("scene.save_current_wmo_collection", text="Save current WMO", icon='FILE_TICK')
     row.label(text='WoW Scene:')
     row.prop(context.scene.wow_scene, 'version', text='')
     row.prop(context.scene.wow_scene, 'type', text='')

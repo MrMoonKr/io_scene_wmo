@@ -22,9 +22,7 @@ class BlenderWMOSceneGroup:
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
         self.has_blending: bool = False
 
-        # self.portals_relations: List[str] = []
         self.lights_relations: List[int] = []
-        # self.liquid_relations:  str = ''
         self.doodads_relations:  List[int] = []
 
     @staticmethod
@@ -250,11 +248,8 @@ class BlenderWMOSceneGroup:
         # set mesh location
         obj.location = pos
 
-        scn = bpy.context.scene
-        liquid_collection = get_wmo_collection(scn, SpecialCollections.Liquids)
-
+        liquid_collection = get_wmo_collection(bpy.context.scene, SpecialCollections.Liquids)
         liquid_collection.objects.link(obj)
-
         bpy.context.view_layer.objects.active = obj
 
         bpy.ops.object.mode_set(mode='EDIT')
@@ -776,12 +771,20 @@ class BlenderWMOSceneGroup:
             return material_id
 
         if len(mesh.materials) > 0:
-            if mesh.materials[0].wow_wmo_material.enabled:
-                # material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
-                #     mesh.materials[0].name)
-                material_id = bpy.data.materials.find(mesh.materials[0].name)
-            else:
-                material_id = create_default_liquid_mat()
+            # if mesh.materials[0].wow_wmo_material.enabled:
+            #     # material_id = bpy.context.scene.wow_wmo_root_elements.materials.find(
+            #     #     mesh.materials[0].name)
+            # else:
+            #     material_id = create_default_liquid_mat()
+            # TODO
+            mat_found = False
+            # for id, material in self.bl_materials.items():
+            #     if material.name == mesh.materials[0].name:
+            #         material_id = id
+            #         mat_found = True
+            #         break
+            # if not mat_found:
+            material_id = create_default_liquid_mat()
         else:
             material_id = create_default_liquid_mat()
 
@@ -848,7 +851,12 @@ class BlenderWMOSceneGroup:
 
         for material in mesh.materials:
             # mat_id = scene.wow_wmo_root_elements.materials.find(material.name)
-            mat_id = bpy.data.materials.find(material.name)
+
+            mat_id = -1
+            for id, bl_mat in self.wmo_scene.bl_materials.items():
+                if material.name == bl_mat.name:
+                    mat_id = id
+                    break
 
             if mat_id < 0:
                 raise Exception('Error: Assigned material \"{}\" is not registered as WoW Material.'.format(
@@ -977,15 +985,7 @@ class BlenderWMOSceneGroup:
         self.wmo_group.mogp.group_name_ofs = group_info[0]
         self.wmo_group.mogp.desc_group_name_ofs = group_info[1]
 
-        if len(obj.wow_wmo_group.modr):
-            for doodad in obj.wow_wmo_group.modr:
-                self.wmo_group.modr.doodad_refs.append(doodad.value)
-            self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
-        # elif obj.wow_wmo_group.relations.doodads:
-        #     for doodad in obj.wow_wmo_group.relations.doodads:
-        #         self.wmo_group.modr.doodad_refs.append(doodad.id)
-        #     self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads
-        elif self.doodads_relations:
+        if self.doodads_relations:
             for doodad in self.doodads_relations:
                 self.wmo_group.modr.doodad_refs.append(doodad)
             self.wmo_group.mogp.flags |= MOGPFlags.HasDoodads

@@ -19,6 +19,7 @@ from ....addon_common.common.globals import Globals
 
 from ..handlers import DepsgraphLock
 from .. import handlers
+from ...ui.collections import get_wmo_collection, SpecialCollections
 
 
 
@@ -765,10 +766,17 @@ class WMO_OT_add_liquid(bpy.types.Operator):
     )
 
     def execute(self, context):
+
+        liquid_collection = get_wmo_collection(context.scene, SpecialCollections.Liquids)
+        if not liquid_collection:
+            self.report({'WARNING'}, "Can't add WMO Liquid: No WMO Object Collection found in the scene.")
+            return {'FINISHED'}
+
         bpy.ops.mesh.primitive_grid_add(x_subdivisions=self.x_planes,
                                         y_subdivisions=self.y_planes,
                                         size=4.1666625
                                         )
+
         water = bpy.context.view_layer.objects.active
         bpy.ops.transform.resize(value=(self.x_planes, self.y_planes, 1.0))
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
@@ -776,6 +784,10 @@ class WMO_OT_add_liquid(bpy.types.Operator):
         water.name += "_Liquid"
 
         mesh = water.data
+
+        water.wow_wmo_liquid.enabled = True
+        # move to collection
+        liquid_collection.objects.link(water)
 
         bit = 1
         counter = 0
@@ -791,7 +803,6 @@ class WMO_OT_add_liquid(bpy.types.Operator):
             counter += 1
             bit <<= 1
 
-        water.wow_wmo_liquid.enabled = True
 
         water.hide_set(False if "4" in bpy.context.scene.wow_visibility else True)
 

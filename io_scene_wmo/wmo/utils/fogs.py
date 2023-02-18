@@ -1,7 +1,7 @@
 import bpy
 
 
-def create_fog_object(name='Fog', radius=1.0, location=None, color=(1.0, 1.0, 1.0, 1.0)):
+def create_fog_object(name='WoW Fog', radius=1.0, location=None, color=(1.0, 1.0, 1.0, 1.0)):
 
     bpy.ops.mesh.primitive_uv_sphere_add(radius=radius
                                          , location=bpy.context.scene.cursor.location if location is None else location
@@ -27,13 +27,18 @@ def create_fog_object(name='Fog', radius=1.0, location=None, color=(1.0, 1.0, 1.
     diffuse = material.node_tree.nodes.new('ShaderNodeBsdfDiffuse')
     transparent = material.node_tree.nodes.new('ShaderNodeBsdfTransparent')
     mix = material.node_tree.nodes.new('ShaderNodeMixShader')
+    color_node = material.node_tree.nodes.new('ShaderNodeAttribute')
 
     node_tree.links.new(output.inputs['Surface'], mix.outputs['Shader'])
     node_tree.links.new(mix.inputs[1], transparent.outputs['BSDF'])
     node_tree.links.new(mix.inputs[2], diffuse.outputs['BSDF'])
+    node_tree.links.new(diffuse.inputs['Color'], color_node.outputs['Color'])
 
     mix.inputs['Fac'].default_value = 0.3
-    diffuse.inputs['Color'].default_value = color
+    # diffuse.inputs['Color'].default_value = color
+    # color_node.inputs('Type').
+    color_node.attribute_name = 'wow_wmo_fog.color1'
+    color_node.attribute_type = 'OBJECT'
 
     fog.hide_set(False if "3" in bpy.context.scene.wow_visibility else True)
 
