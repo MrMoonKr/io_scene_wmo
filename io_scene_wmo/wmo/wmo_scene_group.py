@@ -38,7 +38,7 @@ class BlenderWMOSceneGroup:
 
         if basic_liquid_type < 20:
             if basic_liquid_type == 0:
-                real_liquid_type = 14 if self.wmo_group.mogp.flags & 0x80000 else 13
+                real_liquid_type = 14 if self.wmo_group.mogp.flags & MOGPFlags.IsNotOcean else 13
             elif basic_liquid_type == 1:
                 real_liquid_type = 14
             elif basic_liquid_type == 2:
@@ -582,7 +582,7 @@ class BlenderWMOSceneGroup:
         else:
             # getting Liquid Type ID
 
-            if self.wmo_scene.wmo.mohd.flags & MOHDFlags.UseLiquidTypeDBCId: 
+            if self.wmo_scene.wmo.mohd.flags & MOHDFlags.UseLiquidTypeDBCId:
                 real_liquid_type = group.mogp.liquid_type
             else:
                 real_liquid_type = self.from_wmo_liquid_type(group.mogp.liquid_type)
@@ -864,6 +864,7 @@ class BlenderWMOSceneGroup:
 
             material_mapping.append(mat_id)
 
+        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
         liquid_params = self.save_liquid(obj.wow_wmo_group.liquid_mesh) if obj.wow_wmo_group.liquid_mesh else None
 
         return mesh, WMOGeometryBatcherMeshParams(mesh.as_pointer()
@@ -898,7 +899,6 @@ class BlenderWMOSceneGroup:
             self.wmo_group.mocv2.from_bytes(batcher.vertex_colors2(group_index))
 
         # save liquid
-        self.wmo_group.mogp.liquid_type = int(obj.wow_wmo_group.liquid_type)
         if obj.wow_wmo_group.liquid_mesh:
             self.wmo_group.mliq.from_bytes(batcher.liquid(group_index))
         else:
@@ -967,12 +967,10 @@ class BlenderWMOSceneGroup:
                                   fogs[2].wow_wmo_fog.fog_id if fogs[2] else 0,
                                   fogs[3].wow_wmo_fog.fog_id if fogs[3] else 0)
         # save lamps
-        # lamps = obj.wow_wmo_group.relations.lights
         lamps = self.lights_relations
         if lamps:
             has_lights = True
             for lamp_id in lamps:
-                # self.wmo_group.molr.light_refs.append(lamp.id)
                 self.wmo_group.molr.light_refs.append(lamp_id)
 
         self.wmo_group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)

@@ -40,9 +40,9 @@ class BlenderWMOScene:
         self.bl_lights: List[bpy.types.Object] = []
         self.bl_liquids: List[bpy.types.Object] = []
         self.bl_doodad_sets: Dict[str, bpy.types.Object] = {}
+        # used for export:
         self.groups_eval: List[bpy.types.Mesh] = []
         self.group_batch_params: List[WMOGeometryBatcherMeshParams] = []
-        # used for export:
         self.portals_relations: Dict[bpy.types.Object, List[bpy.types.Object]] = {}
         self.lights_relations: Dict[bpy.types.Object, List[int]] = {}
         self.doodads_relations: Dict[bpy.types.Object, List[int]] = {}
@@ -135,7 +135,7 @@ class BlenderWMOScene:
             elif wmo_material.blend_mode == 1:
                 mat.blend_method = 'CLIP'
                 mat.alpha_threshold = 0.9
-            # those blending modes don't exist anymore in 2.9+
+            # TODO : those blending modes don't exist anymore in 2.9+
             # elif wmo_material.blend_mode in (3, 7, 10):
             #     mat.blend_method = 'ADD'
             # elif wmo_material.blend_mode in (4, 5):
@@ -210,7 +210,6 @@ class BlenderWMOScene:
 
             fog_obj.scale = (wmo_fog.big_radius,wmo_fog.big_radius,wmo_fog.big_radius)
 
-            # bpy.context.view_layer.objects.active = fog_obj
             # applying object properties
             fog_obj.wow_wmo_fog.enabled = True
             fog_obj.wow_wmo_fog.ignore_radius = wmo_fog.flags & 0x01
@@ -249,16 +248,7 @@ class BlenderWMOScene:
                     doodadset_coll = bpy.data.collections.new(doodad_set.name)
                     doodad_collection.children.link(doodadset_coll)
 
-                # anchor.name = doodad_set.name
-                # anchor.hide_set(True)
-                # anchor.hide_select = True
-                # anchor.lock_location = (True, True, True)
-                # anchor.lock_rotation = (True, True, True)
-                # anchor.lock_scale = (True, True, True)
-
-                # doodadset_coll.hide_select = True
                 doodadset_coll.color_tag = 'COLOR_04'
-                # doodadset_coll.hide_viewport = True
 
                 for i in range(doodad_set.start_doodad, doodad_set.start_doodad + doodad_set.n_doodads):
                     doodad = self.wmo.modd.definitions[i]
@@ -277,9 +267,6 @@ class BlenderWMOScene:
 
                         # for j, mat in enumerate(nobj.data.materials):
                         #     nobj.data.materials[j] = mat.copy()
-
-                    # nobj.parent = anchor
-                    # bpy.context.collection.objects.link(nobj)
 
                     # also link to base collection ?
                     doodadset_coll.objects.link(nobj)
@@ -436,28 +423,12 @@ class BlenderWMOScene:
     def build_references(self, export_selected, export_method):
         """ Build WMO references in Blender scene """
 
-
-        # process materials
-#        for i, slot in tqdm(enumerate(root_elements.materials), desc='Building material references', ascii=True):
-#            if not slot.pointer:
-#                raise ReferenceError('\nError: Material slot does not point to a valid material.')
-#
-#            self.bl_materials[i] = slot.pointer
-        # for i, material in tqdm(enumerate(bpy.data.materials), desc='Building material references', ascii=True):
-        #     # if material.wow_wmo_material.enabled:
-        #     #     self.bl_materials[i] = material
-        #     self.bl_materials[i] = material
-
-        # process groups
-        # self.groups_relations.clear()
-
         group_objects = []
         scn = bpy.context.scene
 
         material_id = 0
 
         for i, group_object in tqdm(enumerate(get_wmo_groups_list(scn)), desc='Building group references', ascii=True):
-        # for i, group_object in tqdm(enumerate(wmo_outdoor_collection.objects), desc='Building group references(Outdoor)', ascii=True):
             if (export_selected and not group_object.select_get()) or group_object.hide_get():
                 continue
             group_object : bpy.types.Object
@@ -483,7 +454,6 @@ class BlenderWMOScene:
 
 
         # process portals
-        # for i, slot in tqdm(enumerate(root_elements.portals), desc='Building portal references', ascii=True):
         for i, portal_object in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Portals).objects), desc='Building portal references', ascii=True):
             self.bl_portals.append(portal_object)
             portal_object.wow_wmo_portal.portal_id = i
@@ -498,13 +468,11 @@ class BlenderWMOScene:
                 self.portals_relations[portal_object.wow_wmo_portal.second].append(portal_object)
 
         # process fogs
-        # for i, slot in tqdm(enumerate(root_elements.fogs), desc='Building fog references', ascii=True):
         for i, fog_object in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Fogs).objects), desc='Building fog references', ascii=True):
             self.bl_fogs.append(fog_object)
             fog_object.wow_wmo_fog.fog_id = i
 
         # process lights
-        # for i, slot in tqdm(enumerate(root_elements.lights), desc='Building light references', ascii=True):
         for i, light_object in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Lights).objects), desc='Building light references', ascii=True):
             group = find_nearest_object(light_object, group_objects)
             self.lights_relations[group].append(i)
@@ -512,15 +480,10 @@ class BlenderWMOScene:
 
         # process doodads
         doodad_counter = 0
-        # for i, slot in tqdm(enumerate(root_elements.doodad_sets), desc='Building doodad references', ascii=True):
-        # for i, doodad_set_object in tqdm(enumerate(bpy.data.collections.get('Doodads').objects), desc='Building doodad references', ascii=True):
         for i, doodad_set_collection in tqdm(enumerate(get_wmo_collection(scn, SpecialCollections.Doodads).children), desc='Building doodad references', ascii=True):
 
             doodads = []
 
-            # print(doodad_set_collection.name)
-
-            # for doodad in doodad_set_object.doodads:
             for doodad in doodad_set_collection.objects:
                 group = find_nearest_object(doodad, group_objects)
                 if group not in self.doodads_relations:
@@ -536,7 +499,6 @@ class BlenderWMOScene:
     def save_materials(self):
         """ Add material if not already added, then return index in root file """
 
-        # for i, mat_slot in tqdm(enumerate(bpy.context.scene.wow_wmo_root_elements.materials)
         for i, mat in tqdm(enumerate(self.bl_materials.values())
                                 , desc='Saving materials'
                                 , ascii=True
@@ -733,13 +695,10 @@ class BlenderWMOScene:
         for bl_group, group_mesh_eval in tqdm(zip(self.bl_groups, self.groups_eval), desc='Saving portals', ascii=True):
 
             group_obj = bl_group.bl_object
-            # portal_relations = group_obj.wow_wmo_group.relations.portals
-            # portal_relations = self.groups_relations[group_obj.name].portals
             portal_relations = self.portals_relations[group_obj]
             bl_group.wmo_group.mogp.portal_start = len(self.wmo.mopr.relations)
 
             for portal_obj in portal_relations:
-                # portal_obj = bpy.context.scene.objects[relation.id].evaluated_get(depsgraph)
                 portal_index = portal_obj.original.wow_wmo_portal.portal_id
                 portal_mesh = portal_obj.data
 
