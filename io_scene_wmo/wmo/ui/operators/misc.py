@@ -180,39 +180,6 @@ class WMO_OT_select_entity(bpy.types.Operator):
         return {'FINISHED'}
 
 
-        for obj in bpy.context.scene.objects:
-            if obj.hide_get():
-                continue
-
-            if obj.type == 'MESH':
-                if WoWWMOGroup.match(obj):
-                    if self.entity == "Outdoor" and WoWWMOGroup.is_outdoor(obj):
-                        obj.select_set(True)
-                    elif self.entity == "Indoor" and WoWWMOGroup.is_indoor(obj):
-                        obj.select_set(True)
-
-                    if self.entity == "Collision" and obj.wow_wmo_group.collision_mesh:
-                        obj.wow_wmo_group.collision_mesh.select_set(True)
-
-                # could also do : elif self.entity == "Collision" and WoWWMOCollision.match(obj):
-                elif self.entity == "wow_wmo_doodad" and WoWWMODoodad.match(obj):
-                    print(obj.name + " is doodad")
-                    obj.select_set(True)
-                elif self.entity == "wow_wmo_fog" and WoWWMOFog.match(obj):
-                    print(obj.name + " is fog")
-                    obj.select_set(True)
-                elif self.entity == "wow_wmo_liquid" and WoWWMOLiquid.match(obj):
-                    obj.select_set(True)
-                elif self.entity == "wow_wmo_portal" and WoWWMOPortal.match(obj):
-                    print(obj.name + " is portal")
-                    obj.select_set(True)
-
-            elif obj.type == 'LIGHT' and self.entity == "wow_wmo_light" and WoWWMOLight.match(obj):
-                obj.select_set(True)
-
-        return {'FINISHED'}
-
-
 class WMO_OT_generate_minimaps(bpy.types.Operator):
     bl_idname = 'scene.wow_wmo_generate_minimaps'
     bl_label = 'Generate Minimaps'

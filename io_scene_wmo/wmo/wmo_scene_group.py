@@ -967,12 +967,10 @@ class BlenderWMOSceneGroup:
                                   fogs[2].wow_wmo_fog.fog_id if fogs[2] else 0,
                                   fogs[3].wow_wmo_fog.fog_id if fogs[3] else 0)
         # save lamps
-        # lamps = obj.wow_wmo_group.relations.lights
         lamps = self.lights_relations
         if lamps:
             has_lights = True
             for lamp_id in lamps:
-                # self.wmo_group.molr.light_refs.append(lamp.id)
                 self.wmo_group.molr.light_refs.append(lamp_id)
 
         self.wmo_group.mogp.group_id = int(obj.wow_wmo_group.group_dbc_id)
