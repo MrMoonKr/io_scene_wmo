@@ -97,7 +97,7 @@ void LiquidExporter::_process_mesh_data()
 
     for (std::size_t i = 0; i < _liquid_mesh->totpoly; ++i)
     {
-      const MPoly* poly = &_liquid_mesh->mpoly[i];
+      const MPoly* poly = &_bl_polygons[i];
 
       for (int j = 0; j < poly->totloop; ++j)
       {
@@ -114,9 +114,9 @@ void LiquidExporter::_process_mesh_data()
       auto& magma_vertex = _mliq_vertices.emplace_back();
       Vector2D const& uv = vertex_to_uv[i];
       magma_vertex.magma_vert.s = static_cast<std::int16_t>(std::round(uv.x * 255));
-      magma_vertex.magma_vert.t = static_cast<std::int16_t>(std::round(uv.y * 255));
+      magma_vertex.magma_vert.t = static_cast<std::int16_t>(std::round(-(uv.y * 255)));
 
-      const MVert* vertex = &_liquid_mesh->mvert[i];
+      const MVert* vertex = &_bl_verts[i];
       glm::vec4 vertex_co4 = {vertex->co[0], vertex->co[1], vertex->co[2], 1.f};
       glm::vec3 vertex_co = _liquid_mesh_matrix_world * vertex_co4;
 
