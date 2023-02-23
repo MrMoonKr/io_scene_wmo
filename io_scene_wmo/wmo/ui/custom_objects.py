@@ -84,8 +84,8 @@ class WoWWMOGroup(CustomObject):
             obj.pass_index |= BlenderWMOObjectRenderFlags.IsOutdoor
             obj.pass_index &= ~BlenderWMOObjectRenderFlags.IsIndoor
         else:
-            obj.pass_index &= BlenderWMOObjectRenderFlags.IsOutdoor
-            obj.pass_index |= ~BlenderWMOObjectRenderFlags.IsIndoor
+            obj.pass_index &= ~BlenderWMOObjectRenderFlags.IsOutdoor
+            obj.pass_index |= BlenderWMOObjectRenderFlags.IsIndoor
 
         return True
 
