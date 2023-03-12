@@ -114,21 +114,21 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
     fog1:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #1",
-        poll=lambda self, obj: WoWWMOFog.match(self.fog1) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
+        poll=lambda self, obj: WoWWMOFog.match(obj) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
     fog2:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #2",
-        poll=lambda self, obj: WoWWMOFog.match(self.fog2) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
+        poll=lambda self, obj: WoWWMOFog.match(obj) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
     fog3:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #3",
-        poll=lambda self, obj: WoWWMOFog.match(self.fog3) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
+        poll=lambda self, obj: WoWWMOFog.match(obj) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
