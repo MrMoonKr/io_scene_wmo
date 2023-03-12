@@ -25,6 +25,7 @@ windows:
   script:
     - C:\Python310\python.exe -m pip install --upgrade pip
     - C:\Python310\python.exe -m pip install Cython
+    - C:\Python310\python.exe -m pip install numpy
     - mkdir C:\\GitLab-Runner\\builds\\skarnproject\\blender-wow-studio\\dist
     - C:\Python310\python.exe io_scene_wmo/build.py --dist=C:\\GitLab-Runner\\builds\\skarnproject\\blender-wow-studio\\dist
 
