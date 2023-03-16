@@ -8,6 +8,7 @@ from ....pywowlib.blp import PNG2BLP
 # from ....pywowlib.io_utils.types import *
 from ...ui.custom_objects import *
 from ..collections import get_wmo_collection, SpecialCollections
+from ....ui.preferences import get_project_preferences
 
 from ....third_party.tqdm import tqdm
 
@@ -273,10 +274,10 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
             bpy.context.view_layer.objects.active = obj
             camera = bpy.data.cameras["MinimapsCamera"]
             # output_path = bpy.context.scene.render.filepath
-            if not bpy.context.preferences.addons[PACKAGE_NAME].preferences.project_dir_path: # if project dir not set in settings, use blender's render path
+            if not get_project_preferences().project_dir_path: # if project dir not set in settings, use blender's render path
                 output_path = bpy.context.scene.render.filepath
             else:
-                output_path = os.path.join(bpy.context.preferences.addons[PACKAGE_NAME].preferences.project_dir_path, r'textures\Minimap')
+                output_path = os.path.join(get_project_preferences().project_dir_path, r'textures\Minimap')
 
             # md5_text = ""
             md5_text = b''
@@ -433,10 +434,10 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
             for entry in md5_entries:
                 md5_output += entry
 
-            if not bpy.context.preferences.addons[PACKAGE_NAME].preferences.project_dir_path: # if project dir not set in settings, use blender's render path
+            if not get_project_preferences().project_dir_path: # if project dir not set in settings, use blender's render path
                 output_path = os.path.join(bpy.context.scene.render.filepath, r'md5translate.trs')
             else:
-                output_path = os.path.join(bpy.context.preferences.addons[PACKAGE_NAME].preferences.project_dir_path, r'textures\Minimap\md5translate.trs')
+                output_path = os.path.join(get_project_preferences().project_dir_path, r'textures\Minimap\md5translate.trs')
 
             with open(output_path, "wb") as f:
                 f.write(md5_file)

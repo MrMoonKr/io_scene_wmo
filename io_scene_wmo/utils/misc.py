@@ -106,10 +106,6 @@ def load_game_data() -> WoWFileData:
     WoWVersionManager().set_client_version(int(bpy.context.scene.wow_scene.version))
 
     if not hasattr(bpy, 'wow_game_data'):
-
-        # addon_preferences = bpy.context.preferences.addons[PACKAGE_NAME].preferences
-        # bpy.wow_game_data = WoWFileData(addon_preferences.wow_path, addon_preferences.project_dir_path)
-
         project_preferences = get_project_preferences()
         bpy.wow_game_data = WoWFileData(project_preferences.wow_path, project_preferences.project_dir_path)
 
@@ -121,7 +117,10 @@ def load_game_data() -> WoWFileData:
 
 def resolve_texture_path(filepath: str) -> str:
     filepath = os.path.splitext(bpy.path.abspath(filepath))[0] + ".blp"
-    prefs = bpy.context.preferences.addons[PACKAGE_NAME].preferences
+    prefs = get_project_preferences()
+
+    if not prefs.cache_dir_path:
+        raise Exception("Cache directory is not set, textures might not work. Check settings.")
 
     # TODO: project folder
     rel_path = os.path.relpath(filepath, start=prefs.cache_dir_path)
