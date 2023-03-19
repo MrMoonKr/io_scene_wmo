@@ -194,7 +194,7 @@ def get_current_wow_model_collection(scene: bpy.types.Scene
     # check if the collection is a child of some existing collections.
     for col in scene.collection.children:
         # double check if this fix is right and I udnerstood it correctly
-        if getattr(col, id_prop).enabled and act_col.name in col.children_recursive:
+        if getattr(col, id_prop).enabled and act_col in col.children_recursive:
             return col
 
     # print("Error : Failed to find a WoW Model Collection.")

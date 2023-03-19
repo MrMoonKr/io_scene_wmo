@@ -4,6 +4,7 @@ from ...utils.collections import SpecialCollection
 from ..ui.custom_objects import WMO_CUSTOM_OBJECT_TYPES
 from ..ui.collections import WMO_SPECIAL_COLLECTION_TYPES
 from ...ui.enums import WoWSceneTypes
+from .collections import DoodadSetsCollection
 
 from bpy.app.handlers import persistent
 import bpy
@@ -35,6 +36,7 @@ def handle_collection_update(scene: bpy.types.Scene, update: bpy.types.Depsgraph
         # verify integrity of child
         else:
             SpecialCollection.verify_root_collection_integrity(collection, WMO_SPECIAL_COLLECTION_TYPES)
+            DoodadSetsCollection.verify_doodad_sets_collection_integrity(scene, collection)
             return
 
     for col_type in WMO_SPECIAL_COLLECTION_TYPES:

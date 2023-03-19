@@ -129,6 +129,24 @@ class DoodadSetsCollection(_WMOCollection, SpecialCollection):
             return False
 
     @classmethod
+    def verify_doodad_sets_collection_integrity(cls
+                                                , scene: bpy.types.Scene
+                                                , root_col: bpy.types.Collection):
+
+        if root_col is None:
+            return False
+
+        # cls.verify_root_collection_integrity(root_col, Iterable['SpecialCollection'])
+        for child_col in root_col.children:
+                if match_id_name(child_col.name, DoodadSetsCollection.__wbs_collection_name__):
+                    default_global_coll = child_col.children.get("Set_$DefaultGlobal")
+                    if not default_global_coll:
+                        print("missing!")
+                        default_global_coll = bpy.data.collections.new("Set_$DefaultGlobal")
+                        child_col.children.link(default_global_coll)
+                        default_global_coll.color_tag = 'COLOR_04'
+
+    @classmethod
     def handle_collection_if_matched(cls
                                      , scene: bpy.types.Scene
                                      , update: bpy.types.DepsgraphUpdate
@@ -143,6 +161,8 @@ class DoodadSetsCollection(_WMOCollection, SpecialCollection):
             return False
 
         cls.verify_root_collection_integrity(root_col, special_collection_ts)
+
+        cls.verify_doodad_sets_collection_integrity(scene, root_col)
 
         # doodad sets collection of collections
         if match_id_name(collection.name, cls.__wbs_collection_name__):
@@ -159,6 +179,7 @@ class DoodadSetsCollection(_WMOCollection, SpecialCollection):
             if len(collection.children):
                 for child_col in collection.children:
                     collection_swap_parent_collection(child_col, collection, root_col)
+                    child_col.color_tag = 'COLOR_04'
 
                 MessageStack().push_message(msg=f'Collection "{collection.name}" cannot contain child collections.')
 

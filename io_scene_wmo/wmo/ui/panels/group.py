@@ -135,7 +135,7 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
     fog4:  bpy.props.PointerProperty(
         type=bpy.types.Object,
         name="Fog #4",
-        poll=lambda self, obj: WoWWMOFog.match(self.fog4) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
+        poll=lambda self, obj: WoWWMOFog.match(obj) and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Fogs).objects,
         update=fog_validator
     )
 
