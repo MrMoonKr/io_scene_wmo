@@ -246,7 +246,7 @@ class WoWWMOPortal(CustomObject):
 class WoWWMOCollision(CustomObject):
     __wbs_bl_object_type__ = 'MESH'
     __wbs_prop_group_id__ = ''
-    __wbs_allow_modifiers__ = False
+    __wbs_allow_modifiers__ = True
     __wbs_allow_constraints__ = False
     __wbs_allow_material_properties__ = False
     __wbs_allow_particles__ = False
