@@ -12,7 +12,7 @@ from ..pywowlib.wmo_file import WMOFile
 
 from ..ui.preferences import get_project_preferences
 from .ui.handlers import DepsgraphLock
-from .ui.collections import WMO_SPECIAL_COLLECTION_TYPES
+from .ui.collections import WMO_SPECIAL_COLLECTION_TYPES, DoodadSetsCollection
 
 
 def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath: str = ''):
@@ -43,6 +43,7 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath:
         if not wow_model_collection:
             wow_model_collection = create_wmo_model_collection(bpy.context.scene, filepath, wowfilepath)
         SpecialCollection.verify_root_collection_integrity(wow_model_collection, WMO_SPECIAL_COLLECTION_TYPES)
+        DoodadSetsCollection.verify_doodad_sets_collection_integrity(bpy.context.scene, wow_model_collection)
 
         # extract textures to cache folder
         # game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())

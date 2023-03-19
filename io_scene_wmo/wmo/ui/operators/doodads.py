@@ -9,7 +9,7 @@ from ....utils.misc import find_nearest_object
 from ....third_party.tqdm import tqdm
 from ..custom_objects import WoWWMODoodad, WoWWMOGroup
 
-from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection
+from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection, DoodadSetsCollection
 from ...ui.enums import SpecialCollections
 
 
@@ -20,26 +20,33 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def get_active_doodad_collection(self, scene : bpy.types.Scene) -> bpy.types.Collection | None:
-        active_doodad_set : str = scene.wow_doodad_visibility
 
-        if not active_doodad_set  or active_doodad_set == "None":
+        active_coll = bpy.context.collection
+
+        active_set_collection : bpy.types.Collection = None
+
+        if DoodadSetsCollection.is_doodad_set_collection(scene, active_coll):
+            active_set_collection = active_coll
+        else:
+            # if the current selected collection isn't a doodadset coll, import to DefaultGlobal
+            wmo_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+            if wmo_model_collection:
+                for set_collection in get_wmo_collection(scene, SpecialCollections.Doodads).children:
+                    DoodadSetsCollection.verify_doodad_sets_collection_integrity(scene, wmo_model_collection)
+                    if set_collection.name == "Set_$DefaultGlobal":
+                        active_set_collection = set_collection
+                        self.report({'INFO'}, "No Doodad Set collection selected, importing it to [Set_$DefaultGlobal].")
+            else:
+                self.report({'ERROR'}, "Failed to find an active WMO model collection.")
+
+
+        if not active_set_collection or active_set_collection is None:
             self.report({'ERROR'}, "Failed to import doodad. No active doodad set is selected."
             "Select the doodad set to import the doodad to in the WMO panel")
             return None
-        
-        active_set_collection : bpy.types.Collection = None
-        wmo_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
-        if wmo_model_collection:
-            for set_collection in get_or_create_collection(wmo_model_collection, SpecialCollections.Doodads.name).children: 
-                if set_collection.name == active_doodad_set:
-                    active_set_collection = set_collection
-        else:
-            self.report({'ERROR'}, "Failed to find an active WMO model collection.")
-
-        if active_set_collection is None:
-            self.report({'ERROR'}, "Failed to find the active doodad set collection.")
 
         return active_set_collection
+
 
     def execute(self, context):
 
