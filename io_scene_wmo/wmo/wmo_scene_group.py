@@ -516,8 +516,11 @@ class BlenderWMOSceneGroup:
         if group.mogp.flags & MOGPFlags.Outdoor:
             wmo_outdoor_collection.objects.link(nobj)
 
-        if group.mogp.flags & MOGPFlags.Indoor:
+        else:
             wmo_indoor_collection.objects.link(nobj)
+            if not group.mogp.flags & MOGPFlags.Indoor:
+                print('\nWARNING: Group ' + self.name + 'does not have an interior or exterior flag. Most likely an older alpha/beta model, importing as indoor.')
+
 
         self.bl_object = nobj
 
