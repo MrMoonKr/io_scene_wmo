@@ -171,8 +171,6 @@ class WMO_PT_tools_object_mode_actions(bpy.types.Panel):
         col.separator()
         box_col = col.column(align=True)
         box_col.operator("scene.wow_wmo_generate_minimaps", text='Generate minimaps', icon='SHADING_RENDERED')
-        # could still be useful for materials pointers ?
-        # box_col.operator("scene.wow_wmo_purge_references", text='Purge invalid references', icon='TOOL_SETTINGS')
 
         if bpy.context.selected_objects:
             box_col.operator("scene.wow_wmo_generate_materials", text='Generate materials', icon='MATERIAL')

@@ -7,7 +7,7 @@ from ....utils.misc import load_game_data
 from ....pywowlib.blp import PNG2BLP
 # from ....pywowlib.io_utils.types import *
 from ...ui.custom_objects import *
-from ..collections import get_wmo_collection, SpecialCollections
+from ..collections import get_wmo_collection, SpecialCollections, get_wmo_groups_list
 from ....ui.preferences import get_project_preferences
 
 from ....third_party.tqdm import tqdm
@@ -236,13 +236,21 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
         def set_mat_backface_culling():
             # for wmo_mat in bpy.data.scenes["Scene"].wow_wmo_root_elements.materials:
-            for wmo_mat in bpy.data.materials:
-                wmo_mat.pointer.use_backface_culling = True
+
+            for group_object in get_wmo_groups_list(bpy.context.scene):
+                for material in group_object.data.materials:
+                    material.use_backface_culling = True
+
+            # for wmo_mat in bpy.data.materials:
+            #     wmo_mat.pointer.use_backface_culling = True
 
 
         def disable_object_wmo_render_visiblity():
-            for obj in bpy.context.scene.objects:
-                obj.hide_render = True
+            for group_object in get_wmo_groups_list(bpy.context.scene):
+                group_object.hide_render = True
+
+            # for obj in bpy.context.scene.objects:
+            #     obj.hide_render = True
 
             # for wmo_group in bpy.data.scenes["Scene"].wow_wmo_root_elements.groups:
             #     group_obj = wmo_group.pointer.hide_render = True
@@ -262,12 +270,12 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
 
         def iterate_groups():
-            wmo_outdoor_collection = bpy.data.collections.get('Outdoor')
-            wmo_indoor_collection = bpy.data.collections.get('Indoor')
-            for i, wmo_group in enumerate(list(wmo_outdoor_collection.objects) + list(wmo_indoor_collection.objects)):
-                if WoWWMOGroup.is_indoor():
+            # wmo_outdoor_collection = bpy.data.collections.get('Outdoor')
+            # wmo_indoor_collection = bpy.data.collections.get('Indoor')
+            for i, wmo_group in enumerate(get_wmo_groups_list(bpy.context.scene)):
+                if WoWWMOGroup.is_indoor(wmo_group):
                     # group_id = wmo_group.pointer.wow_wmo_group.group_id
-                    render_images(wmo_group.pointer, i)
+                    render_images(wmo_group, i)
 
 
         def render_images(obj, group_id):
@@ -442,6 +450,10 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
             with open(output_path, "wb") as f:
                 f.write(md5_file)
                 f.write(md5_output)
+
+            # open the folder when done
+            os.startfile(os.path.dirname(output_path))
+            
 
         create_camera_object()
         set_mat_backface_culling()
