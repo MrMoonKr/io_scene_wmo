@@ -4,7 +4,7 @@ from ..enums import *
 from .common import panel_poll
 from ..custom_objects import *
 from ...ui.enums import SpecialCollections
-from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection
+from ...ui.collections import get_current_wow_model_collection, get_or_create_collection, get_wmo_groups_list
 
 
 def update_wow_visibility(self, context):
@@ -46,6 +46,15 @@ def update_wow_visibility(self, context):
             obj.hide_set('5' not in values)
 
         obj['wow_hide'] = obj.hide_get()
+
+
+def update_wow_wmo_culling(self, context):
+    values = self.wow_enable_culling
+
+    for group_object in get_wmo_groups_list(bpy.context.scene):
+        for material in group_object.data.materials:
+            if not "4" in material.wow_wmo_material.flags: # two-sided flag
+                material.use_backface_culling = ('culling' in values)
 
 
 def get_doodad_sets(self, context):
@@ -109,6 +118,8 @@ class WMO_PT_tools_object_mode_display(bpy.types.Panel):
         box2_row2.prop(context.scene, "wow_doodad_visibility", expand=False)
         box2_row2.operator("scene.wow_wmo_select_entity", text='', icon='VIEWZOOM').entity = 'wow_wmo_doodad'
 
+        box2_row3 = col.row()
+        box2_row3.prop(context.scene, "wow_enable_culling")
     @classmethod
     def poll(cls, context):
         return panel_poll(cls, context)
@@ -262,6 +273,16 @@ def register():
     )
 
 
+    bpy.types.Scene.wow_enable_culling = bpy.props.EnumProperty(
+        items=[
+            ('culling', "Backface Culling",
+             "Enable materials backface culling unless that material has the two-sided flag for a realistic WoW rendering",
+              'XRAY', 0x1)],
+        options={'ENUM_FLAG'},
+        # default={},
+        update=update_wow_wmo_culling
+    )
+
 
     bpy.types.Scene.wow_doodad_visibility = bpy.props.EnumProperty(
         name="",
@@ -277,6 +298,7 @@ def register():
 def unregister():
     del bpy.types.Scene.wow_visibility
     del bpy.types.Scene.wow_doodad_visibility
+    del bpy.types.Scene.wow_enable_culling
 
     bpy.types.VIEW3D_MT_add.remove(wow_components_add_menu_item)
     bpy.types.VIEW3D_MT_add.remove(render_viewport_toggles_right)
