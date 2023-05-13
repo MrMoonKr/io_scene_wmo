@@ -20,7 +20,7 @@ def get_project_preferences() -> Optional['WBS_PG_ProjectPreferences']:
     addon_preferences = get_addon_preferences()
 
     if not len(addon_preferences.projects):
-        return None
+        raise UserWarning("No active project. Check WBS settings.")
 
     return addon_preferences.projects[addon_preferences.active_project_index]
 
