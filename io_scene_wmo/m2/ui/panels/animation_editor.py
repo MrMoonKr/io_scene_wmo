@@ -199,7 +199,7 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
             else:
                 col.prop(cur_anim_track, 'blend_time', text="Blend time")
 
-            col.prop(cur_anim_track, 'frequency', text="Frequency")
+            col.prop(cur_anim_track, 'frequency', text="Frequency (%)")
 
             col.label(text='Random repeat:')
             col.prop(cur_anim_track, 'replay_min', text="Min")
@@ -415,6 +415,20 @@ class M2_OT_animation_editor_sequence_deselect(bpy.types.Operator):
             # TODO: set to rest pose here
 
         return {'FINISHED'}
+    
+class M2_OT_animation_editor_play_global_sequence(bpy.types.Operator):
+    bl_idname = 'scene.wow_m2_animation_editor_play_global_sequence'
+    bl_label = 'Play all global sequences along animation'
+    bl_description = 'Play all global sequences'
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    def execute(self, context):
+
+        context.scene.wow_m2_play_global_sequences = not context.scene.wow_m2_play_global_sequences
+
+        update_animation(self, context)
+
+        return {'FINISHED'}    
 
 
 class M2_OT_animation_editor_go_to_animation(bpy.types.Operator):
@@ -462,6 +476,8 @@ class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
                         icon = 'OUTLINER_DATA_EMPTY'
                     elif item.object.wow_m2_uv_transform.enabled:
                         icon = 'ASSET_MANAGER'
+                    elif item.object.wow_m2_particle.enabled:
+                        icon = 'OBJECT_DATA'
 
                 row.label(text=item.object.name, icon=icon)
             elif item.type == 'SCENE' and item.scene:
@@ -605,7 +621,8 @@ def poll_object(self, obj):
     if obj.type == 'EMPTY' and not (obj.wow_m2_uv_transform.enabled
                                     or obj.wow_m2_attachment.enabled
                                     or obj.wow_m2_event.enabled
-                                    or obj.wow_m2_camera.enabled):
+                                    or obj.wow_m2_camera.enabled
+                                    or obj.wow_m2_particle.enabled):
         return False
 
     return True
@@ -762,6 +779,7 @@ def update_stash_to_nla(self, context):
 
                 if obj.animation_data.action:
                     strip.frame_end = obj.animation_data.action.frame_range[1]
+     
     else:
         for anim_pair in self.anim_pairs:
             if (anim_pair.object or anim_pair.scene) and anim_pair.action:
@@ -773,6 +791,11 @@ def update_stash_to_nla(self, context):
 
     update_scene_frame_range()
 
+def get_frequency_percentage(frequency):
+    return (frequency / 32767) * 100
+
+def convert_frequency_percentage(frequency):
+    return (int((frequency / 100) * 32767))
 
 class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
 
@@ -851,11 +874,11 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
         default=1.0
     )
 
-    frequency:  bpy.props.IntProperty(
+    frequency:  bpy.props.FloatProperty(
         name="Frequency",
-        description="This is used to determine how often the animation is played.",
-        min=0,
-        max=32767
+        description="This is used to determine how often the animation is played as a percentage %",
+        min=0.0,
+        max=100.0,
     )
 
     replay_min:  bpy.props.IntProperty(
@@ -986,7 +1009,7 @@ def update_scene_frame_range():
             frame_end = bpy.context.scene.animation_data.action.frame_range[1]
 
     bpy.context.scene.frame_start = 0
-    bpy.context.scene.frame_end = frame_end
+    bpy.context.scene.frame_end = int(frame_end)
 
     # update NLA tracks length
     for anim in bpy.context.scene.wow_m2_animations:
@@ -1041,10 +1064,23 @@ def update_animation(self, context):
         if anim.is_global_sequence:
             global_seqs.append(anim)
 
-    update_scene_frame_range()
+    update_scene_frame_range()      
+    
+    if context.scene.wow_m2_play_global_sequences:
+        for i, anim in enumerate(context.scene.wow_m2_animations):
+            if i == context.scene.wow_m2_cur_anim_index:
+                if not anim.is_global_sequence:
+                    for i, anim in enumerate(global_seqs):
+                        for anim_pair in anim.anim_pairs:
+                            if anim_pair.type == 'OBJECT':
+                                anim_pair.object.animation_data.action = anim_pair.action
 
-    for seq in global_seqs:
-        update_stash_to_nla(seq, bpy.context)
+    for anim_pair in sequence.anim_pairs:
+        if anim_pair.type == 'OBJECT':
+            anim_pair.object.animation_data.action = anim_pair.action  
+
+    #for seq in global_seqs:
+        #update_stash_to_nla(seq, bpy.context)
 
 
 def register():
@@ -1060,7 +1096,11 @@ def register():
         update=update_animation
     )
 
+    bpy.types.Scene.wow_m2_play_global_sequences = bpy.props.BoolProperty(default=False)
+
 
 def unregister():
     del bpy.types.Scene.wow_m2_animations
     del bpy.types.Scene.wow_m2_cur_anim_index
+    del bpy.types.Scene.wow_m2_play_global_sequences
+

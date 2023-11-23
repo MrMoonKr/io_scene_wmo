@@ -439,5 +439,5 @@ def register():
 
 
 def unregister():
-    del bpy.types.Object.wow_m2_particle
+    del bpy.Object.wow_m2_particle
 

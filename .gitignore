@@ -12,3 +12,4 @@ build/
 /io_scene_wmo/.vscode/settings.json
 /io_scene_wmo/wbs_kernel/src/render.cpp
 /io_scene_wmo/wbs_kernel/src/wmo_utils.cpp
+/.vs

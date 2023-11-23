@@ -10,6 +10,7 @@ from ..pywowlib.archives.wow_filesystem import WoWFileData
 from .. import PACKAGE_NAME
 from ..ui.preferences import get_project_preferences
 
+
 SequenceRecord = namedtuple('SequenceRecord', ['name', 'value', 'index'])
 
 
@@ -114,16 +115,18 @@ def load_game_data() -> WoWFileData:
 
     return bpy.wow_game_data
 
-
+def custom_relpath(path, start):
+    if path.lower().startswith(start.lower()):
+        return path[len(start):].lstrip('\\')
+    else:
+        return resolve_outside_texture_path(path)
+    
 def resolve_texture_path(filepath: str) -> str:
     filepath = os.path.splitext(bpy.path.abspath(filepath))[0] + ".blp"
     prefs = get_project_preferences()
 
-    if not prefs.cache_dir_path:
-        raise Exception("Cache directory is not set, textures might not work. Check settings.")
-
     # TODO: project folder
-    rel_path = os.path.relpath(filepath, start=prefs.cache_dir_path)
+    rel_path = custom_relpath(filepath, prefs.cache_dir_path)
     test_path = os.path.join(prefs.cache_dir_path, rel_path)
     if os.path.exists(test_path) and os.path.isfile(test_path):
         return rel_path.replace('/', '\\')
@@ -153,6 +156,20 @@ def resolve_texture_path(filepath: str) -> str:
         if game_data.has_file(rest_path_n)[0]:
             return rest_path_n
 
+def resolve_outside_texture_path(filepath: str) -> str:
+    keywords = ["world\\", "dungeon\\", "creature\\", "interface\\", "item\\", "models\\", "spells\\", "textures\\", "tileset\\", "xtextures\\"]
+    lowercase_filepath = filepath.lower()
+    
+    for keyword in keywords:
+        if keyword in lowercase_filepath:
+            index = lowercase_filepath.rfind(keyword)
+            extracted_path = lowercase_filepath[index:]
+            extracted_path = os.path.splitext(extracted_path)[0] + ".blp"
+            normalized_path = os.path.normpath(extracted_path)
+            return normalized_path
+    
+    lowercase_filepath = os.path.splitext(bpy.path.abspath(lowercase_filepath))[0] + ".blp"
+    return lowercase_filepath
 
 def get_origin_position():
     loc = bpy.context.scene.cursor.location

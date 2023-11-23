@@ -8,6 +8,31 @@ __reload_order_index__ = -1
 ## Enumerated constants
 ###############################
 
+GLOBAL_FLAGS = [
+    ("1","Tilt X", "Model will tilt according to terrain on X axis", "PMARKER", 0x1),
+    ("2","Tilt Y", "Model will tilt according to terrain on Y axis", "PMARKER", 0x2),
+    ("4","Unknown", "", "QUESTION", 0x4),
+    ("8","Texture Combiner", "Add textureCombinerCombos array to end of data", "PMARKER", 0x8),
+    ("16","Unknown", "", "QUESTION", 0x10),
+    ("32","Load Phys Data Mop", "", "PMARKER", 0x20),
+    ("64","Unknown", "", "QUESTION", 0x40),
+    ("128","Unknown", "with this flag unset, demon hunter tattoos stop glowing // since Cata (4.0.1.12911) every model now has this flag", "QUESTION", 0x80),
+    ("256","Camera Related", "", "QUESTION", 0x100),
+    ("512","New Particle Record", "In CATA: new version of ParticleEmitters", "PMARKER", 0x200),
+    ("1024","Unknown", "", "QUESTION", 0x400),
+    ("2048","Texture Transforms Use Bone Sequences", "When set, texture transforms are animated using the sequence being played on the bone found by index in tex_unit_lookup_table[textureTransformIndex], instead of using the sequence being played on the model's first bone", "PMARKER", 0x800),
+    ("4096","Unknown", "", "QUESTION", 0x1000),
+    ("8192","ChunkedAnimFiles", "Seen in various legion models", "PMARKER", 0x2000),
+    ("16384","Unknown", "", "QUESTION", 0x4000),
+    ("32768","Unknown", "Seen in UI_MainMenu_Legion", "QUESTION", 0x8000),
+    ("65536","Unknown", "", "QUESTION", 0x10000),
+    ("131072","Unknown", "", "QUESTION", 0x20000),
+    ("262144","Unknown", "", "QUESTION", 0x40000),
+    ("524288","Unknown", "", "QUESTION", 0x80000),
+    ("1048576","Unknown", "", "QUESTION", 0x100000),
+    ("2097152","Unknown", "apparently: use 24500 upgraded model format: chunked .anim files, change in the exporter reordering sequence+bone blocks before name", "QUESTION", 0x200000),
+]
+
 VERTEX_SHADERS = [
     ("0", "Diffuse_T1", ""),
     ("1", "Diffuse_Env", ""),
@@ -125,11 +150,6 @@ RENDER_FLAGS = [
     ("4", "Two-sided", "Render from both sides", 'MOD_UVPROJECT', 0x4),
     ("8", "Depth-Test", "Unknown", 'SPACE3', 0x8),
     ("16", "Depth-Write", "Unknown", 'SPACE2', 0x10),
-    ("64", "Shadow Batch 1", "seen in WoD", 'QUESTION', 0x40),
-    ("128", "Shadow Batch 2", "seen in WoD", 'QUESTION', 0x80),
-    ("256", "Unknown", "seen in well_vortex01.m2", 'QUESTION', 0x100),
-    ("1024", "Unknown", "see in WoD", 'QUESTION', 0x400),
-    ("2048", "Prevent Alpha ", "revent alpha for custom elements. if set, use (fully) opaque or transparent. (litSphere, shadowMonk) (MoP+)", 'SPACE2', 0x800)
 ]
 
 BLENDING_MODES = [
@@ -169,12 +189,23 @@ TEXTURE_TYPES = [
     ("22", "Secondary Hair", "", 'PMARKER', 23),
     ("23", "Unknown: 23", "", 'PMARKER', 24),
     ("24", "Unknown: 24", "", 'PMARKER', 25)
-
 ]
+
+def get_texture_type_name(texture_type_id):
+    for field in TEXTURE_TYPES:
+        if int(field[0]) == texture_type_id:
+            return "DBC {}".format(field[1])
+    return "DBC texture type {}".format(str(texture_type_id))
 
 TEXTURE_FLAGS = [
     ("1", "Wrap X", "Texture wrap X", 'TRIA_RIGHT', 0x1),
     ("2", "Wrap Y", "Texture wrap Y", 'TRIA_UP', 0x2)
+]
+
+TEXTURE_MAPPING = [
+    ("UVMap", "First UVMap", "Use the first UVMap"),
+    ("UVMap.001", "Second UVMap", "Use the second UVMap"),
+    ("Env", "Environmental Mapping", "Use environmental mapping"),
 ]
 
 BONE_FLAGS = [
