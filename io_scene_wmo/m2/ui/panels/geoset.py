@@ -16,16 +16,6 @@ class M2_PT_geoset_panel(bpy.types.Panel):
             self.layout.prop(context.object.wow_m2_geoset, "mesh_part_group")
             self.layout.prop(context.object.wow_m2_geoset, "mesh_part_id")
 
-            row = self.layout.row(align=True)
-            row.prop(context.object.wow_m2_geoset, "uv_transform_1")
-            op = row.operator("scene.wow_m2_geoset_add_texture_transform", text='', icon='RNA_ADD')
-            op.channel = 1
-
-            row = self.layout.row(align=True)
-            row.prop(context.object.wow_m2_geoset, "uv_transform_2")
-            op = row.operator("scene.wow_m2_geoset_add_texture_transform", text='', icon='RNA_ADD')
-            op.channel = 2
-
     @classmethod
     def poll(cls, context):
         return (context.scene is not None
@@ -33,33 +23,6 @@ class M2_PT_geoset_panel(bpy.types.Panel):
                 and context.object is not None
                 and context.object.data is not None
                 and isinstance(context.object.data, bpy.types.Mesh))
-
-
-def update_geoset_uv_transform(self, context):
-    c_obj = context.object.wow_m2_geoset.uv_transform_1
-    c_obj_1 = context.object.wow_m2_geoset.uv_transform_2
-
-    for c_obj, uv_transform_name, uv_name in ((c_obj, 'M2TexTransform_1', 'UVMap'),
-                                              (c_obj_1, 'M2TexTransform_2', 'UVMap.001')):
-
-        uv_transform = context.object.modifiers.get(uv_transform_name)
-
-        if c_obj:
-            if not c_obj.wow_m2_uv_transform.enabled:
-                context.object.wow_m2_geoset.uv_transform = None
-
-            if not uv_transform:
-                bpy.ops.object.modifier_add(type='UV_WARP')
-                uv_transform = context.object.modifiers[-1]
-                uv_transform.name = uv_transform_name
-                uv_transform.object_from = context.object
-                uv_transform.object_to = c_obj
-                uv_transform.uv_layer = uv_name
-            else:
-                uv_transform.object_to = c_obj
-
-        elif uv_transform:
-            context.object.modifiers.remove(uv_transform)
 
 
 class WowM2GeosetPropertyGroup(bpy.types.PropertyGroup):
@@ -82,50 +45,6 @@ class WowM2GeosetPropertyGroup(bpy.types.PropertyGroup):
         description="Mesh part ID of this geoset",
         items=mesh_part_id_menu
     )
-
-    uv_transform_1:  bpy.props.PointerProperty(
-        name="UV Transform 1",
-        type=bpy.types.Object,
-        poll=lambda self, obj: obj.wow_m2_uv_transform.enabled,
-        update=update_geoset_uv_transform
-    )
-
-    uv_transform_2:  bpy.props.PointerProperty(
-        name="UV Transform 2",
-        type=bpy.types.Object,
-        poll=lambda self, obj: obj.wow_m2_uv_transform.enabled,
-        update=update_geoset_uv_transform
-    )
-
-
-class M2_OT_add_texture_transform(bpy.types.Operator):
-    bl_idname = 'scene.wow_m2_geoset_add_texture_transform'
-    bl_label = 'Add new UV transform controller'
-    bl_options = {'REGISTER', 'INTERNAL'}
-
-    anim_index:  bpy.props.IntProperty()
-    channel:  bpy.props.IntProperty(min=1, max=2)
-
-    def execute(self, context):
-        obj = context.object
-        bpy.ops.object.empty_add(type='SINGLE_ARROW', location=(0, 0, 0))
-        c_obj = bpy.context.view_layer.objects.active
-        c_obj.name = "TT_Controller"
-        c_obj.wow_m2_uv_transform.enabled = True
-        c_obj = bpy.context.view_layer.objects.active
-        c_obj.rotation_mode = 'QUATERNION'
-        c_obj.empty_display_size = 0.5
-        c_obj.animation_data_create()
-        c_obj.animation_data.action_blend_type = 'ADD'
-
-        if self.channel == 1:
-            obj.wow_m2_geoset.uv_transform_1 = c_obj
-        else:
-            obj.wow_m2_geoset.uv_transform_2 = c_obj
-
-        bpy.context.view_layer.objects.active = obj
-
-        return {'FINISHED'}
 
 #############
 

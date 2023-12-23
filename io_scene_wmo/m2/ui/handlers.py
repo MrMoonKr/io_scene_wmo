@@ -4,7 +4,6 @@ import bmesh
 from bpy.app.handlers import persistent
 from .drivers import register as register_m2_driver_utils
 from ...utils.misc import show_message_box, singleton
-from ...ui.enums import WoWSceneTypes
 
 __reload_order_index__ = 0
 
@@ -73,7 +72,7 @@ def load_handler(dummy):
 
 @persistent
 def on_depsgraph_update(_):
-    if bpy.context.scene.wow_scene.type != WoWSceneTypes.M2.name or DepsgraphLock().DEPSGRAPH_UPDATE_LOCK:
+    if DepsgraphLock().DEPSGRAPH_UPDATE_LOCK:
         return
 
     delete = False
@@ -140,7 +139,7 @@ def on_depsgraph_update(_):
                                 slot_idx = root_comps.wow_m2_events.find(act_obj.name)
                                 root_comps.cur_event = slot_idx
 
-                        elif act_obj.type == 'LIGHT':
+                        elif act_obj.type == 'LAMP':
                             if act_obj.wow_m2_light.enabled:
                                 slot_idx = root_comps.lights.find(act_obj.name)
                                 root_comps.cur_light = slot_idx
@@ -188,17 +187,17 @@ def on_depsgraph_update(_):
             DepsgraphLock().DEPSGRAPH_UPDATE_LOCK = False
 
 
-def register():
-    bpy.wbs_n_scene_objects = 0
-    bpy.app.handlers.frame_change_pre.append(live_update_materials)
-    load_handler(None)
-    bpy.app.handlers.load_post.append(load_handler)
+# def register():
+#     bpy.wbs_n_scene_objects = 0
+#     bpy.app.handlers.frame_change_pre.append(live_update_materials)
+#     load_handler(None)
+#     bpy.app.handlers.load_post.append(load_handler)
     
-    bpy.app.handlers.depsgraph_update_post.append(on_depsgraph_update)
+#     bpy.app.handlers.depsgraph_update_post.append(on_depsgraph_update)
 
 
-def unregister():
-    bpy.app.handlers.depsgraph_update_post.remove(on_depsgraph_update)
-    del bpy.wbs_n_scene_objects
-    bpy.app.handlers.frame_change_pre.remove(live_update_materials)
-    bpy.app.handlers.load_post.remove(load_handler)
+# def unregister():
+#     bpy.app.handlers.depsgraph_update_post.remove(on_depsgraph_update)
+#     del bpy.wbs_n_scene_objects
+#     bpy.app.handlers.frame_change_pre.remove(live_update_materials)
+#     bpy.app.handlers.load_post.remove(load_handler)

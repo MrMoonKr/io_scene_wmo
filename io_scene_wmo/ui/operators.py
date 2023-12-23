@@ -1,7 +1,7 @@
 import bpy
 import json
 import os
-from pathlib import Path
+from pathlib import Path                        
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -10,7 +10,7 @@ from ..wmo.export_wmo import export_wmo_from_blender_scene
 from ..m2.import_m2 import import_m2
 from ..m2.export_m2 import export_m2, create_m2
 from ..utils.misc import load_game_data
-from ..utils.collections import get_current_wow_model_collection, SpecialCollection
+from ..utils.collections import get_current_wow_model_collection, SpecialCollection                                                                                   
 from ..ui.preferences import get_project_preferences
 
 #############################################################
@@ -42,7 +42,7 @@ class WBS_OT_texture_transparency_toggle(bpy.types.Operator):
 
 class WBS_OT_reload_game_data(bpy.types.Operator):
     bl_idname = 'scene.reload_wow_filesystem'
-    bl_label = 'Reoad WoW filesystem'
+    bl_label = 'Reload WoW filesystem'
     bl_description = 'Re-establish connection to World of Warcraft client files'
     bl_options = {'REGISTER'}
 
@@ -112,8 +112,7 @@ class WBS_OT_save_current_wmo(bpy.types.Operator):
 
         self.report({'ERROR'}, 'Invalid scene type.')
         return {'CANCELLED'}
-
-
+        
 
 #############################################################
 ######             Import/Export Operators             ######
@@ -221,6 +220,44 @@ class WBS_OT_wmo_export(bpy.types.Operator, ExportHelper):
         self.report({'ERROR'}, 'Invalid scene type.')
         return {'CANCELLED'}
 
+class WBS_OT_blp_load_from_game(bpy.types.Operator):
+    """Load BLP from game data"""
+    bl_idname = "load.blp"
+    bl_label = "Load BLP from game data"
+    bl_options = {'UNDO','REGISTER'}
+
+    blp_file: StringProperty()
+    imported_name: StringProperty()
+
+    def execute(self, context):
+        game_data = load_game_data()
+        project_preferences = get_project_preferences()
+
+        if not project_preferences.cache_dir_path:
+            raise Exception('Error: cache directory is not specified. Check addon settings.')
+        
+        if game_data and game_data.files:
+            files = game_data.extract_textures_as_png(project_preferences.cache_dir_path, [self.blp_file])
+            for key,value in files.items():
+                img = bpy.data.images.load(os.path.join(value))
+                if self.imported_name:
+                    img.name = self.imported_name
+                else:
+                    img.name = os.path.basename(key)
+            return {'FINISHED'}
+        else:
+            raise NotImplementedError('Error: Importing without gamedata loaded is not yet implemented.')
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "blp_file", text="BLP File")
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
 class WBS_OT_m2_import(bpy.types.Operator):
     """Load M2 data"""
@@ -238,7 +275,7 @@ class WBS_OT_m2_import(bpy.types.Operator):
         )
 
     def execute(self, context):
-        import_m2(int(context.scene.wow_scene.version), self.filepath, True)
+        import_m2(int(context.scene.wow_scene.version), self.filepath, False)      
         context.scene.wow_scene.type = 'M2'
         return {'FINISHED'}
 
@@ -291,11 +328,17 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
         description="Automatically assign texture paths based on texture filenames",
         default=True
         )
+    
+    merge_vertices: BoolProperty(
+        name="Merge vertices",
+        description="Execute merge vertices algorithm for splitting uv islands after",
+        default=True
+    )
 
     def execute(self, context):
         if context.scene:
             context.scene.wow_scene.type = 'M2'
-        export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale)
+        export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale, self.merge_vertices)
         return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')

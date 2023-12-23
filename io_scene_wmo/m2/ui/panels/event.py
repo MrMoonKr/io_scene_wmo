@@ -25,6 +25,7 @@ class M2_PT_event_panel(bpy.types.Panel):
         elif event_name == 'GOAddShake':
             col.label(text='SpellEffectCameraShakesID')
             col.prop(context.object.wow_m2_event, 'data')
+        col.prop(context.object.wow_m2_event, 'fire',text="Event Activated")
 
     @classmethod
     def poll(cls, context):
@@ -59,10 +60,12 @@ class WowM2EventPropertyGroup(bpy.types.PropertyGroup):
         min=0
     )
 
-    fire:  bpy.props.BoolProperty(
-        name='Enabled',
+    fire:  bpy.props.IntProperty(
+        name='Fire',
         description='Enable this event in this specific animation keyframe',
-        default=False
+        default = 1,
+        min=1,
+        max=1
     )
 
 

@@ -5,7 +5,7 @@ import importlib
 
 from ..ui.preferences import get_project_preferences
 
-def create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale):
+def create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices):
     print("\n\n### Exporting M2 model ###")
     proj_prefs = get_project_preferences()
     m2 = M2File(version)
@@ -36,7 +36,7 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     print("\nExporting animations")
     bl_m2.save_animations()
     print("\nExporting geosets")
-    bl_m2.save_geosets(selected_only, fill_textures)
+    bl_m2.save_geosets(selected_only, fill_textures, merge_vertices)
     print("\nExporting collisions")
     bl_m2.save_collision(selected_only)
     print("\nRestoring Pose")
@@ -44,5 +44,5 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     m2_export_warnings.print_warnings()
     return m2
 
-def export_m2(version, filepath, selected_only, fill_textures, forward_axis, scale):
-    create_m2(version,filepath,selected_only,fill_textures,forward_axis, scale).write(filepath)
+def export_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices):
+    create_m2(version,filepath,selected_only,fill_textures,forward_axis, scale, merge_vertices).write(filepath)

@@ -39,6 +39,9 @@ def transformed_objects():
         return str_out
 
     for obj in bpy.data.objects:
+        if obj.type not in  ('ARMATURE', 'MESH'):
+            continue
+
         def compare(name,names,val1,val2):
             if not vec_eq(len(names),val1,val2):
                 items.append(f"Object {obj.name}s {name} is {vec_str(val1,names)}, but should be {vec_str(val2,names)}")
@@ -60,15 +63,16 @@ def transformed_objects():
 def empty_textures():
     name = "Empty Textures"
     description = [
-        'Issue: An M2 material has no texture set in any of its 4 texture slots.',
+        'Issue: An M2 material has no texture set in any of its texture slots.',
         'Effect: Will usually cause the model to become invisible ingame',
         "Note: this is not *always* an error, not all materials have textures."
     ]
     items = []
     for obj in bpy.data.objects:
-        for slot in obj.material_slots:
-            if slot.material.wow_m2_material.texture_1 is None:
-                items.append(f'Object {obj.name} has no m2 textures, this is usually an error and will cause the model to be invisible ingame')
+        if not obj.wow_m2_geoset.collision_mesh:
+            for slot in obj.material_slots:
+                if slot.material.wow_m2_material.texture_1 is None:
+                    items.append(f'Object {obj.name} has no m2 textures, this is usually an error and will cause the model to be invisible ingame')
 
     return (name,description,items)
 
@@ -86,11 +90,14 @@ def empty_texture_paths():
     for obj in bpy.data.objects:
         for slot in obj.material_slots:
             mat = slot.material.wow_m2_material
-            for texture in [mat.texture_1,mat.texture_2,mat.texture_3,mat.texture_4]:
+            for texture in [mat.texture_1,mat.texture_2]:
+
                 if (
                     texture is not None 
                     and len(texture.wow_m2_texture.path) == 0
                    ):
+                    if texture.wow_m2_texture.texture_type != 0:
+                        continue
                     if not texture.name in texture_maps:
                        texture_maps[texture.name] = []
                     
@@ -119,7 +126,7 @@ def no_materials():
     ]
     items = []
     for obj in bpy.data.objects:
-        if len(obj.material_slots) == 0:
+        if obj.type == 'MESH' and not obj.wow_m2_geoset.collision_mesh and len(obj.material_slots) == 0:
             items.append(f'Object {obj.name} has no m2 materials, this is usually an error and will cause the model to be invisible ingame')
     return (name,description,items)
         
@@ -181,43 +188,9 @@ def non_primary_sequences():
     ]
     items = []
     for sequence in bpy.context.scene.wow_m2_animations:
-        if not "32" in sequence.flags:
+
+        if not "32" in sequence.flags and not sequence.is_global_sequence:
             items.append(f'Sequence {sequence.name} does not have the primary sequence flag')
-
-    return (name,description,items)
-
-def non_uniform_scale_tracks():
-    name = "Incompatible Scale Tracks"
-    description = [
-        "Issue: You have bones with non-uniform scale tracks",
-        "Effect: Your animations will break completely, WBS cannot currently convert non-uniform scale tracks.",
-        "Note: In the future, it should be possible to write non-uniform scales for bones in axis aligned directions, but never for bones in non-axis aligned directions.",
-        "Fix: Run 'Convert Bones To WoW' to automatically strip these tracks and manually rewrite scale if necessary",
-    ]
-    items = []
-
-    # We don't want to warn for this on blizzard models.
-    # If users run this after they've converted the model and still export with a different output, j
-    def find_transformed_bone():
-        for obj in bpy.data.objects:
-            if obj.type != 'ARMATURE': continue
-            for bone in obj.data.bones:
-                vec = Vector(bone.tail-bone.head)
-                vec.normalize()
-                if abs(vec.x-1)>0.001 or abs(vec.y)>0.001 or abs(vec.z)>0.001:
-                    found_transformed_bone = True
-                    return True
-        return False
-
-    if find_transformed_bone():
-        for action in bpy.data.actions:
-            fcurve_compounds = make_fcurve_compound(action.fcurves,
-                lambda path: path.startswith('pose.bones') and path.endswith('scale'))
-
-            for path,fcurves in fcurve_compounds.items():
-                bone = re.search('"(.+?)"',path).group(1)
-                if not can_apply_scale(fcurves, len(fcurves[0].keyframe_points)):
-                    items.append(f'Curve {path} is a non-uniform rotation')
 
     return (name,description,items)
 
@@ -249,10 +222,15 @@ def fcurves_transforming_objects():
         'Fix: Run "Convert Bones To WoW" and check the result.'
     ]
     items = []
-    for action in bpy.data.actions:
-        for curve in action.fcurves:
-            if curve.data_path in ["location","rotation_euler","scale"]:
-                items.append(f'FCurve "{curve.data_path}[{curve.array_index}]" in {action.name} transforms an object')
+    for animation in bpy.context.scene.wow_m2_animations:
+        for anim_pair in animation.anim_pairs:
+            action = anim_pair.action
+            obj = anim_pair.object
+            if action is not None:
+                for curve in action.fcurves:
+                    if curve.data_path in ["location", "rotation_euler", "scale"]:
+                        if obj is not None and not obj.wow_m2_uv_transform.enabled:
+                            items.append(f'FCurve "{curve.data_path}[{curve.array_index}]" in {action.name} transforms an object')
     return (name,description,items)
 
 def print_warnings():
@@ -283,7 +261,6 @@ def print_warnings():
     warning_section(no_animation_pairs)
     warning_section(missing_animation_items)
     warning_section(non_primary_sequences)
-    warning_section(non_uniform_scale_tracks)
     warning_section(too_many_bone_groups)
     warning_section(fcurves_transforming_objects)
 

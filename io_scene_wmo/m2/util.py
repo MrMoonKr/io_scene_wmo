@@ -11,10 +11,14 @@ def make_fcurve_compound(fcurves, accept = lambda path: True):
     compound = {}
     for fcurve in fcurves:
         if not accept(fcurve.data_path):
+            # print("not accepting data path :")
+            # print(fcurve.data_path)
             continue
         if not fcurve.data_path in compound:
             compound[fcurve.data_path] = {}
         compound[fcurve.data_path][fcurve.array_index] = fcurve
+    
+    # print(compound)
     return compound
 
 def get_bone_groups(obj, vertex, bone_names):

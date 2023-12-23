@@ -77,40 +77,40 @@ m2_widget_items = (
 m2_widget_labels = {item[0] : item[2] for item in m2_widget_items}
 
 
-class M2_PT_root_elements(bpy.types.Panel):
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "scene"
-    bl_label = "M2 Components"
+# class M2_PT_root_elements(bpy.types.Panel):
+#     bl_space_type = "PROPERTIES"
+#     bl_region_type = "WINDOW"
+#     bl_context = "scene"
+#     bl_label = "M2 Components"
 
-    @classmethod
-    def poll(cls, context):
-        return (context.scene is not None
-                and context.scene.wow_scene.type == 'M2')
+#     @classmethod
+#     def poll(cls, context):
+#         return (context.scene is not None
+#                 and context.scene.wow_scene.type == 'M2')
 
-    def draw(self, context):
-        layout = self.layout
-        row = layout.row(align=True)
-        row.prop(context.scene.wow_m2_root_elements, 'cur_widget', expand=True)
-        row.label(text=m2_widget_labels[context.scene.wow_m2_root_elements.cur_widget])
-        col = layout.column()
+#     def draw(self, context):
+#         layout = self.layout
+        #row = layout.row(align=True)
+        #row.prop(context.scene.wow_m2_root_elements, 'cur_widget', expand=True)
+        # row.label(text=m2_widget_labels[context.scene.wow_m2_root_elements.cur_widget])
+        # col = layout.column()
 
-        cur_widget = context.scene.wow_m2_root_elements.cur_widget
+        # cur_widget = context.scene.wow_m2_root_elements.cur_widget
 
-        if cur_widget == 'GEOSETS':
-            draw_m2_geosets_panel(col, context)
-        elif cur_widget == 'MATERIALS':
-            draw_m2_materials_panel(col, context)
-        elif cur_widget == 'LIGHTS':
-            draw_m2_lights_panel(col, context)
-        elif cur_widget == 'TEXTURES':
-            draw_m2_textures_panel(col, context)
-        elif  cur_widget == 'ATTACHMENTS':
-            draw_m2_attachments_panel(col, context)
-        elif  cur_widget == 'EVENTS':
-            draw_m2_events_panel(col, context)
-        else:
-            pass # invalid identifier
+        # if cur_widget == 'GEOSETS':
+        #     draw_m2_geosets_panel(col, context)
+        # elif cur_widget == 'MATERIALS':
+        #     draw_m2_materials_panel(col, context)
+        # elif cur_widget == 'LIGHTS':
+        #     draw_m2_lights_panel(col, context)
+        # elif cur_widget == 'TEXTURES':
+        #     draw_m2_textures_panel(col, context)
+        # elif  cur_widget == 'ATTACHMENTS':
+        #     draw_m2_attachments_panel(col, context)
+        # elif  cur_widget == 'EVENTS':
+        #     draw_m2_events_panel(col, context)
+        # else:
+        #     pass # invalid identifier
 
 
 def draw_m2_geosets_panel(layout, context):
@@ -300,6 +300,7 @@ def update_object_pointer(self, context, prop, obj_type):
             # self.pointer = None
             return
 
+        # print("updating object pointer")
         print(self.pointer)
         print(type(self.pointer))
         getattr(self.pointer, prop).enabled = True

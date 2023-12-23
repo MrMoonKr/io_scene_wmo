@@ -50,6 +50,27 @@ class WBS_PG_ProjectPreferences(bpy.types.PropertyGroup):
         subtype='FILE_PATH'
     )
 
+    wow_export_path: bpy.props.StringProperty(
+        name="WoW Export Runtimelog Path",
+        subtype='FILE_PATH'
+    )
+
+    noggit_red_path: bpy.props.StringProperty(
+        name="Noggit Red log Path",
+        subtype='FILE_PATH'
+    )
+
+    import_method: bpy.props.EnumProperty(
+        name="Import Method",
+        items=[
+            ('WMV', "WMV", "Use WoW Model Viewer"),
+            ('WowExport', "WowExport", "Use WoW Export"),
+            ('NoggitRed', "NoggitRed", "Use Noggit Red"),
+        ],
+        default='WMV',
+        description="Choose the preferred method of import for WoW files."
+    )
+
     cache_dir_path: bpy.props.StringProperty(
         name="Cache Directory Path",
         description="Any folder that can be used to store textures and other temporary files.",
@@ -154,6 +175,12 @@ class WBS_AP_Preferences(bpy.types.AddonPreferences):
             col.label(text='Project settings:', icon='SETTINGS')
             box = col.box()
             box.prop(proj_prefs, 'wow_path')
-            box.prop(proj_prefs, 'wmv_path')
+            box.prop(proj_prefs, 'import_method')
+            if proj_prefs.import_method == 'WMV':
+                box.prop(proj_prefs, 'wmv_path')
+            elif proj_prefs.import_method == 'WowExport':
+                box.prop(proj_prefs, 'wow_export_path')  
+            elif proj_prefs.import_method == 'NoggitRed':
+                box.prop(proj_prefs, 'noggit_red_path')                 
             box.prop(proj_prefs, 'cache_dir_path')
             box.prop(proj_prefs, 'project_dir_path')

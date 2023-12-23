@@ -34,6 +34,7 @@ class M2_PT_animations_panel(bpy.types.Panel):
                 else:
                     row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
                     row.operator("screen.animation_play", text="", icon='PLAY')
+                    row.operator("scene.wow_m2_animation_editor_play_global_sequence", text="", icon='SEQUENCE')
             else:
                 sub = row.row(align=True)
                 sub.scale_x = 2.0
