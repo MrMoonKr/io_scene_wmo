@@ -43,8 +43,8 @@ class M2_OT_import_last_m2_from_wmv(bpy.types.Operator):
             Make sure to use compatible WMV version or WoW.Export and open an .m2 there.""")
             return {'CANCELLED'}
 
-        try:
-            import_m2_gamedata(2, m2_path)
+        try:         
+            import_m2_gamedata(2, m2_path, False)
         except:
             traceback.print_exc()
             self.report({'ERROR'}, "Failed to import model.")

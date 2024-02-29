@@ -225,7 +225,7 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
         uv_layer1.data[i].uv = (uv[0], 1 - uv[1])
 
     # unpack and convert textures
-    # game_data.extract_textures_as_png(asset_dir, texture_paths)
+    game_data.extract_textures_as_png(asset_dir, texture_paths)
 
     # create object
     nobj = bpy.data.objects.new(m2_name, mesh)

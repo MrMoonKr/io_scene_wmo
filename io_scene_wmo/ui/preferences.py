@@ -51,13 +51,23 @@ class WBS_PG_ProjectPreferences(bpy.types.PropertyGroup):
     )
 
     wow_export_path: bpy.props.StringProperty(
-        name="WoW Export Runtimelog Path",
+        name="WoW Export Runtimelog Path", 
         subtype='FILE_PATH'
     )
 
     noggit_red_path: bpy.props.StringProperty(
         name="Noggit Red log Path",
         subtype='FILE_PATH'
+    )
+
+    time_import_method: bpy.props.EnumProperty(
+        name="Time Conversion Import Method",
+        items=[
+            ('Convert', "Convert to 24 FPS", "(Original WBS Method)"),
+            ('Keep Original', "Keep_Original", "Don't convert timestamps"),
+        ],
+        default='Convert',
+        description="Choose the preferred method for timestamp import."
     )
 
     import_method: bpy.props.EnumProperty(
@@ -175,6 +185,7 @@ class WBS_AP_Preferences(bpy.types.AddonPreferences):
             col.label(text='Project settings:', icon='SETTINGS')
             box = col.box()
             box.prop(proj_prefs, 'wow_path')
+            box.prop(proj_prefs, 'time_import_method')
             box.prop(proj_prefs, 'import_method')
             if proj_prefs.import_method == 'WMV':
                 box.prop(proj_prefs, 'wmv_path')

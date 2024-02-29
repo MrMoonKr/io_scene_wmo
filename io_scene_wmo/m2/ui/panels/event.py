@@ -1,6 +1,9 @@
 import bpy
 from ..enums import *
 
+def update_event_name(self, context):
+    event_type = context.object.wow_m2_event.token
+    context.object.name = ('Event_' + M2EventTokens.get_event_name(event_type))
 
 class M2_PT_event_panel(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
@@ -51,7 +54,8 @@ class WowM2EventPropertyGroup(bpy.types.PropertyGroup):
     token:  bpy.props.EnumProperty(
         name='Token',
         description='This token defines the purpose of the event',
-        items=get_event_names
+        items=get_event_names,
+        update=update_event_name
     )
 
     data:  bpy.props.IntProperty(

@@ -8,6 +8,7 @@ import bpy
 import sys, io
 import ctypes
 from mathutils import Vector
+from ..ui.preferences import get_project_preferences
 
 from .bl_render import update_m2_mat_node_tree
 from ..render.m2.shaders import M2ShaderPermutations
@@ -61,10 +62,12 @@ class BlenderM2Scene:
         self.settings = prefs
         self.actions = {} # maps action names to actions
         self.final_textures = {}
+        self.anim_data_table = M2SequenceNames()
+        self.final_events = {}
 
         self.scene = bpy.context.scene
 
-    def load_colors(self):
+    def load_colors(self, timestamp_convert):
 
         def animate_color(anim_pair, color_track, color_index, anim_index):
 
@@ -89,7 +92,10 @@ class BlenderM2Scene:
 
             # set translation values for each channel
             for i, timestamp in enumerate(frames):
-                frame = timestamp * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame = timestamp * 0.0266666
+                else: 
+                    frame = timestamp
 
                 for j in range(3):
                     keyframe = f_curves[j].keyframe_points[i]
@@ -118,7 +124,10 @@ class BlenderM2Scene:
 
             # set translation values for each channel
             for i, timestamp in enumerate(frames):
-                frame = timestamp * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame = timestamp * 0.0266666
+                else: 
+                    frame = timestamp
 
                 keyframe = f_curve.keyframe_points[i]
                 keyframe.co = frame, track[i] / 0x7FFF
@@ -185,7 +194,7 @@ class BlenderM2Scene:
                 if m2_color.alpha.global_sequence < 0:
                     animate_alpha(anim_pair, m2_color.alpha, i, anim_index)
 
-    def load_transparency(self):
+    def load_transparency(self, timestamp_convert):
 
         def animate_transparency(anim_pair, trans_track, trans_index, anim_index):
 
@@ -209,7 +218,10 @@ class BlenderM2Scene:
 
             # set translation values for each channel
             for i, timestamp in enumerate(frames):
-                frame = timestamp * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame = timestamp * 0.0266666
+                else: 
+                    frame = timestamp
 
                 keyframe = f_curve.keyframe_points[i]
                 keyframe.co = frame, track[i] / 0x7FFF
@@ -332,26 +344,38 @@ class BlenderM2Scene:
 
     def load_materials(self):
 
+        print("\nImporting materials.")
+
         skin = self.m2.skins[0]
 
         loaded_textures = {}
 
+        flags = parse_bitfield(self.m2.root.global_flags, 0x10)
+
         for tex_unit in skin.texture_units:
-            m2_mat = self.m2.root.materials[tex_unit.material_index] 
-            try: 
-                m2_mat2 = self.m2.root.materials[tex_unit.material_index+1] 
-            except IndexError as e:
-                print("Material for second texture not found, using first texture material, probably fucked up wbs export:", e)
-                m2_mat2 = m2_mat
+            try:
+                m2_mat = self.m2.root.materials[tex_unit.material_index] 
+            except IndexError:
+                #sys.tracebacklimit = 0
+                print('\n')
+                m2_mat_error_message = f"Material with index {tex_unit.material_index} not found in M2 file. This may indicate a corrupt M2 file."
+                raise IndexError(m2_mat_error_message) from None
+
+            if tex_unit.texture_count == 2 and '8' not in flags:
+                try: 
+                    m2_mat2 = self.m2.root.materials[tex_unit.material_index+1] 
+                except IndexError as e:
+                    print("\nMaterial for second texture not found, using first texture material:", e)
+                    m2_mat2 = m2_mat
 
             blender_mat = bpy.data.materials.new(name='Unknown')
-            blender_mat.wow_m2_material.live_update = True
+            #blender_mat.wow_m2_material.live_update = True
 
             for i in range(tex_unit.texture_count):
                 try:
                     texid = self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i]
                 except IndexError as e:
-                    print("Texture not found, probably fucked up m2:", e)    
+                    print("\nTexture not found, probably fucked up m2:", e)    
                 tex = self.load_texture(texid)
                 setattr(blender_mat.wow_m2_material, "texture_{}".format(i + 1), tex)
 
@@ -489,28 +513,24 @@ class BlenderM2Scene:
                 0: "UVMap",
                 1: "UVMap.001",
             }
-            flags = parse_bitfield(self.m2.root.global_flags, 0x10)
+            
             blender_mat.wow_m2_material.texture_1_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index])
             if tex_unit.texture_count == 2 and '8' in flags:
                 #print("Second material override flag is activated")
                 blender_mat.wow_m2_material.texture_2_render_flags = parse_bitfield(self.m2.root.texture_combiner_combos[tex_unit.shader_id], 0x800)
                 blender_mat.wow_m2_material.texture_2_blending_mode = str(self.m2.root.texture_combiner_combos[tex_unit.shader_id+1])
-                #blender_mat.wow_m2_material.texture_2_animation = tex_unit.texture_transform_combo_index
                 blender_mat.wow_m2_material.texture_2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index+1])
             elif tex_unit.texture_count == 2 and '8' not in flags:
                     blender_mat.wow_m2_material.texture_2_render_flags = parse_bitfield(m2_mat2.flags, 0x800)  # render flags
-                    #try:
-                        #blender_mat.wow_m2_material.texture_2_animation = tex_unit.texture_transform_combo_index+1
-                    #except IndexError as e:
-                        #blender_mat.wow_m2_material.texture_2_animation = tex_unit.texture_transform_combo_index
+
                     try: 
                         blender_mat.wow_m2_material.texture_2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index+1])
                     except IndexError as e:
+                        print("Mapping for second texture not found, using first texture mapping", e)
                         blender_mat.wow_m2_material.texture_2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index])
                     blender_mat.wow_m2_material.texture_2_blending_mode = str(m2_mat2.blending_mode)
         
             blender_mat.wow_m2_material.layer = tex_unit.material_layer
-            #blender_mat.wow_m2_material.animation = tex_unit.texture_transform_combo_index
             blender_mat.wow_m2_material.priority_plane = tex_unit.priority_plane
 
             #vertex_shader = M2ShaderPermutations().get_vertex_shader_id(tex_unit.texture_count, tex_unit.shader_id)
@@ -539,7 +559,7 @@ class BlenderM2Scene:
         if not len(self.m2.root.bones):
             print("\nNo armature found to import.")
             return
-
+        
         print("\nImporting armature")
 
         # Create armature
@@ -555,6 +575,10 @@ class BlenderM2Scene:
         bpy.context.view_layer.update()
 
         bpy.ops.object.mode_set(mode='EDIT')
+
+        bpy.context.object.data.layers[1] = True
+        bpy.context.object.data.layers[2] = True
+        bpy.context.object.data.layers[3] = True
 
         for i, bone in enumerate(self.m2.root.bones):  # add bones to armature.
             bl_edit_bone = armature.edit_bones.new(bone.name)
@@ -572,7 +596,27 @@ class BlenderM2Scene:
             try:
                 bl_edit_bone.wow_m2_bone.key_bone_id = str(bone.key_bone_id)
             except TypeError:
-                print('\nFailed to set keybone ID \"{}\". Unknown keybone ID'.format(bone.key_bone_id))
+                print('\nFailed to set keybone ID \"{}\". Unknown keybone ID'.format(bone.key_bone_id))          
+                
+            if 'AT_' in bone.name:
+                bl_edit_bone.layers[0] = False
+                bl_edit_bone.layers[1] = False
+                bl_edit_bone.layers[2] = True
+                bl_edit_bone.layers[3] = False
+            elif 'ET' in bone.name:
+                bl_edit_bone.layers[0] = False
+                bl_edit_bone.layers[1] = False
+                bl_edit_bone.layers[2] = False
+                bl_edit_bone.layers[3] = True
+            elif bone.key_bone_id == -1:
+                bl_edit_bone.layers[0] = False
+                bl_edit_bone.layers[1] = True
+                bl_edit_bone.layers[2] = False
+                bl_edit_bone.layers[3] = False              
+            else:
+                bl_edit_bone.layers[1] = False
+                bl_edit_bone.layers[2] = False
+                bl_edit_bone.layers[3] = False
 
         # link children to parents
         for i, bone in enumerate(self.m2.root.bones):
@@ -582,7 +626,7 @@ class BlenderM2Scene:
                 bl_edit_bone.parent = parent
 
         bpy.context.view_layer.update()  # update scene.
-        bpy.ops.object.mode_set(mode='OBJECT')  # return to object mode.
+        bpy.ops.object.mode_set(mode='OBJECT')  # return to object mode. 
 
     @staticmethod
     def _populate_bl_fcurve(f_curves, frames, track, length, callback, interp_type):
@@ -592,12 +636,18 @@ class BlenderM2Scene:
             f_curve.keyframe_points.add(len(frames))
 
         # set values for each channel
+            
+        preferences = get_project_preferences()
+        timestamp_convert = preferences.time_import_method
 
         if track:
 
             for j, timestamp in enumerate(frames):
                 value = callback(value=track[j])
-                frame = timestamp * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame = timestamp * 0.0266666
+                else: 
+                    frame = timestamp
 
                 for k in range(len(value)):
                     keyframe = f_curves[k].keyframe_points[j]
@@ -607,7 +657,10 @@ class BlenderM2Scene:
         else:
 
             for j, timestamp in enumerate(frames):
-                frame = timestamp * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame = timestamp * 0.0266666
+                else: 
+                    frame = timestamp
                 keyframe = f_curves[0].keyframe_points[j]
                 keyframe.co = frame, True
                 keyframe.interpolation = interp_type
@@ -746,7 +799,7 @@ class BlenderM2Scene:
         return seq
 
     def _bl_load_sequences(self):
-        anim_data_table = M2SequenceNames()
+        #anim_data_table = M2SequenceNames()
 
         # import global sequence animations
         for i in range(len(self.m2.root.global_sequences)):
@@ -761,7 +814,7 @@ class BlenderM2Scene:
             idx, sequence = pair
 
             # create sequence
-            field_name = anim_data_table.get_sequence_name(sequence.id)
+            field_name = self.anim_data_table.get_sequence_name(sequence.id)
             name = '{}_UnkAnim'.format(str(i).zfill(3)) \
                 if not field_name else "{}_{}_({})".format(str(i).zfill(3), field_name, sequence.variation_index)
 
@@ -922,21 +975,21 @@ class BlenderM2Scene:
                     self._bl_create_action_group(action, bone.name)
                     self._bl_create_fcurves(action, bone.name, partial(bl_convert_trans_track, bl_bone=bl_bone,
                                             bone=bone), 3, anim_index,
-                                            'pose.bones.["{}"].location'.format(bl_bone.name),
+                                            'pose.bones["{}"].location'.format(bl_bone.name),
                                             bone.translation)
 
                 # rotate bones
                 if not is_global_seq_rot and bone.rotation.timestamps.n_elements > anim_index:
                     self._bl_create_action_group(action, bone.name)
                     self._bl_create_fcurves(action, bone.name, partial(bl_convert_rot_track), 4,
-                                            anim_index,'pose.bones.["{}"].rotation_quaternion'.format(bl_bone.name),
+                                            anim_index,'pose.bones["{}"].rotation_quaternion'.format(bl_bone.name),
                                             bone.rotation)
 
                 # scale bones
                 if not is_global_seq_scale and bone.scale.timestamps.n_elements > anim_index:
                     self._bl_create_action_group(action, bone.name)
                     self._bl_create_fcurves(action, bone.name, partial(bl_convert_scale_track), 3, anim_index,
-                                            'pose.bones.["{}"].scale'.format(bl_bone.name),
+                                            'pose.bones["{}"].scale'.format(bl_bone.name),
                                             bone.scale)
         load_alias_actions()
 
@@ -1405,7 +1458,7 @@ class BlenderM2Scene:
                 anim = bpy.context.scene.wow_m2_animations[event.enabled.global_sequence]
                 if not event.enabled.timestamps.n_elements \
                 or not event.enabled.timestamps[0]:
-                    continue
+                    return
 
                 anim_pair = anim.anim_pairs.add()
                 anim_pair.type = 'OBJECT'
@@ -1425,38 +1478,23 @@ class BlenderM2Scene:
                 sequence = self.m2.root.sequences[anim_index]
 
                 if event.enabled.timestamps.n_elements > anim_index:
-                    if not event.enabled.timestamps[anim_index]:                
+                    if not event.enabled.timestamps[anim_index]:
+                        continue
                         
-                         anim_pair = anim.anim_pairs.add()
-                         anim_pair.type = 'OBJECT'
-                         anim_pair.object = obj
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = 'OBJECT'
+                    anim_pair.object = obj
 
-                         field_name = seq_name_table.get_sequence_name(sequence.id)
-                         name = 'ET_{}_{}_UnkAnim'.format(token, str(anim_index).zfill(3)) if not field_name \
-                             else "ET_{}_{}_{}_({})".format(token, str(anim_index).zfill(3), field_name,
-                                                             sequence.variation_index)
+                    field_name = seq_name_table.get_sequence_name(sequence.id)
+                    name = 'ET_{}_{}_UnkAnim'.format(token, str(anim_index).zfill(3)) if not field_name \
+                        else "ET_{}_{}_{}_({})".format(token, str(anim_index).zfill(3), field_name,
+                                                        sequence.variation_index)
 
-                         self._bl_create_action(anim_pair, name)
-                         self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
-                                                     'wow_m2_event.fire', event.enabled)
-                    else:
-
-                        anim_pair = anim.anim_pairs.add()
-                        anim_pair.type = 'OBJECT'
-                        anim_pair.object = obj
-
-                        field_name = seq_name_table.get_sequence_name(sequence.id)
-                        name = 'ET_{}_{}_UnkAnim'.format(token, str(anim_index).zfill(3)) if not field_name \
-                            else "ET_{}_{}_{}_({})".format(token, str(anim_index).zfill(3), field_name,
-                                                            sequence.variation_index)
-
-                        self._bl_create_action(anim_pair, name)
-                        self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
+                    self._bl_create_action(anim_pair, name)
+                    self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, anim_index,
                                                     'wow_m2_event.fire', event.enabled)
                     
-
-
-    def load_cameras(self):
+    def load_cameras(self, timestamp_convert):
 
         def animate_camera_loc(anim_pair, name, cam_track, anim_index):
 
@@ -1475,8 +1513,12 @@ class BlenderM2Scene:
 
             curves = []
             for i in range(1, len(frames)):
-                frame1 = frames[i - 1] * 0.0266666
-                frame2 = frames[i] * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame1 = frames[i - 1] * 0.0266666
+                    frame2 = frames[i] * 0.0266666
+                else: 
+                    frame1 = frames[i - 1]    
+                    frame2 = frames[i]       
 
                 curve_name = '{}_Path'.format(anim_pair.object.name)
                 curve = bpy.data.curves.new(name=curve_name, type='CURVE')
@@ -1542,7 +1584,10 @@ class BlenderM2Scene:
 
             # set translation values for each channel
             for i, timestamp in enumerate(frames):
-                frame = timestamp * 0.0266666
+                if timestamp_convert == 'Convert':
+                    frame = timestamp * 0.0266666
+                else: 
+                    frame = timestamp
 
                 keyframe = f_curve.keyframe_points[i]
                 keyframe.co = frame, track[i].value
@@ -1731,7 +1776,7 @@ class BlenderM2Scene:
             self._bl_create_sequences(ribbon,'visibility_track',
                 f'RB_{i}',obj,'wow_m2_ribbon','visibility',1,self._bl_convert_track_value)
 
-    def load_particles(self):
+    def load_particles(self, timestamp_convert):
         if not len(self.m2.root.particle_emitters):
             print("\nNo particles found to import.")
             return
@@ -1841,7 +1886,10 @@ class BlenderM2Scene:
                     fcurve.keyframe_points.add(frame_count)
 
                 for k in range(frame_count):
-                    time = m2_track.timestamps[k]*0.0266666
+                    if timestamp_convert == 'Convert':
+                        time = m2_track.timestamps[k]*0.0266666
+                    else: 
+                        time = m2_track.timestamps[k]
                     value = conv(m2_track.keys[k])
                     for j,fcurve in enumerate(fcurves):
                         keyframe = fcurve.keyframe_points[k]
@@ -1865,7 +1913,10 @@ class BlenderM2Scene:
             fake_spline_fcurve = FBlock(vec3D)
             fake_spline_fcurve.interpolation_type = 1
             for i,spline in enumerate(m2_particle.spline_points):
-                fake_spline_fcurve.timestamps.append(i/0.026666)
+                if timestamp_convert == 'Convert':
+                    fake_spline_fcurve.timestamps.append(i/0.026666)
+                else: 
+                    fake_spline_fcurve.timestamps.append(i)
                 fake_spline_fcurve.keys.append(spline)
             create_fcurve_track(spline_action, fake_spline_fcurve, 'spline_point','Spline', 3)
 
@@ -2170,6 +2221,7 @@ class BlenderM2Scene:
                 'GOPlaySoundKitCustom',
                 'GOAddShake'):
                 evt.data = bl_evt.wow_m2_event.data
+            self.final_events[bl_evt.name] = evt
 
     def save_lights(self):
         lights = [light for light in bpy.data.objects if light.type == 'LIGHT' and light.data.wow_m2_light.enabled]
@@ -2214,7 +2266,7 @@ class BlenderM2Scene:
                     )
                     ribbon_textures[bl_texture] = tex_id
                 m2_ribbon.texture_indices.append(tex_id)
-                wow_path = resolve_texture_path(bl_texture.filepath)
+                wow_path = bl_texture.wow_m2_texture.path
                 self.final_textures[wow_path] = tex_id
 
             for mat_slot in bl_ribbon.wow_m2_ribbon.materials:
@@ -2229,7 +2281,7 @@ class BlenderM2Scene:
                     ribbon_materials[bl_mat] = mat_id
                 m2_ribbon.material_indices.append(mat_id)
 
-    def save_particles(self):
+    def save_particles(self, timestamp_convert):
         particles = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_particle.enabled]
         particle_textures = {}
 
@@ -2255,7 +2307,7 @@ class BlenderM2Scene:
                         construct_bitfield(bl_texture.wow_m2_texture.flags),
                         int(bl_texture.wow_m2_texture.texture_type)
                     )
-                wow_path = resolve_texture_path(bl_texture.filepath)
+                wow_path = bl_texture.wow_m2_texture.path
                 self.final_textures[wow_path] = m2_particle.texture
             else:
                 m2_particle.texture = 0
@@ -2312,7 +2364,10 @@ class BlenderM2Scene:
                         values.append(fcurve.keyframe_points[i].co[1])
                     values = conv(tuple(values) if len(values)>1 else values[0])
                     if has_time:
-                        time = int(round(fcurves[0].keyframe_points[i].co[0]/0.0266666))
+                        if timestamp_convert == 'Convert':
+                            time = int(round(fcurves[0].keyframe_points[i].co[0]/0.0266666))
+                        else: 
+                            time = int(fcurves[0].keyframe_points[i].co[0])                   
                         m2_track.timestamps.append(time)
                         m2_track.keys.append(values)
                     else:
@@ -2328,9 +2383,12 @@ class BlenderM2Scene:
             if bl_particle.spline_action:
                 export_fcurve(m2_particle.spline_points, bl_particle.spline_action, 'spline_point', False)
 
-    def save_animations(self):
+    def save_animations(self, timestamp_convert):
         def bl_to_m2_time(bl):
-            return int(round(bl/0.02666666))
+            if timestamp_convert == 'Convert':
+                return int(round(bl/0.02666666))
+            else: 
+                return int(bl)                    
 
         #def bl_to_m2_quat(n):
             #n = max(min(n,1),-1) * 32767
@@ -2386,7 +2444,17 @@ class BlenderM2Scene:
                 if not path in self.compounds and not fill_tracks:
                         print("M2 track path not found : " + path)                                                              
                         return
+                
+                def animations_count():
+                    global_seq_count = 0
+                    for wow_seq in bpy.context.scene.wow_m2_animations:
+                        if wow_seq.is_global_sequence:
+                            global_seq_count += 1
+                    return (len(bpy.context.scene.wow_m2_animations) - global_seq_count) 
+                                
                 # Events for example need to add one entry per animation even if they're empty
+                anim_count = animations_count()  
+
                 if fill_tracks:
                     # Handle here only the ones that are not enabled, else return and continue with the normal code
                     if not path in self.compounds:
@@ -2394,24 +2462,10 @@ class BlenderM2Scene:
                         while len(m2_track.timestamps) <= self.seq_id:
                             m2_track.timestamps.add(M2Array(uint32))
                         
-                        global_seq_count = 0
-                        for wow_seq in bpy.context.scene.wow_m2_animations:
-                            if wow_seq.is_global_sequence:
-                                global_seq_count += 1
-                        animations_count = len(bpy.context.scene.wow_m2_animations) - global_seq_count
-
                         if self.seq_id > 0:
                             while len(m2_track.timestamps) < animations_count:
-                                m2_track.timestamps.add(M2Array(uint32))
-                        m2_times = m2_track.timestamps[seq_id]
-
-                        if fill_tracks:
-                            if self.seq_id > 0:
-                                while len(m2_track.timestamps) < animations_count:
-                                    m2_track.timestamps.add(M2Array(0))
-                                while len(m2_track.timestamps) > animations_count:
-                                    m2_track.timestamps.add(M2Array(0))
-                            m2_times = m2_track.timestamps[seq_id]                    
+                                m2_track.timestamps.add(M2Array(0))
+                        m2_times = m2_track.timestamps[seq_id]                    
 
                         # Make sure value track exists
                         m2_values = None
@@ -2423,13 +2477,23 @@ class BlenderM2Scene:
                             #     while len(m2_track.values) < animations_count:
                             #         m2_track.values.add(M2Array(value_type))
                             if self.seq_id > 0:
-                                while len(m2_track.values) < animations_count:
+                                while len(m2_track.values) < anim_count:
                                     m2_track.values.add(M2Array(value_type))            
                             m2_values = m2_track.values[seq_id]
 
                         return
-                
+                    else:
 
+                        while len(m2_track.timestamps) < anim_count:
+                            m2_track.timestamps.add(M2Array(uint32))
+
+                        if self.seq_id > 0:
+                            while len(m2_track.timestamps) < anim_count:
+                                m2_track.timestamps.add(M2Array(0))
+                        m2_times = m2_track.timestamps[seq_id]                    
+
+                        pass                     
+                
                 fcurves = self.get_curves(path)
                 if len(fcurves) == 0:
                     return
@@ -2484,28 +2548,11 @@ class BlenderM2Scene:
                 while len(m2_track.timestamps) <= self.seq_id:
                     m2_track.timestamps.add(M2Array(uint32))
                 
-                # titi
-                # bones, events, color.alpha seem to require 1 entry per animation
-                global_seq_count = 0
-                for wow_seq in bpy.context.scene.wow_m2_animations:
-                    if wow_seq.is_global_sequence:
-                        global_seq_count += 1
-                animations_count = len(bpy.context.scene.wow_m2_animations) - global_seq_count
-
                 # if fill_tracks:
                 if self.seq_id > 0:
-                    while len(m2_track.timestamps) < animations_count:
+                    while len(m2_track.timestamps) < anim_count:
                         m2_track.timestamps.add(M2Array(uint32))
-                m2_times = m2_track.timestamps[seq_id]
-
-                if fill_tracks:
-                    if self.seq_id > 0:
-                        while len(m2_track.timestamps) < animations_count:
-                            m2_track.timestamps.add(M2Array(0))
-                        while len(m2_track.timestamps) > animations_count:
-                            m2_track.timestamps.add(M2Array(0))
-                    m2_times = m2_track.timestamps[seq_id]                    
-
+                m2_times = m2_track.timestamps[seq_id]               
 
                 # Make sure value track exists
                 m2_values = None
@@ -2514,10 +2561,10 @@ class BlenderM2Scene:
                         m2_track.values.add(M2Array(value_type))
 
                     # if fill_tracks:
-                    #     while len(m2_track.values) < animations_count:
+                    #     while len(m2_track.values) < anim_count:
                     #         m2_track.values.add(M2Array(value_type))
                     if self.seq_id > 0:
-                        while len(m2_track.values) < animations_count:
+                        while len(m2_track.values) < anim_count:
                             m2_track.values.add(M2Array(value_type))            
                     m2_values = m2_track.values[seq_id]
 
@@ -2541,8 +2588,9 @@ class BlenderM2Scene:
                     if not self.global_seq_id in global_seq_durations or time > global_seq_durations[self.global_seq_id]:
                         global_seq_durations[self.global_seq_id] = time
                 else:
-                    if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
-                        seq_durations[self.seq_id] = time                 
+                    if path.startswith('pose'):
+                        if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
+                            seq_durations[self.seq_id] = max(33, time)
 
         def write_light(cpd, pair):
             m2_light = self.m2.root.lights.values[self.light_ids[pair.object.name]]
@@ -2592,7 +2640,7 @@ class BlenderM2Scene:
                             bl_to_m2_quat(x[self.axis_order[0] + 1] * self.axis_polarity[0]),
                             bl_to_m2_quat(x[self.axis_order[1] + 1] * self.axis_polarity[1]),
                             bl_to_m2_quat(x[3])
-                        )), fill_tracks = True
+                        )), fill_tracks = False
                     )
 
                 if curve_type == 'scale':
@@ -2602,12 +2650,12 @@ class BlenderM2Scene:
                         elif self.forward_axis == 'Y+' or self.forward_axis == 'Y-':
                             scale = (scale[0],scale[1],scale[2])
                         return scale
-                    cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale, fill_tracks = True)
+                    cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale, fill_tracks = False)
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
                 if curve_type == 'location':
                     cpd.write_track(path,3,m2_bone.translation,vec3D,
-                        lambda x: self._convert_vec((x[1],-x[0],x[2])), fill_tracks = True)
+                        lambda x: self._convert_vec((x[1],-x[0],x[2])), fill_tracks = False)
 
         def write_scene(cpd, pair):
             def extract_scene_data(path):
@@ -2662,6 +2710,25 @@ class BlenderM2Scene:
 
             cpd.write_track("wow_m2_event.fire",1,m2_event.enabled,None, fill_tracks = True)
 
+            events_to_remove = []
+            for event in self.final_events:
+                if pair.object.name == event:
+                    events_to_remove.append(event)
+            for event in events_to_remove:
+                del self.final_events[event]
+
+        def write_empty_events():
+            for key, identifier in self.final_events.items():
+                m2_track = identifier.enabled                   
+                global_seq_count = 0
+                for wow_seq in bpy.context.scene.wow_m2_animations:
+                    if wow_seq.is_global_sequence:
+                        global_seq_count += 1
+                animations_count = len(bpy.context.scene.wow_m2_animations) - global_seq_count
+
+                while len(m2_track.timestamps) < animations_count:
+                    m2_track.timestamps.add(M2Array(0))
+                    
         def write_texture_transform(cpd, pair):
             if pair.object.name in self.texture_transform_ids:
                 return
@@ -2834,6 +2901,8 @@ class BlenderM2Scene:
             self.m2.root.sequence_lookup.append(0xffff)
         if self.m2.root.sequence_lookup[4] == -1:
             self.m2.root.sequence_lookup[4] = 0
+        
+        write_empty_events()
 
     def save_globalflags(self, need_combiner_flag):     
         global_flags_armature = next((obj for obj in bpy.data.objects if obj.type == 'ARMATURE'), None)
@@ -3250,3 +3319,5 @@ class BlenderM2Scene:
                                                     + ((b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
                                                     + ((b_max[2] - b_min[2])) ** 2) / 2
 
+        #for key, identifier in self.final_events.items():
+        #    print(key, identifier)
