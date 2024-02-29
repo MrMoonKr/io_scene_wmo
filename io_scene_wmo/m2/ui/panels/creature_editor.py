@@ -14,10 +14,9 @@ def get_creature_model_data(self, context):
     
     creature_model_data_db = game_data.db_files_client.CreatureModelData
 
-    # print("proc get_creature_model_data")
-
     cr_model_data_entries = [('None', 'None', '')]
     model_path = os.path.splitext(context.scene.wow_scene.game_path.lower())[0]
+    model_path = model_path.replace('/', '\\')
 
     for record in creature_model_data_db.records:
         if os.path.splitext(record.ModelName.lower())[0] == model_path:
@@ -438,20 +437,20 @@ class M2_OT_creature_editor_load_textures(bpy.types.Operator):
 
                     #if material.wow_m2_material.texture_1:
                     #    if material.wow_m2_material.texture_1.image.wow_m2_texture.texture_type == str(tex_type):
-                    if material.node_tree.nodes.get('Image Texture').image: # which one is better to use ? 
-                        if material.node_tree.nodes.get('Image Texture').image.wow_m2_texture.texture_type == str(tex_type):
+                    if material.node_tree.nodes.get('Tex1_image').image: # which one is better to use ? 
+                        if material.node_tree.nodes.get('Tex1_image').image.wow_m2_texture.texture_type == str(tex_type):
 
-                            img.name = material.node_tree.nodes.get('Image Texture').image.name
+                            img.name = material.node_tree.nodes.get('Tex1_image').image.name
                             img.wow_m2_texture.texture_type = str(tex_type)
-                            img.wow_m2_texture.flags = material.node_tree.nodes.get('Image Texture').image.wow_m2_texture.flags
-                            img.wow_m2_texture.path = material.node_tree.nodes.get('Image Texture').image.wow_m2_texture.path
+                            img.wow_m2_texture.flags = material.node_tree.nodes.get('Tex1_image').image.wow_m2_texture.flags
+                            img.wow_m2_texture.path = material.node_tree.nodes.get('Tex1_image').image.wow_m2_texture.path
                             img.wow_m2_texture.enabled = True
 
                             material.wow_m2_material.texture_1 = img # this just changes the m2 mat to a newly created texture with incorrect m2 text settings
                                                         # can try to replace the m2 texture by the correct texture
 
                             # change the shader tetxures, looks like the best replacement over active texture
-                            material.node_tree.nodes.get('Image Texture').image = img
+                            material.node_tree.nodes.get('Tex1_image').image = img
 
                             # TODO : multiple textures ?
 

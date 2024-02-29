@@ -176,7 +176,10 @@ def missing_animation_items():
             if pair.object is None:
                 items.append(f'Sequence {sequence.name} pair {j} has no object set')
             if pair.action is None:
-                items.append(f'Sequence {sequence.name} pair {j} has no action set')
+                if pair.object.name == 'CharInfoCam' or 'CharInfoCam_Target' or 'PortraitCam' or 'PortraitCam_Target':
+                    pass
+                else:
+                    items.append(f'Sequence {sequence.name} pair {pair.object.name} has no action set')
     return (name,description,items)
 
 def non_primary_sequences():

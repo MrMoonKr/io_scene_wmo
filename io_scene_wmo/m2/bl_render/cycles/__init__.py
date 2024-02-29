@@ -64,7 +64,7 @@ def update_m2_mat_node_tree_cycles(bl_mat):
         bl_mat.node_tree.links.new(bsdf.inputs['Alpha'], tex_image.outputs['Alpha'])
         bl_mat.node_tree.links.new(uv.outputs['UV'], tex_image.inputs['Vector'])
         bl_mat.blend_method = 'CLIP'
-        bl_mat.alpha_threshold = 0.02
+        bl_mat.alpha_threshold = 0.878431
 
     if bl_mat.wow_m2_material.texture_1_blending_mode == '2' or bl_mat.wow_m2_material.texture_1_blending_mode == '4':
         bl_mat.node_tree.links.new(bsdf.inputs['Alpha'], tex_image.outputs['Alpha'])
@@ -93,7 +93,7 @@ def update_m2_mat_node_tree_cycles(bl_mat):
     trans_name_var = driver.variables.new()
     trans_name_var.name = 'Transparency'
     trans_name_var.targets[0].id_type = 'SCENE'
-    trans_name_var.targets[0].id = bpy.data.scenes["Scene"]
+    trans_name_var.targets[0].id = bpy.context.scene
     
     trans_name = bl_mat.wow_m2_material.transparency
 

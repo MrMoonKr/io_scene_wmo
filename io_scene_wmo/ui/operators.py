@@ -275,7 +275,17 @@ class WBS_OT_m2_import(bpy.types.Operator):
         )
 
     def execute(self, context):
-        import_m2(int(context.scene.wow_scene.version), self.filepath, False)      
+        project_preferences = get_project_preferences()
+        time_import_method = project_preferences.time_import_method
+
+        if time_import_method == 'Convert':
+            bpy.context.scene.render.fps = 24
+            bpy.context.scene.sync_mode = 'NONE'
+        else:
+            bpy.context.scene.render.fps = 1000
+            bpy.context.scene.sync_mode = 'FRAME_DROP'
+            
+        import_m2(int(context.scene.wow_scene.version), self.filepath, True, time_import_method)      
         context.scene.wow_scene.type = 'M2'
         return {'FINISHED'}
 

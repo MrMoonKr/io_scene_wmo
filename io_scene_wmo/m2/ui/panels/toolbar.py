@@ -87,16 +87,18 @@ class M2_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
         col1_col = col.column(align=True)
         col1_row1 = col1_col.row(align=True)  
         
-        if game_data_loaded:
-            col1_row1.operator("scene.wow_import_last_m2_from_wmv", text='M2',
-                icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD']) 
-            
-        col1_row1.operator("scene.m2_add_attachment", text='Attachment', icon='POSE_HLT')
-        
         col1_row2 = col1_col.row(align=True)  
+
+        
+        col1_row1.operator("scene.wow_import_last_m2_from_wmv", text='M2',
+            icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD']) 
+        
         
         if proj_prefs := get_project_preferences():
-            col1_row2.prop(proj_prefs, 'import_method', text='')
+            col1_row1.prop(proj_prefs, 'import_method', text='')
+
+        col1_row2.operator("scene.m2_add_attachment", text='Attachment', icon='POSE_HLT')
+        col1_row2.operator("scene.m2_add_event", text='Event', icon='POSE_HLT')
 
    
         # col1_row1.operator("scene.wow_add_liquid", text='Event', icon='PLUGIN')
@@ -160,6 +162,7 @@ class M2_MT_mesh_wow_components_add(bpy.types.Menu):
                 icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])          
 
         col.operator("scene.m2_add_attachment", text='Attachment', icon='POSE_HLT')
+        col.operator("scene.m2_add_event", text='Event', icon='POSE_HLT')
         # col.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
         # col.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
         # col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])

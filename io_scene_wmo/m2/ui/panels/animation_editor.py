@@ -1,12 +1,18 @@
 import bpy
 
-from ..enums import get_anim_ids, ANIMATION_FLAGS
+from ..enums import ANIMATION_FLAGS
+from ....pywowlib.enums.m2_enums import M2SequenceNames
 from ....pywowlib import WoWVersions
 
 
 ###############################
 ## User Interface
 ###############################
+class M2_Animation_IDS:
+
+    context = None
+    m2_sequence_names = M2SequenceNames()
+    anim_ids = m2_sequence_names.get_anim_ids(context)
 
 # TODO: hacky way to display the right indices in the ui panel
 def resolve_alias_next(alias_next):
@@ -188,8 +194,7 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
 
             row = col.row(align=True)
             row.label(text="Animation ID: ")
-            anim_ids = get_anim_ids(None, None)
-            row.operator("scene.wow_m2_animation_id_search", text=anim_ids[int(cur_anim_track.animation_id)][1],
+            row.operator("scene.wow_m2_animation_id_search", text=M2_Animation_IDS.anim_ids[int(cur_anim_track.animation_id)][1],
                          icon='VIEWZOOM')
             col.prop(cur_anim_track, 'move_speed', text="Move speed")
 
@@ -249,7 +254,7 @@ class M2_OT_animation_editor_id_search(bpy.types.Operator):
     bl_options = {'REGISTER', 'INTERNAL'}
     bl_property = "animation_id"
 
-    animation_id:  bpy.props.EnumProperty(items=get_anim_ids)
+    animation_id:  bpy.props.EnumProperty(items=M2_Animation_IDS.anim_ids)
 
     def execute(self, context):
 
@@ -274,7 +279,7 @@ class M2_OT_animation_editor_id_search(bpy.types.Operator):
 
 def update_animation_collection(self, context):
 
-    anim_ids = get_anim_ids(None, None)
+    anim_ids = M2_Animation_IDS.anim_ids
     index_cache = {}
 
     for i, anim in enumerate(bpy.context.scene.wow_m2_animations):
@@ -856,7 +861,7 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
     animation_id:  bpy.props.EnumProperty(
         name="animation_id",
         description="WoW Animation ID",
-        items=get_anim_ids,
+        items=M2_Animation_IDS.anim_ids,
         update=update_animation_collection
     )
 

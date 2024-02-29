@@ -6,7 +6,8 @@ from ..utils.misc import load_game_data
 
 @persistent
 def _load_game_data(scene):
-    load_game_data()
+    pass
+    #load_game_data()
 
 
 def register():

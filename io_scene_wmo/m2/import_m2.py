@@ -9,7 +9,7 @@ from ..pywowlib.m2_file import M2File, M2Versions
 from ..ui.preferences import get_project_preferences
 
 
-def import_m2(version, filepath, is_local_file=False):
+def import_m2(version, filepath, is_local_file, time_import_method):
 
     # get global variables
     project_preferences = get_project_preferences()
@@ -32,39 +32,61 @@ def import_m2(version, filepath, is_local_file=False):
     if game_data and game_data.files:
 
         # extract and read skel
-        skel_fdid = m2_file.find_main_skel()
+        # skel_fdid = m2_file.find_main_skel()
 
-        while skel_fdid:
-            skel_path = game_data.extract_file(extract_dir, skel_fdid, 'skel')
-            skel_fdid = m2_file.read_skel(skel_path)
+        # while skel_fdid:
+        #     skel_path = game_data.extract_file(extract_dir, skel_fdid, 'skel')
+        #     skel_fdid = m2_file.read_skel(skel_path)
 
-        m2_file.process_skels()
+        # m2_file.process_skels()
+
+        print("\n\nExtracting M2 required files into cache folder")
 
         dependencies = m2_file.find_model_dependencies()
 
-        # extract textures
-        m2_file.texture_path_map = game_data.extract_textures_as_png(extract_dir, dependencies.textures)
+        # extract textures, always into cache folder
+        m2_file.texture_path_map = game_data.extract_textures_as_png(project_preferences.cache_dir_path, dependencies.textures)
 
         # extract anims
         anim_filepaths = {}
         for key, identifier in dependencies.anims.items():
-            try:
-                anim_filepaths[key] = game_data.extract_file(extract_dir, identifier, 'anim')
-            except:
-                anim_filepaths[key] = game_data.extract_file(os.path.dirname(filepath), identifier, 'anim')
+            #For importing m2 through import (folder)
+            if is_local_file:
+                    
+                    full_path = os.path.join(extract_dir, os.path.split(identifier)[-1])
+
+                    if os.path.exists(full_path):
+                        anim_filepaths[key] = full_path
+                    else:
+                        anim_filepaths[key] = os.path.split(identifier)[-1]
+                        print("\n.anim not found at:", full_path, '\n')
+            #For importing thorugh WMV/WoW.Export...               
+            else:
+                try:
+                    anim_filepaths[key] = game_data.extract_file(extract_dir, identifier, 'anim')
+                except:
+                        anim_filepaths[key] = os.path.split(identifier)[-1]
+                        print("\n Failed to extract anim from game data:", identifier)
 
         # extract skins and everything else
-        skin_filepaths = game_data.extract_files(extract_dir, dependencies.skins, 'skin')
+        if is_local_file:
+            skin_filepaths = game_data.extract_files(extract_dir, dependencies.skins, 'skin')
+        else:
+            skin_filepaths = game_data.extract_files(extract_dir, dependencies.skins, 'skin')
 
         if version >= M2Versions.WOD:
             game_data.extract_files(extract_dir, dependencies.bones, 'bone', True)
             game_data.extract_files(extract_dir, dependencies.lod_skins, 'skin', True)
-
+        
     else:
         raise NotImplementedError('Error: Importing without gamedata loaded is not yet implemented.')
 
     m2_file.read_additional_files(skin_filepaths, anim_filepaths)
     m2_file.root.assign_bone_names()
+
+    if not is_local_file:
+        for key, identifier in dependencies.anims.items():
+            os.remove(os.path.join(extract_dir, identifier))
 
     print("\n\n### Importing M2 model ###")
 
@@ -77,9 +99,13 @@ def import_m2(version, filepath, is_local_file=False):
     bpy.context.scene.wow_scene.game_path = m2_filepath
 
     bl_m2.load_armature()
+    #import cProfile
+    #def profile_import_animations(instance):
+        #cProfile.runctx('instance.load_animations()', globals(), locals(), sort='cumulative')
+    #profile_import_animations(bl_m2)
     bl_m2.load_animations()
-    bl_m2.load_colors()
-    bl_m2.load_transparency()
+    bl_m2.load_colors(time_import_method)
+    bl_m2.load_transparency(time_import_method)
     bl_m2.load_materials()
     bl_m2.load_geosets()
     bl_m2.load_texture_transforms()
@@ -87,15 +113,15 @@ def import_m2(version, filepath, is_local_file=False):
     bl_m2.load_attachments()
     bl_m2.load_lights()
     bl_m2.load_events()
-    bl_m2.load_cameras()
+    bl_m2.load_cameras(time_import_method)
     bl_m2.load_ribbons()
-    bl_m2.load_particles()
+    bl_m2.load_particles(time_import_method)
     bl_m2.load_globalflags()
     bpy.ops.scene.wow_creature_load_textures(LoadAll=True) 
     return m2_file
 
 
-def import_m2_gamedata(version, filepath):
+def import_m2_gamedata(version, filepath, is_local_file):
 
 
     game_data = load_game_data()
@@ -105,6 +131,14 @@ def import_m2_gamedata(version, filepath):
 
     addon_prefs = get_project_preferences()
     cache_dir = addon_prefs.cache_dir_path
+    time_import_method = addon_prefs.time_import_method
+
+    if time_import_method == 'Convert':
+        bpy.context.scene.render.fps = 24
+        bpy.context.scene.sync_mode = 'NONE'
+    else:
+        bpy.context.scene.render.fps = 1000
+        bpy.context.scene.sync_mode = 'FRAME_DROP'
 
     game_data.extract_file(cache_dir, filepath)
 
@@ -121,7 +155,7 @@ def import_m2_gamedata(version, filepath):
     skin_paths = ["{}{}.skin".format(filepath[:-3], str(i).zfill(2)) for i in range(n_skins)]
     game_data.extract_files(cache_dir, skin_paths)
 
-    import_m2(version, root_path)    
+    import_m2(version, root_path, is_local_file, time_import_method)    
 
     # clean up unnecessary files and directories
     os.remove(root_path)

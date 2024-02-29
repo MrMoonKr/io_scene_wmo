@@ -8,6 +8,7 @@ from ..ui.preferences import get_project_preferences
 def create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices):
     print("\n\n### Exporting M2 model ###")
     proj_prefs = get_project_preferences()
+    time_import_method = proj_prefs.time_import_method
     m2 = M2File(version)
     importlib.reload(m2_scene)
     importlib.reload(m2_export_warnings)
@@ -32,9 +33,9 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     print("\nExporting Ribbons")
     bl_m2.save_ribbons()
     print("\nExporting particles")
-    bl_m2.save_particles()
+    bl_m2.save_particles(time_import_method)
     print("\nExporting animations")
-    bl_m2.save_animations()
+    bl_m2.save_animations(time_import_method)
     print("\nExporting geosets")
     bl_m2.save_geosets(selected_only, fill_textures, merge_vertices)
     print("\nExporting collisions")
