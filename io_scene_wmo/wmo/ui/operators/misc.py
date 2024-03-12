@@ -331,36 +331,52 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
                 # bm = bmesh.new()
                 # bm.from_object(liquidobj, bpy.context.evaluated_depsgraph_get())
 
-                bm = liquidobj.copy()
-                
-                bpy.context.collection.objects.link(bm)
-                bpy.context.view_layer.update()
-                bpy.ops.object.mode_set(mode = 'OBJECT') 
-                bpy.context.view_layer.objects.active = bm
-                bpy.ops.object.mode_set(mode = 'EDIT')
-    
-                mesh = bm.data
+                bpy.context.view_layer.objects.active = liquidobj
+                liquidobj.select_set(True)
+                liquidobj.hide_render = True
+                bpy.ops.object.duplicate()
+                duplicated_object = bpy.context.active_object
 
-                renderflag_layer = mesh.vertex_colors['flag_0']
+                duplicated_object.select_set(True)
+
+                bpy.ops.object.mode_set(mode='OBJECT')
 
                 def comp_colors(color1, color2):
-                    for i in range(3):
-                        if color1[i] != color2[i]:
-                            return False
-                    return True
+                    return all(color1[i] == color2[i] for i in range(3))
 
                 blue = [0.0, 0.0, 1.0]
+                mesh = duplicated_object.data
+
+                renderflag_layer = mesh.color_attributes['flag_0']
+
+                matching_loop_indices = []
+                if renderflag_layer:
+                    for i, loop_color in enumerate(renderflag_layer.data):
+                        if comp_colors(loop_color.color, blue):
+                            matching_loop_indices.append(i) 
+
+                matching_vertex_indices = set()
+                
+                for loop in mesh.loops:
+                    if loop.index in matching_loop_indices:
+                        matching_vertex_indices.add(loop.vertex_index)
+
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+
                 for poly in mesh.polygons:
-                    if comp_colors(renderflag_layer.data[poly.loop_indices[0]].color, blue):
+                    if any(vertex in matching_vertex_indices for vertex in poly.vertices):
                         poly.select = True
 
-                # bpy.ops.object.mode_set(mode = 'EDIT')
-                # bpy.ops.object.editmode_toggle()
+                bpy.ops.object.mode_set(mode='EDIT')        
                 bpy.ops.mesh.delete(type='FACE')
-                bpy.ops.object.mode_set(mode = 'OBJECT')
-                bm.hide_render = False
 
-                return bm
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+                duplicated_object.hide_render = False
+
+                return duplicated_object
 
             
             def render(offset_x, offset_y):
@@ -380,6 +396,7 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
                 obj.hide_render = True
                 if liquidobj:
                     # bm.free()
+                    bm.hide_render = True
                     bpy.ops.object.delete() # should delete previosuly selected liquid copy
                 
                 bpy.context.scene.render.filepath = output_path
