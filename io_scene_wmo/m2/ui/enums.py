@@ -229,7 +229,7 @@ MESH_PART_TYPES = [
     ("Facial3", "Facial3", "Usually sideburns geosets", 'PMARKER', 5),
     ("Glove", "Glove", "Glove geosets", 'PMARKER', 6),
     ("Boots", "Boots", "Boots geosets", 'PMARKER', 7),
-    ("Unknown", "Unknown", "", 'PMARKER', 8),
+    ("Shirt", "Shirt", "", 'PMARKER', 8),
     ("Ears", "Ears", "Ears geosets", 'PMARKER', 9),
     ("Wristbands", "Wristbands", "Wristbands / Sleeves geosets", 'PMARKER', 10),
     ("Kneepads", "Kneepads", "Kneepad geosets", 'PMARKER', 11),
@@ -237,19 +237,43 @@ MESH_PART_TYPES = [
     ("Pants", "Pants", "Pants geosets", 'PMARKER', 13),
     ("Tabard", "Tabard", "Tabard geosets", 'PMARKER', 14),
     ("Legs", "Trousers", "Trousers geosets", 'PMARKER', 15),
-    ("Unknown2", "Unknown 2", "", 'PMARKER', 16),
-    ("Cloak", "Cloak", "Cloak geosets", 'PMARKER', 17),
-    ("Unknown3", "Unknown 3", "", 'PMARKER', 18),
-    ("Eyeglows", "Eyeglows", "Eyeglows geosets", 'PMARKER', 19),
+    ("ShirtDoublet", "Loincloth", "", 'PMARKER', 16),
+    ("Cape", "Cape", "Cape geosets", 'PMARKER', 17),
+    ("FacialJewelry", "FacialJewelry", "", 'PMARKER', 18),
+    ("EyeEffects", "EyeEffects", "EyeEffects geosets", 'PMARKER', 19),
     ("Belt", "Belt", "Belt / Bellypack geosets", 'PMARKER', 20),
     ("Trail", "Trail", "Trail geosets / Undead bones (Legion+)", 'PMARKER', 21),
     ("Feet", "Feet", "Feet geosets", 'PMARKER', 22),
     ("Hands", "BE Hands", "Hands for Blood Elf / Night Elf (Legion+)", 'PMARKER', 23),
-    ("Head", "Head", "", 'PMARKER', 24),
-    ("Torso", "Torso", "", 'PMARKER', 25),
-    ("Shoulders", "Shoulders", "", 'PMARKER', 26),
-    ("Helmet", "Helmet", "", 'PMARKER', 27),
-    ("Unknown4", "Unknown4", "", 'PMARKER', 28),
+    ("Horns", "Horns", "Horns for Draenei/Tauren", 'PMARKER', 24),
+    ("Head", "Head", "", 'PMARKER', 25),
+    ("Torso", "Torso", "", 'PMARKER', 26),
+    ("Shoulders", "Shoulders", "", 'PMARKER', 27),
+    ("Helmet", "Helmet", "", 'PMARKER', 28),
+    ("ArmUpper", "ArmUpper", "", 'PMARKER', 29),
+    ("ArmsReplace", "ArmsReplace", "Mechagnome arms/hands, BFA+", 'PMARKER', 30),
+    ("LegsReplace", "LegsReplace", "Mechagnome legs, BFA+", 'PMARKER', 31),
+    ("FeetReplace", "FeetReplace", "Mechagnome feet, BFA+", 'PMARKER', 32),
+    ("HeadSwap", "HeadSwap", "SL+", 'PMARKER', 33),
+    ("Eyes", "Eyes", "SL+", 'PMARKER', 34),
+    ("Eyebrows", "Eyebrows", "SL+", 'PMARKER', 35),
+    ("Piercings", "Piercings/Earrings", "SL+", 'PMARKER', 36),
+    ("Necklaces", "Necklaces", "SL+", 'PMARKER', 37),
+    ("Headdress", "Headdress", "SL+", 'PMARKER', 38),
+    ("Tail", "Tail", "Draenei SL+", 'PMARKER', 39),
+    ("MiscAccessory", "MiscAccessory", "Vines NE SL+", 'PMARKER', 40),
+    ("MiscFeature", "MiscFeature", "Vines NE SL+", 'PMARKER', 41),
+    ("Noses", "Noses", "Noses Goblins SL+", 'PMARKER', 42),
+    ("HairDecoration", "HairDecoration", "Light Forged Draenei SL+", 'PMARKER', 43),
+    ("HornDecoration", "HornDecoration", "Highmountain Tauren SL+", 'PMARKER', 44),
+    ("BodySize", "BodySize", "Dracthyr DF+", 'PMARKER', 45),
+    ("Unknown1", "Unknown1", "Unknown1 DF+", 'PMARKER', 46),
+    ("Unknown2", "Unknown2", "Unknown2 DF+", 'PMARKER', 47),
+    ("Unknown3", "Unknown3", "Unknown3 DF+", 'PMARKER', 48),
+    ("Unknown4", "Unknown4", "Unknown4 DF+", 'PMARKER', 49),
+    ("Unknown5", "Unknown5", "Unknown5 DF+", 'PMARKER', 50),
+    ("Unknown6", "Unknown6", "Unknown6 DF+", 'PMARKER', 51),
+    ("EyeGlows", "EyeGlows", "EyeGlow (AllRaces) DF+", 'PMARKER', 52),
 ]
 
 ANIMATION_FLAGS = [
@@ -298,8 +322,7 @@ PARTICLE_BLEND_MODES = [
 ]
 
 def generate_enumerated_list(irange, name):
-    return list([(str(i), "{}_{}".format(name, i), "") for i in irange])
-
+    return list([(str(i), "{}_{}".format(i, name), "") for i in irange])
 
 def mesh_part_id_menu(self, context):
 
@@ -308,109 +331,239 @@ def mesh_part_id_menu(self, context):
         return [('0', 'No subtype', "")]
 
     elif geoset_group == 'Hair':
-        return generate_enumerated_list(M2SkinMeshPartID.Hair.value, 'Hairstyle')
+        return generate_enumerated_list(M2SkinMeshPartID.Hair.value, 'Hair')
 
     elif geoset_group == 'Facial1':
-        return generate_enumerated_list(M2SkinMeshPartID.Facial1.value, 'Facial')
+        return generate_enumerated_list(M2SkinMeshPartID.Facial1.value, 'Facial1')
 
     elif geoset_group == 'Facial2':
-        return generate_enumerated_list(M2SkinMeshPartID.Facial2.value, 'Facial')
+        return generate_enumerated_list(M2SkinMeshPartID.Facial2.value, 'Facial2')
 
     elif geoset_group == 'Facial3':
-        return generate_enumerated_list(M2SkinMeshPartID.Facial3.value, 'Facial')
+        return generate_enumerated_list(M2SkinMeshPartID.Facial3.value, 'Facial3')
 
     elif geoset_group == 'Glove':
-        return [("401", "Skin", ""),
-                ("402", "Regular", ""),
-                ("403", "Jackgloves", ""),
-                ("404", "Armored", "")]
+        return [("401", "401 - Skin", ""),
+                ("402", "402 - Regular", ""),
+                ("403", "403 - Jackgloves", ""),
+                ("404", "404 - Armored", ""),
+                ("405", "405 - Armored", "")]
 
     elif geoset_group == 'Boots':
-        return [("501", "Skin", ""),
-                ("502", "Short", ""),
-                ("503", "Jackboots", ""),
-                ("504", "Regular", ""),
-                ("505", "Plate", "")
-                ]
+        return [("501", "501 - Skin", ""),
+                ("502", "502 - Short", ""),
+                ("503", "503 - Jackboots", ""),
+                ("504", "504 - Regular", ""),
+                ("505", "505 - Plate", ""),
+                ("506", "506 - Boots6", ""),
+                ("507", "507 - Boots7", ""),
+                ("508", "508 - Boots8", ""),
+                ("509", "509 - Boots9", ""),
+                ("510", "510 - Boots10", "")]
 
+    elif geoset_group == 'Shirt':
+        return generate_enumerated_list(M2SkinMeshPartID.Shirt.value, 'Shirt')
+    
     elif geoset_group == 'Ears':
-        return [("701", "None (DNE)", "No ears"),
-                ("702", "Ears", "Ears geoset")]
+        return [("701", "701 - None (DNE)", "No ears"),
+                ("702", "702 - Ears", "Ears geoset"),
+                ("703", "703 - Ears3", "Ears3"),
+                ("704", "704 - Ears4", "Ears4"),
+                ("705", "705 - Ears5", "Ears5"),
+                ("706", "706 - Ears6", "Ears6"),
+                ("707", "707 - Ears7", "Ears7"),
+                ("708", "708 - Ears8", "Ears8"),
+                ("709", "709 - Ears9", "Ears9"),
+                ("710", "710 - Ears10", "Ears10"),
+                ("711", "711 - Ears11", "Ears11"),
+                ("712", "712 - Ears12", "Ears12")]
 
     elif geoset_group == 'Wristbands':
-        return [("801", "None (DNE)", "No wristbands"),
-                ("802", "Normal", "Normal wristbands"),
-                ("803", "Ruffled", "Ruffled wristbands"),
-                ("804", "Panda Collar Shirt", "")]
+        return [("801", "801 - None (DNE)", "No wristbands"),
+                ("802", "802 - Normal", "Normal wristbands"),
+                ("803", "803 - Ruffled", "Ruffled wristbands"),
+                ("804", "804 - Panda Collar Shirt", "")]
 
     elif geoset_group == 'Kneepads':
-        return [("901", "None (DNE)", "No kneepads"),
-                ("902", "Long", "Long kneepads"),
-                ("903", "Short", "Short kneepads"),
-                ("904", "Panda Pants", "")]
+        return [("901", "901 - None (DNE)", "No kneepads"),
+                ("902", "902 - Long", "Long kneepads"),
+                ("903", "903 - Short", "Short kneepads"),
+                ("904", "904 - Panda Pants", ""),
+                ("905", "905 - Kneepads5", "")]
 
     elif geoset_group == 'Chest':
-        return [("1001", "None (DNE)", "No chest"),
-                ("1002", "Plate", "Downside of a plate chest"),
-                ("1003", "Body 2", ""),
-                ("1004", "Body 3", "")]
+        return [("1001", "1001 - None (DNE)", "No chest"),
+                ("1002", "1002 - Plate", "Downside of a plate chest"),
+                ("1003", "1003 - Body 2", ""),
+                ("1004", "1004 - Body 3", "")]
 
     elif geoset_group == 'Pants':
-        return [("1101", "Regular", "Regular pants"),
-                ("1102", "Skirt", "Short skirt"),
-                ("1104", "Armored", "Armored pants")]
+        return [("1101", "1101 - Regular", "Regular pants"),
+                ("1102", "1102 - Skirt", "Short skirt"),
+                ("1104", "1104 - Armored", "Armored pants"),
+                ("1105", "1105 - Regular5", "Pants5")]
 
     elif geoset_group == 'Tabard':
-        return [("1201", "None (DNE)", "No tabard"),
-                ("1202", "Tabard", "Tabard"),
-                ("1203", "Tabard Unk", "SL +")]
+        return [("1201", "1201 - None (DNE)", "No tabard"),
+                ("1202", "1202 - Tabard", "Tabard"),
+                ("1203", "1203 - Tabard Unk", "SL +"),
+                ("1204", "1204 - Tabard4", "Tabard4")]
 
     elif geoset_group == 'Legs':
-        return [("1301", "Trousers", ""),
-                ("1302", "Dress", "")]
+        return [("1301", "1301 - Trousers", ""),
+                ("1302", "1302 - Dress", ""),
+                ("1303", "1303 - Legs3", ""),
+                ("1304", "1304 - Legs4", "")]
 
-    elif geoset_group == 'Cloak':
-        return [("1501", "Scarf", "Shortest cloak"),
-                ("1502", "Knight", "Usually the longest cloak"),
-                ("1503", "Normal", ""),
-                ("1504", "Double-tail", ""),
-                ("1505", "Small", ""),
-                ("1506", "Small double-tail", ""),
-                ("1507", "Guild cloak", ""),
-                ("1508", "Split", "Long"),
-                ("1509", "Tapered", "Long"),
-                ("1509", "Notched", "Long"),
-                ("1510", "Unknown", "SL+")]
+    elif geoset_group == 'ShirtDoublet':
+        return generate_enumerated_list(M2SkinMeshPartID.ShirtDoublet.value, 'ShirtDoublet')
+    
+    elif geoset_group == 'Cape':
+        return [("1501", "1501 - Scarf", "Shortest cloak"),
+                ("1502", "1502 - Knight", "Usually the longest cloak"),
+                ("1503", "1503 - Normal", ""),
+                ("1504", "1504 - Double-tail", ""),
+                ("1505", "1505 - Small", ""),
+                ("1506", "1506 - Small double-tail", ""),
+                ("1507", "1507 - Guild cloak", ""),
+                ("1508", "1508 - Split", "Long"),
+                ("1509", "1509 - Tapered", "Long"),
+                ("1510", "1510 - Notched", "Long"),
+                ("1511", "1511 - Unknown1", "SL+"),
+                ("1512", "1512 - Unknown2", "SL+"),
+                ("1513", "1513 - Unknown3", "SL+"),
+                ("1514", "1514 - Unknown4", "SL+"),
+                ("1515", "1515 - Unknown5", "SL+"),
+                ("1516", "1516 - Unknown6", "SL+"),
+                ("1517", "1517 - Unknown7", "SL+"),
+                ("1518", "1518 - Unknown8", "SL+"),
+                ("1519", "1519 - Unknown9", "SL+"),
+                ("1520", "1520 - Unknown10", "SL+"),
+                ("1521", "1521 - Unknown11", "SL+"),
+                ("1522", "1522 - Unknown12", "SL+"),
+                ("1523", "1523 - Unknown13", "SL+"),
+                ("1524", "1524 - Unknown14", "SL+"),
+                ("1525", "1525 - Unknown15", "SL+")]
 
-    elif geoset_group == 'Eyeglows':
-        return [("1701", "None (DNE)", "No eyeglow"),
-                ("1702", "Racial", "Racial eyeglow"),
-                ("1703", "DK", "Death Knight eyeglow")]
+    elif geoset_group == 'FacialJewelry':
+        return generate_enumerated_list(M2SkinMeshPartID.FacialJewelry.value, 'FacialJewelry')
+
+    elif geoset_group == 'EyeEffects':
+        return [("1701", "1701 - None (DNE)", "No eyeglow"),
+                ("1702", "1702 - Racial", "Racial eyeglow"),
+                ("1703", "1703 - DK", "Death Knight eyeglow"),
+                ("1704", "1704 - Eyeffects4", "Eyeffects4"),
+                ("1705", "1705 - Eyeffects5", "Eyeffects5")]
 
     elif geoset_group == 'Belt':
-        return [("1801", "None (DNE)", "No belt / bellypack"),
-                ("1802", "Bulky", "Bulky belt"),
-                ("1803", "Panda Cord Belt", "")]
+        return [("1801", "1801 - None (DNE)", "No belt / bellypack"),
+                ("1802", "1802 - Bulky", "Bulky belt"),
+                ("1803", "1803 - Panda Cord Belt", ""),
+                ("1804", "1804 - Belt4", "")]
+
+    elif geoset_group == 'Trail':
+        return generate_enumerated_list(M2SkinMeshPartID.Trail.value, 'Trail')
 
     elif geoset_group == 'Feet':
-        return [("2001", "Basic shoes", ""),
-                ("2002", "Toes", "")]
+        return [("2001", "2001 - Basic shoes", ""),
+                ("2002", "2002 - Toes", ""),
+                ("2003", "2003 - Feet3", ""),
+                ("2004", "2004 - Feet4", ""),
+                ("2005", "2005 - Feet5", ""),
+                ("2006", "2006 - Feet6", ""),
+                ("2007", "2007 - Feet7", ""),
+                ("2008", "2008 - Feet8", "")]
 
     elif geoset_group == 'Head':
-        return [("2101", "Show head", "")]
+        return [("2101", "2101 - Show head", "")]
 
     elif geoset_group == 'Torso':
-        return [("2201", "Default", ""),
-                ("2202", "Covered torso", "")]
+        return [("2201", "2201 - Default", ""),
+                ("2202", "2202 - Covered torso", "")]
 
     elif geoset_group == 'Hands':
-        return [("2301", "BE / NE Hands", 'Hands for Blood Elf / Night Elf')]
+        return [("2301", "2301 - BE / NE Hands", 'Hands for Blood Elf / Night Elf')]
 
+    elif geoset_group == 'Horns':
+        return generate_enumerated_list(M2SkinMeshPartID.Horns.value, 'Horns')
+    
     elif geoset_group == 'Shoulders':
-        return [("2201", "Show shoulders", "")]
+        return generate_enumerated_list(M2SkinMeshPartID.Shoulders.value, 'Shoulders')
 
     elif geoset_group == 'Helmet':
-        return [("2202", "Helmet", "")]
+        return generate_enumerated_list(M2SkinMeshPartID.Helmet.value, 'Helmet')
+
+    elif geoset_group == 'ArmUpper':
+        return generate_enumerated_list(M2SkinMeshPartID.ArmUpper.value, 'ArmUpper')
+
+    elif geoset_group == 'ArmsReplace':
+        return generate_enumerated_list(M2SkinMeshPartID.ArmsReplace.value, 'ArmsReplace')
+
+    elif geoset_group == 'LegsReplace':
+        return generate_enumerated_list(M2SkinMeshPartID.LegsReplace.value, 'LegsReplace')    
+
+    elif geoset_group == 'FeetReplace':
+        return generate_enumerated_list(M2SkinMeshPartID.FeetReplace.value, 'FeetReplace')
+
+    elif geoset_group == 'HeadSwap':
+        return generate_enumerated_list(M2SkinMeshPartID.HeadSwap.value, 'HeadSwap')
+
+    elif geoset_group == 'Eyes':
+        return generate_enumerated_list(M2SkinMeshPartID.Eyes.value, 'Eyes')
+    
+    elif geoset_group == 'Eyebrows':
+        return generate_enumerated_list(M2SkinMeshPartID.Eyebrows.value, 'Eyebrows')    
+
+    elif geoset_group == 'Piercings':
+        return generate_enumerated_list(M2SkinMeshPartID.Piercings.value, 'Piercings')    
+
+    elif geoset_group == 'Necklaces':
+        return generate_enumerated_list(M2SkinMeshPartID.Necklaces.value, 'Necklaces')
+
+    elif geoset_group == 'Headdress':
+        return generate_enumerated_list(M2SkinMeshPartID.Headdress.value, 'Headdress')
+
+    elif geoset_group == 'Tail':
+        return generate_enumerated_list(M2SkinMeshPartID.Tail.value, 'Tail')
+
+    elif geoset_group == 'MiscAccessory':
+        return generate_enumerated_list(M2SkinMeshPartID.MiscAccessory.value, 'MiscAccessory')
+
+    elif geoset_group == 'MiscFeature':
+        return generate_enumerated_list(M2SkinMeshPartID.MiscFeature.value, 'MiscFeature')
+
+    elif geoset_group == 'Noses':
+        return generate_enumerated_list(M2SkinMeshPartID.Noses.value, 'Noses')
+
+    elif geoset_group == 'HairDecoration':
+        return generate_enumerated_list(M2SkinMeshPartID.HairDecoration.value, 'HairDecoration')
+
+    elif geoset_group == 'HornDecoration':
+        return generate_enumerated_list(M2SkinMeshPartID.HornDecoration.value, 'HornDecoration')
+
+    elif geoset_group == 'BodySize':
+        return generate_enumerated_list(M2SkinMeshPartID.BodySize.value, 'BodySize')
+
+    elif geoset_group == 'Unknown1':
+        return generate_enumerated_list(M2SkinMeshPartID.Unknown1.value, 'Unknown1')        
+
+    elif geoset_group == 'Unknown2':
+        return generate_enumerated_list(M2SkinMeshPartID.Unknown2.value, 'Unknown2')     
+
+    elif geoset_group == 'Unknown3':
+        return generate_enumerated_list(M2SkinMeshPartID.Unknown3.value, 'Unknown3')         
+
+    elif geoset_group == 'Unknown4':
+        return generate_enumerated_list(M2SkinMeshPartID.Unknown4.value, 'Unknown4')     
+
+    elif geoset_group == 'Unknown5':
+        return generate_enumerated_list(M2SkinMeshPartID.Unknown5.value, 'Unknown5')     
+
+    elif geoset_group == 'Unknown6':
+        return generate_enumerated_list(M2SkinMeshPartID.Unknown6.value, 'Unknown6')     
+
+    elif geoset_group == 'EyeGlows':
+        return generate_enumerated_list(M2SkinMeshPartID.EyeGlows.value, 'EyeGlows')     
 
     else:
         return [('0', 'No subtype', "")]

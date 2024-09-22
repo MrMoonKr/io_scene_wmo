@@ -63,7 +63,9 @@ def load_texture(textures : dict, filepath : str, texture_dir : str) -> bpy.type
     
             texture = tex_img
         
+        filepath = filepath.replace('/', '\\')
         texture.wow_wmo_texture.path = filepath
+        texture.wow_m2_texture.path = filepath
         texture.name = os.path.basename(new_filename)
 
         textures[filepath] = texture

@@ -8,14 +8,39 @@ class M2_PT_colors_panel(bpy.types.Panel):
     bl_label = "M2 Colors"
 
     def draw(self, context):
+        # layout = self.layout
+
+        # col = layout.column()
+
+        # row = col.row()
+        # sub_col1 = row.column()
+        # sub_col1.template_list("M2_UL_color_list", "", context.scene, "wow_m2_colors", context.scene,
+        #                        "wow_m2_cur_color_index")
+
+        # sub_col2 = row.column().column(align=True)
+        # sub_col2.operator("scene.wow_m2_colors_add_color", text='', icon='ADD')
+        # sub_col2.operator("scene.wow_m2_colors_remove_color", text='', icon='REMOVE')
+
         layout = self.layout
 
-        col = layout.column()
+        # Create two columns side by side
+        split = layout.split(factor=0.5)
 
-        row = col.row()
+        # Left column for the color list
+        col_left = split.column()
+
+        row = col_left.row()
         sub_col1 = row.column()
         sub_col1.template_list("M2_UL_color_list", "", context.scene, "wow_m2_colors", context.scene,
-                               "wow_m2_cur_color_index")
+                            "wow_m2_cur_color_index")
+
+        # Right column for the alpha list
+        col_right = split.column()
+
+        row = col_right.row()
+        sub_col1 = row.column()
+        sub_col1.template_list("M2_UL_color_alpha_list", "", context.scene, "wow_m2_color_alpha",
+                            context.scene, "wow_m2_cur_color_alpha_index")
 
         sub_col2 = row.column().column(align=True)
         sub_col2.operator("scene.wow_m2_colors_add_color", text='', icon='ADD')
@@ -52,6 +77,10 @@ class M2_OT_color_add(bpy.types.Operator):
         context.scene.wow_m2_cur_color_index = len(context.scene.wow_m2_colors) - 1
         color.name = 'Color_{}'.format(context.scene.wow_m2_cur_color_index)
 
+        value = context.scene.wow_m2_color_alpha.add()
+        context.scene.wow_m2_cur_color_alpha_index = len(context.scene.wow_m2_color_alpha) - 1
+        value.name = 'Color_{}_Alpha'.format(context.scene.wow_m2_cur_color_alpha_index)
+
         return {'FINISHED'}
 
 
@@ -63,6 +92,7 @@ class M2_OT_color_remove(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.wow_m2_colors.remove(context.scene.wow_m2_cur_color_index)
+        context.scene.wow_m2_color_alpha.remove(context.scene.wow_m2_cur_color_index)
 
         return {'FINISHED'}
 
@@ -73,18 +103,19 @@ def update_color_change(self, context):
             mat.node_tree.nodes['ColorRamp'].color_ramp.elements[0].color = self.color
             mat.invert_z = mat.invert_z
 
-
 class WowM2ColorPropertyGroup(bpy.types.PropertyGroup):
 
     color:  bpy.props.FloatVectorProperty(
         name='Color',
         description='The color applied to WoW material. Can be animated. Alpha defines model transparency and is multiplied with transparency value',
         subtype='COLOR',
-        size=4,
-        default=(1.0, 1.0, 1.0, 1.0),
+        size=3,
+        default=(1.0, 1.0, 1.0),
         min=0.0,
-        max=1.0,
+        max=10.0,
+        soft_max=1.0,
         update=update_color_change
+
     )
 
     name:  bpy.props.StringProperty(

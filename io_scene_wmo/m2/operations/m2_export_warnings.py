@@ -81,28 +81,32 @@ def empty_texture_paths():
     description = [
         'Issue: A model has an M2 material with a texture set that has no blp path',
         'Effect: Will usually cause the model to become invisible ingame',
-        'Fix: you need to add the texture as an M2 Texture under Scene Properties -> M2 Components -> M2 Textures and set the "Path" property',
-        'Note: this is not *always* an error, not all textures have paths'
+        'Fix: Find the material with the texture and fill the Texture Path',
     ]
     items = []
 
     texture_maps = {}
     for obj in bpy.data.objects:
-        for slot in obj.material_slots:
-            mat = slot.material.wow_m2_material
-            for texture in [mat.texture_1,mat.texture_2]:
+        if obj.type == 'MESH' and not obj.wow_m2_geoset.collision_mesh and len(obj.material_slots) != 0:
+            for slot in obj.material_slots:
+                
+                if slot.material is None:
+                    continue
 
-                if (
-                    texture is not None 
-                    and len(texture.wow_m2_texture.path) == 0
-                   ):
-                    if texture.wow_m2_texture.texture_type != 0:
-                        continue
-                    if not texture.name in texture_maps:
-                       texture_maps[texture.name] = []
-                    
-                    if not obj.name in texture_maps[texture.name]:
-                        texture_maps[texture.name].append(obj.name)
+                if not hasattr(slot.material, 'wow_m2_material'):
+                    continue 
+
+                mat = slot.material.wow_m2_material
+
+                for texture in [mat.texture_1,mat.texture_2]:
+                    if hasattr(texture, 'wow_m2_texture'):
+                        if texture is not None and len(texture.wow_m2_texture.path) == 0:
+                            if texture.wow_m2_texture.texture_type == '0':
+                                if not texture.name in texture_maps:
+                                    texture_maps[texture.name] = []
+                                
+                                if not obj.name in texture_maps[texture.name]:
+                                    texture_maps[texture.name].append(obj.name)
     
     for texture,obj_names in texture_maps.items():
         tex_str = f"Texture {texture} ("
@@ -254,7 +258,7 @@ def print_warnings():
                 print(f'\n{description}')
             for item in items:
                 print(f'\n- {item}')
-
+    
     warning_section(wrong_scene_type)
     warning_section(transformed_objects)
     warning_section(empty_textures)
@@ -269,3 +273,6 @@ def print_warnings():
 
     if not printed_warnings:
         print("\nNo warnings found!")
+        return False
+    else:
+        return True

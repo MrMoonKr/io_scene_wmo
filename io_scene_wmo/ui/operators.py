@@ -96,12 +96,12 @@ class WBS_OT_save_current_wmo(bpy.types.Operator):
                                             \nWMO will be saved at the root of the project.')
             
             project_preferences = get_project_preferences()
-            if not project_preferences.project_dir_path:
-                self.report({'ERROR'}, 'Project path in addon preferences is empty.')
+            if not project_preferences.export_dir_path:
+                self.report({'ERROR'}, 'Export path in addon preferences is empty.')
                 return {'CANCELLED'}
 
             # Doesn't work if wow_wmo.dir_path is a full path with Disk name etc, happens if WMO has been imported from local file.
-            dir_path = os.path.join(project_preferences.project_dir_path, wmo_collection.wow_wmo.dir_path)
+            dir_path = os.path.join(project_preferences.export_dir_path, wmo_collection.wow_wmo.dir_path)
             # dir_path = project_preferences.project_dir_path # temporary so we don't override the old file
             filename = Path(wmo_collection.name).stem + '.wmo'
             filepath = os.path.join(dir_path, filename)
@@ -112,7 +112,36 @@ class WBS_OT_save_current_wmo(bpy.types.Operator):
 
         self.report({'ERROR'}, 'Invalid scene type.')
         return {'CANCELLED'}
-        
+
+class WBS_OT_save_current_m2(bpy.types.Operator):
+    bl_idname = 'scene.save_current_m2'
+    bl_label = 'Save current M2 object'
+    bl_description = "Save the currently selected M2 to the Export Folder as a .m2 file using the Scene [Game Path]."
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        if scene and scene.wow_scene.type == 'M2':
+
+            version = int(scene.wow_scene.version)
+            
+            project_preferences = get_project_preferences()
+            if not project_preferences.export_dir_path:
+                self.report({'ERROR'}, 'Export path in addon preferences is empty.')
+                return {'CANCELLED'}
+
+            scene_gamepath = scene.wow_scene.game_path.replace('/', '\\')
+            dir_path = os.path.join(project_preferences.export_dir_path, os.path.dirname(scene_gamepath))
+            os.makedirs(dir_path, exist_ok=True)
+            filename = os.path.basename(scene_gamepath)
+            filepath = os.path.join(dir_path, filename)
+
+            print("Saving M2 to : " + filepath)
+            export_m2(version, filepath, selected_only = False, fill_textures = True, forward_axis = 'X+', scale = 1.0, merge_vertices = True)
+            return {'FINISHED'}
+
+        self.report({'ERROR'}, 'Invalid scene type.')
+        return {'CANCELLED'}        
 
 #############################################################
 ######             Import/Export Operators             ######
@@ -279,7 +308,7 @@ class WBS_OT_m2_import(bpy.types.Operator):
         time_import_method = project_preferences.time_import_method
 
         if time_import_method == 'Convert':
-            bpy.context.scene.render.fps = 24
+            bpy.context.scene.render.fps = 30
             bpy.context.scene.sync_mode = 'NONE'
         else:
             bpy.context.scene.render.fps = 1000
@@ -348,8 +377,8 @@ class WBS_OT_m2_export(bpy.types.Operator, ExportHelper):
     def execute(self, context):
         if context.scene:
             context.scene.wow_scene.type = 'M2'
-        export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale, self.merge_vertices)
-        return {'FINISHED'}
+            export_m2(int(context.scene.wow_scene.version), self.filepath, self.export_selected, self.autofill_textures, self.forward_axis, self.scale, self.merge_vertices)
+            return {'FINISHED'}
 
         self.report({'ERROR'}, 'Invalid scene type.')
 

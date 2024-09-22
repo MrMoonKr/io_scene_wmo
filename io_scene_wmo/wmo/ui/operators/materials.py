@@ -1,9 +1,10 @@
 import bpy
 import bmesh
+import os
 
 from ...bl_render import load_wmo_shader_dependencies, update_wmo_mat_node_tree
-from ...utils.wmv import wmv_get_last_texture
-from ....utils.misc import resolve_texture_path, load_game_data
+from ...utils.wmv import wmv_get_last_texture, wow_export_get_last_texture
+from ....utils.misc import resolve_texture_path, resolve_outside_texture_path, load_game_data
 from ...utils.materials import load_texture
 from ....ui.preferences import get_project_preferences
 from ...ui.handlers import DepsgraphLock
@@ -150,7 +151,7 @@ class WMO_OT_material_deselect(bpy.types.Operator):
 class WMO_OT_fill_textures(bpy.types.Operator):
     bl_idname = 'scene.wow_fill_textures'
     bl_label = 'Fill textures'
-    bl_description = "Fill Texture 1 field of WoW materials with paths from applied image"
+    bl_description = "Fill Texture field of WoW materials with paths from applied image"
     bl_options = {'REGISTER'}
 
     def execute(self, context):
@@ -160,13 +161,31 @@ class WMO_OT_fill_textures(bpy.types.Operator):
             for material in mesh.materials:
                 if not WoWWMOGroup.match(ob) :
                     continue 
+                
 
-                texture = material.wow_wmo_material.diff_texture_1
+                texture1 = material.wow_wmo_material.diff_texture_1
+                texture2 = material.wow_wmo_material.diff_texture_2   
 
-                if not texture or texture.type != 'IMAGE':
+
+                if not texture1 or texture1.type != 'IMAGE':
                     continue
 
-                texture.wow_wmo_texture.path = resolve_texture_path(texture.filepath)
+                t1_resolved_path = resolve_texture_path(texture1.filepath)
+                if t1_resolved_path is None:
+                    t1_resolved_path = resolve_outside_texture_path(texture1.filepath)
+
+                texture1.wow_wmo_texture.path = t1_resolved_path    
+
+                if not texture2 or texture2.type != 'IMAGE':
+                    continue                          
+                
+                if texture2 is not None:
+
+                    t2_resolved_path = resolve_texture_path(texture2.filepath)
+                    if t2_resolved_path is None:
+                        t2_resolved_path = resolve_outside_texture_path(texture2.filepath)
+
+                texture2.wow_wmo_texture.path = t2_resolved_path
 
         self.report({'INFO'}, "Done filling texture paths")
 
@@ -187,8 +206,11 @@ class WMO_OT_import_texture(bpy.types.Operator):
         if not game_data:
             self.report({'ERROR'}, "Importing texture failed. Game data was not loaded.")
             return {'CANCELLED'}
-
-        path = wmv_get_last_texture().capitalize()
+        
+        if project_preferences.import_method == 'WMV':
+            path = wmv_get_last_texture().capitalize()
+        elif project_preferences.import_method == 'WowExport' or 'NoggitRed':
+            path = wow_export_get_last_texture().capitalize()
 
         if not path:
             self.report({'ERROR'}, "WMV log does not contain any texture paths.")
@@ -197,7 +219,7 @@ class WMO_OT_import_texture(bpy.types.Operator):
         game_data.extract_textures_as_png(project_preferences.cache_dir_path, (path,))
         texture = load_texture({}, path, project_preferences.cache_dir_path)
 
-        mat = bpy.data.materials.new(name=path.split('\\')[-1][:-4] + '.PNG')
+        mat = bpy.data.materials.new(name="T1_" + os.path.basename(path).replace('.blp', ''))
         mat.wow_wmo_material.diff_texture_1 = texture
         mat.wow_wmo_material.diff_color = (0.584314,0.584314,0.584314,1)
         mat.wow_wmo_material.emissive_color = (0,0,0,1)
@@ -206,8 +228,7 @@ class WMO_OT_import_texture(bpy.types.Operator):
         load_wmo_shader_dependencies()
         update_wmo_mat_node_tree(mat)
 
-        # slot = context.scene.wow_wmo_root_elements.materials.add()
-        # slot.pointer = mat
+        print("Info: Successfully imported texture: " + mat.name)
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="Info: Successfully imported texture: " + mat.name, font_size=24, y_offset=67)        
 
         return {'FINISHED'}
-

@@ -3,7 +3,7 @@ import mathutils
 
 from ..panels.toolbar import switch_doodad_set, get_doodad_sets
 from ...utils.doodads import import_doodad
-from ...utils.wmv import wmv_get_last_m2
+from ...utils.wmv import wmv_get_last_m2, wow_export_get_last_m2
 from ....ui.preferences import get_project_preferences
 from ....utils.misc import find_nearest_object
 from ....third_party.tqdm import tqdm
@@ -50,7 +50,14 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
 
     def execute(self, context):
 
-        m2_path = wmv_get_last_m2()
+        project_preferences = get_project_preferences()
+        if project_preferences.import_method == 'WMV':
+            if project_preferences.wmv_path:
+                m2_path = wmv_get_last_m2()
+        elif project_preferences.import_method == 'WowExport':       
+            if project_preferences.wow_export_path:
+                m2_path = wow_export_get_last_m2()
+                
         cache_path = get_project_preferences().cache_dir_path
 
         active_set_collection = self.get_active_doodad_collection(context.scene)
@@ -69,6 +76,7 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
         active_set_collection.objects.link(obj)
 
         context.view_layer.objects.active = obj
+        obj.wow_wmo_doodad.color = (1, 1, 1, 1)
 
         return {'FINISHED'}
 

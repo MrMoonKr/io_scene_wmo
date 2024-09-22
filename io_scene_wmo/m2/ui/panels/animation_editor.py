@@ -24,6 +24,14 @@ def resolve_alias_next(alias_next):
             return i,anim
     return -1,None
 
+def get_non_global_sequence_animations(animations):
+    """Returns a list of animations that are not global sequences."""
+    return [anim for anim in animations if not anim.is_global_sequence]
+
+def n_global_sequences():
+    g_sequences = sum(1 for anim in bpy.context.scene.wow_m2_animations if anim.is_global_sequence)
+    return g_sequences
+    
 #### Pop-up dialog ####
 
 class M2_OT_animation_editor_dialog(bpy.types.Operator):
@@ -56,6 +64,7 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
         sub_col_parent = row.column()
         sub_col2 = sub_col_parent.column(align=True)
         sub_col2.operator("scene.wow_m2_animation_editor_seq_add", text='', icon='ADD')
+        sub_col2.operator("scene.wow_m2_animation_editor_seq_duplicate", text='', icon='DUPLICATE')
         sub_col2.operator("scene.wow_m2_animation_editor_seq_remove", text='', icon='REMOVE')
 
         sub_col_parent.separator()
@@ -63,6 +72,11 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
         sub_col3 = sub_col_parent.column(align=True)
         sub_col3.operator("scene.wow_m2_animation_editor_seq_move", text='', icon='TRIA_UP').direction = 'UP'
         sub_col3.operator("scene.wow_m2_animation_editor_seq_move", text='', icon='TRIA_DOWN').direction = 'DOWN'
+
+        sub_col_parent.separator()
+
+        sub_col4 = sub_col_parent.column(align=True)
+        sub_col4.operator("scene.wow_m2_animation_editor_seq_cleanup", text='', icon='GHOST_DISABLED')
 
         # Objects column
 
@@ -196,6 +210,7 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
             row.label(text="Animation ID: ")
             row.operator("scene.wow_m2_animation_id_search", text=M2_Animation_IDS.anim_ids[int(cur_anim_track.animation_id)][1],
                          icon='VIEWZOOM')
+
             col.prop(cur_anim_track, 'move_speed', text="Move speed")
 
             if int(context.scene.wow_scene.version) >= WoWVersions.WOD:
@@ -211,6 +226,11 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
             col.prop(cur_anim_track, 'replay_max', text="Max")
 
             col.label(text='Relations:')
+            row1 = col.row(align=True)
+            row1.prop(cur_anim_track, 'VariationNext', text='Next animation')
+            row1.operator("scene.wow_m2_animation_editor_go_to_index", text="", icon='ZOOM_SELECTED').anim_index = \
+                resolve_alias_next(cur_anim_track.VariationNext)[0]
+
             row = col.row(align=True)
             row.enabled = cur_anim_track.is_alias
             row.label(text='', icon='FILE_TICK' if resolve_alias_next(cur_anim_track.alias_next)[1] is not None else 'ERROR')
@@ -242,6 +262,8 @@ class M2_OT_animation_editor_dialog(bpy.types.Operator):
             col.separator()
             col.prop(cur_anim_track, 'flags', text="Flags")
             col.separator()
+            col.prop(cur_anim_track, 'use_preset_duration', text='Use Preset Duration')
+            col.prop(cur_anim_track, 'duration', text='Duration')
 
     def check(self, context):  # redraw the popup window
         return True
@@ -282,6 +304,8 @@ def update_animation_collection(self, context):
     anim_ids = M2_Animation_IDS.anim_ids
     index_cache = {}
 
+    num_global_sequences = n_global_sequences()
+
     for i, anim in enumerate(bpy.context.scene.wow_m2_animations):
         anim_id = int(anim.animation_id) if not anim.is_global_sequence else -1
         last_idx = index_cache.get(anim_id)
@@ -295,10 +319,10 @@ def update_animation_collection(self, context):
 
         if not anim.is_global_sequence:
             if not anim.is_alias:
-                anim.name = "#{} {} ({})".format(i, anim_ids[int(anim.animation_id)][1], anim.chain_index)
+                anim.name = "#{} {} ({})".format(i - num_global_sequences, anim_ids[int(anim.animation_id)][1], anim.chain_index)
             else:
-                anim.name = "#{} {} ({}) -> #{}".format(i, anim_ids[int(anim.animation_id)][1],
-                                                        anim.chain_index, resolve_alias_next(anim.alias_next)[0])
+                anim.name = "#{} {} ({}) -> #{}".format(i - num_global_sequences, anim_ids[int(anim.animation_id)][1],
+                                                        anim.chain_index, resolve_alias_next(anim.alias_next)[0] - num_global_sequences)
         else:
             anim.name = "#{} Global Sequence ({})".format(i, anim.chain_index)
 
@@ -365,6 +389,49 @@ class M2_OT_animation_editor_sequence_add(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class M2_OT_animation_editor_sequence_duplicate(bpy.types.Operator):
+    bl_idname = 'scene.wow_m2_animation_editor_seq_duplicate'
+    bl_label = 'Duplicate WoW animation'
+    bl_description = 'Duplicate WoW animation sequence'
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    def execute(self, context):
+        anim_to_copy = context.scene.wow_m2_cur_anim_index
+        context.scene.wow_m2_animations.add()
+        context.scene.wow_m2_cur_anim_index = len(context.scene.wow_m2_animations) - 1
+        new_anim = context.scene.wow_m2_cur_anim_index
+        animation = context.scene.wow_m2_animations
+
+        animation[new_anim].is_global_sequence = animation[anim_to_copy].is_global_sequence
+        animation[new_anim].move_speed = animation[anim_to_copy].move_speed
+        animation[new_anim].blend_time = animation[anim_to_copy].blend_time
+        animation[new_anim].frequency = animation[anim_to_copy].frequency
+        animation[new_anim].use_preset_bounds = animation[anim_to_copy].use_preset_bounds
+        animation[new_anim].preset_bounds_min_x = animation[anim_to_copy].preset_bounds_min_x
+        animation[new_anim].preset_bounds_min_y = animation[anim_to_copy].preset_bounds_min_y
+        animation[new_anim].preset_bounds_min_z = animation[anim_to_copy].preset_bounds_min_z
+        animation[new_anim].preset_bounds_max_x = animation[anim_to_copy].preset_bounds_max_x
+        animation[new_anim].preset_bounds_max_y = animation[anim_to_copy].preset_bounds_max_y
+        animation[new_anim].preset_bounds_max_z = animation[anim_to_copy].preset_bounds_max_z
+        animation[new_anim].preset_bounds_radius = animation[anim_to_copy].preset_bounds_radius
+        animation[new_anim].flags = animation[anim_to_copy].flags
+        animation[new_anim].use_preset_duration = animation[anim_to_copy].use_preset_duration
+        animation[new_anim].duration = animation[anim_to_copy].duration
+
+        for i, pair in enumerate(animation[anim_to_copy].anim_pairs):
+            bpy.ops.scene.wow_m2_animation_editor_object_add()
+
+            animation[new_anim].anim_pairs[i].type = animation[anim_to_copy].anim_pairs[i].type
+            if animation[new_anim].anim_pairs[i].type == 'SCENE':
+                animation[new_anim].anim_pairs[i].scene =  animation[anim_to_copy].anim_pairs[i].scene
+                animation[new_anim].anim_pairs[i].action =  animation[anim_to_copy].anim_pairs[i].action
+            else:
+                animation[new_anim].anim_pairs[i].object =  animation[anim_to_copy].anim_pairs[i].object
+                animation[new_anim].anim_pairs[i].action =  animation[anim_to_copy].anim_pairs[i].action
+
+        update_animation_collection(None, None)
+
+        return {'FINISHED'}
 
 class M2_OT_animation_editor_sequence_remove(bpy.types.Operator):
     bl_idname = 'scene.wow_m2_animation_editor_seq_remove'
@@ -372,12 +439,48 @@ class M2_OT_animation_editor_sequence_remove(bpy.types.Operator):
     bl_description = 'Remove WoW animation sequence'
     bl_options = {'REGISTER', 'INTERNAL'}
 
+    # def execute(self, context):
+    #     context.scene.wow_m2_animations.remove(context.scene.wow_m2_cur_anim_index)
+    #     update_animation_collection(None, None)
+
+    #     return {'FINISHED'}
+
     def execute(self, context):
-        context.scene.wow_m2_animations.remove(context.scene.wow_m2_cur_anim_index)
+        animations = context.scene.wow_m2_animations
+        current_index = context.scene.wow_m2_cur_anim_index
+        
+        # Remove the animation at the current index
+        animations.remove(current_index)
+        
+        # Adjust alias_next and VariationNext indices
+        non_global_animations = get_non_global_sequence_animations(animations)
+        real_index = current_index - n_global_sequences()
+
+        for anim in non_global_animations:
+            # Update alias_next
+            if anim.alias_next > real_index:
+                anim.alias_next -= 1
+            elif anim.alias_next == real_index:
+                print('Alias Animation was removed, removed Alias Flag')
+                anim.alias_next = 0
+                anim.is_alias = False
+
+            # Update VariationNext
+            if anim.VariationNext > real_index:
+                anim.VariationNext -= 1
+            elif anim.VariationNext == real_index:
+                print('Next Animation in the chain was removed, next animation is now -1 (Callback)')
+                anim.VariationNext = -1
+
         update_animation_collection(None, None)
 
-        return {'FINISHED'}
+        # If the removed animation was the last one, adjust the current index
+        if current_index >= len(animations):
+            context.scene.wow_m2_cur_anim_index = len(animations) - 1
+        else:
+            context.scene.wow_m2_cur_anim_index = current_index
 
+        return {'FINISHED'}
 
 class M2_OT_animation_editor_sequence_move(bpy.types.Operator):
     bl_idname = 'scene.wow_m2_animation_editor_seq_move'
@@ -388,21 +491,69 @@ class M2_OT_animation_editor_sequence_move(bpy.types.Operator):
     direction:  bpy.props.StringProperty()
 
     def execute(self, context):
+        animations = context.scene.wow_m2_animations
+        current_index = context.scene.wow_m2_cur_anim_index
+        
+        non_global_animations = get_non_global_sequence_animations(animations)
 
-        if self.direction == 'UP':
-            context.scene.wow_m2_animations.move(context.scene.wow_m2_cur_anim_index, context.scene.wow_m2_cur_anim_index - 1)
-            context.scene.wow_m2_cur_anim_index -= 1
-        elif self.direction == 'DOWN':
-            context.scene.wow_m2_animations.move(context.scene.wow_m2_cur_anim_index, context.scene.wow_m2_cur_anim_index + 1)
-            context.scene.wow_m2_cur_anim_index += 1
+        #We'll use real_index for the alias_next and variation_next properties
+        real_index = current_index - n_global_sequences()
+
+        # Determine the new index based on the move direction
+        if self.direction == 'UP' and current_index > 0:
+            new_index = current_index - 1
+            new_real_index = real_index - 1
+        elif self.direction == 'DOWN' and current_index < len(animations) - 1:
+            new_index = current_index + 1
+            new_real_index = real_index + 1
         else:
-            raise NotImplementedError("Only UP and DOWN movement in the UI list in supported.")
+            raise NotImplementedError("Only UP and DOWN movement in the UI list is supported.")
 
+        # Swap the alias_next and VariationNext indices
+        for anim in non_global_animations:
+            if anim.alias_next == real_index:
+                anim.alias_next = new_real_index
+            elif anim.alias_next == new_real_index:
+                anim.alias_next = real_index
+
+            if anim.VariationNext == real_index:
+                anim.VariationNext = new_real_index
+            elif anim.VariationNext == new_real_index:
+                anim.VariationNext = real_index
+
+        animations.move(current_index, new_index)
+        context.scene.wow_m2_cur_anim_index = new_index
+        
         update_animation_collection(None, None)
 
         return {'FINISHED'}
 
+class M2_OT_animation_editor_sequence_cleanup(bpy.types.Operator):
+    bl_idname = 'scene.wow_m2_animation_editor_seq_cleanup'
+    bl_label = 'Clean up WoW animations'
+    bl_description = 'Clean up empty objects from WoW animation sequence'
+    bl_options = {'REGISTER', 'INTERNAL'}
 
+    def execute(self, context):
+
+        for i, wow_seq in enumerate(context.scene.wow_m2_animations):
+            to_remove = []
+            for j, pair in enumerate(context.scene.wow_m2_animations[i].anim_pairs):
+                
+                if context.scene.wow_m2_animations[i].anim_pairs[j].type == 'SCENE' and context.scene.wow_m2_animations[i].anim_pairs[j].scene == None:
+                    to_remove.append(j)
+                elif context.scene.wow_m2_animations[i].anim_pairs[j].type == 'OBJECT' and context.scene.wow_m2_animations[i].anim_pairs[j].object == None:
+                    to_remove.append(j)
+
+            to_remove.sort(reverse=True)
+                
+            for index in to_remove:
+                context.scene.wow_m2_animations[i].anim_pairs.remove(index)
+
+        update_animation_collection(None, None)
+
+        return {'FINISHED'}
+    
 class M2_OT_animation_editor_sequence_deselect(bpy.types.Operator):
     bl_idname = 'scene.wow_m2_animation_editor_seq_deselect'
     bl_label = 'Get back to rest pose'
@@ -627,11 +778,11 @@ def poll_object(self, obj):
                                     or obj.wow_m2_attachment.enabled
                                     or obj.wow_m2_event.enabled
                                     or obj.wow_m2_camera.enabled
-                                    or obj.wow_m2_particle.enabled):
+                                    or obj.wow_m2_particle.enabled
+                                    or obj.wow_m2_ribbon.enabled):
         return False
 
     return True
-
 
 def poll_scene(self, scene):
 
@@ -759,6 +910,32 @@ def update_alias(self, context):
 
     update_animation_collection(None, None)
 
+def get_second_to_last_global_sequence_animation_index(animations):
+    """Returns the index of the second-to-last found global sequence animation, or -1 if there aren't at least two."""
+    found = -1
+    second_to_last = -1
+    
+    for i in range(len(animations)):
+        if animations[i].is_global_sequence:
+            second_to_last = found
+            found = i
+    
+    return second_to_last
+
+def update_global_sequence(self, context):
+    # animations = context.scene.wow_m2_animations
+    # current_index = context.scene.wow_m2_cur_anim_index
+
+    # is_global_sequence = animations[current_index].is_global_sequence
+
+    # if is_global_sequence:
+    #     last_global_animation = get_second_to_last_global_sequence_animation_index(animations) + 1
+
+    #     if last_global_animation >= 0 and last_global_animation < len(animations):
+    #         animations.move(current_index, last_global_animation)
+    #         context.scene.wow_m2_cur_anim_index = last_global_animation
+
+    update_animation_collection(None, None)
 
 def update_stash_to_nla(self, context):
     if self.stash_to_nla and not context.scene.wow_m2_animations[context.scene.wow_m2_cur_anim_index] == self:
@@ -870,13 +1047,26 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
         description="WoW M2 Animation Flags",
         items=ANIMATION_FLAGS,
         options={"ENUM_FLAG"},
+        default={"32"},
         update=update_animation_flags
     )
 
     move_speed:  bpy.props.FloatProperty(
         name="Move speed",
         description="The speed the character moves with in this animation",
-        default=1.0
+        default=0.0
+    )
+
+    use_preset_duration: bpy.props.BoolProperty(
+        name="Use Preset Duration",
+        description="Use preset duration data instead of calculating on export",
+        default=False
+    )
+
+    duration:  bpy.props.IntProperty(
+        name="Duration",
+        description="Duration of the animation",
+        min=0
     )
 
     frequency:  bpy.props.FloatProperty(
@@ -884,6 +1074,7 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
         description="This is used to determine how often the animation is played as a percentage %",
         min=0.0,
         max=100.0,
+        default=100.0
     )
 
     replay_min:  bpy.props.IntProperty(
@@ -902,9 +1093,11 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
 
     VariationNext: bpy.props.IntProperty(
         name='Next Variation',
-        description='Id of the following animation of this animation_id',
+        description='Id of the following animation of this animation_id, last one should be -1',
         min=-1,
+        default=-1,
         update=update_animation_collection
+        
     )
 
     alias_next:  bpy.props.IntProperty(
@@ -917,7 +1110,8 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
     blend_time:  bpy.props.IntProperty(
         name="Blend time",
         description="",
-        min=0
+        min=0,
+        default=150
     )
 
     blend_time_in:  bpy.props.IntProperty(
@@ -1047,7 +1241,10 @@ def update_animation(self, context):
                     bone.scale = (1, 1, 1)
 
     for color in context.scene.wow_m2_colors:
-        color.color = (0.5, 0.5, 0.5, 1.0)
+        color.color = (0.5, 0.5, 0.5)
+
+    for alpha in context.scene.wow_m2_color_alpha:
+        alpha.value = 1.0
 
     for trans in context.scene.wow_m2_transparency:
         trans.value = 1.0
@@ -1062,9 +1259,16 @@ def update_animation(self, context):
         if i == context.scene.wow_m2_cur_anim_index:
             for anim_pair in anim.anim_pairs:
                 if anim_pair.type == 'OBJECT':
-                    anim_pair.object.animation_data.action = anim_pair.action
+                    try:
+                        anim_pair.object.animation_data.action = anim_pair.action
+                    except:
+                        pass
                 else:
-                    anim_pair.scene.animation_data.action = anim_pair.action
+                    try:
+                        anim_pair.scene.animation_data.action = anim_pair.action
+                    except:
+                        pass
+
 
         if anim.is_global_sequence:
             global_seqs.append(anim)
@@ -1082,7 +1286,10 @@ def update_animation(self, context):
 
     for anim_pair in sequence.anim_pairs:
         if anim_pair.type == 'OBJECT':
-            anim_pair.object.animation_data.action = anim_pair.action  
+            try:
+                anim_pair.object.animation_data.action = anim_pair.action
+            except:
+                pass
 
     #for seq in global_seqs:
         #update_stash_to_nla(seq, bpy.context)

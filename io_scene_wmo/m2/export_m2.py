@@ -3,10 +3,14 @@ from . import m2_scene
 from .operations import m2_export_warnings
 import importlib
 
+import os
+import bpy
+import time
+
+from ..utils.misc import resolve_outside_model_path
 from ..ui.preferences import get_project_preferences
 
 def create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices):
-    print("\n\n### Exporting M2 model ###")
     proj_prefs = get_project_preferences()
     time_import_method = proj_prefs.time_import_method
     m2 = M2File(version)
@@ -14,36 +18,46 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     importlib.reload(m2_export_warnings)
     bl_m2 = m2_scene.BlenderM2Scene(m2, proj_prefs)
 
-    print("\nPreparing Axis Settings")
+    export_path = resolve_outside_model_path(filepath)
+    if export_path:
+        bpy.context.scene.wow_scene.game_path = export_path
+
+    print("\n\n##########################")
+    print("### Exporting M2 model ###")
+    print("##########################")
+    print("\n")
+
+    start_time = time.time()
+
     bl_m2.prepare_export_axis(forward_axis, scale)
-    print("\nPreparing Pose")
     bl_m2.prepare_pose(selected_only)
-    print("\nExporting properties")
     bl_m2.save_properties(filepath, selected_only)
-    print("\nExporting bones")
     bl_m2.save_bones(selected_only)
-    print("\nExporting cameras")
     bl_m2.save_cameras()
-    print("\nExporting attachments")
     bl_m2.save_attachments()
-    print("\nExporting events")
     bl_m2.save_events()
-    print("\nExporting lights")
     bl_m2.save_lights()
-    print("\nExporting Ribbons")
     bl_m2.save_ribbons()
-    print("\nExporting particles")
     bl_m2.save_particles(time_import_method)
-    print("\nExporting animations")
     bl_m2.save_animations(time_import_method)
-    print("\nExporting geosets")
     bl_m2.save_geosets(selected_only, fill_textures, merge_vertices)
-    print("\nExporting collisions")
     bl_m2.save_collision(selected_only)
-    print("\nRestoring Pose")
     bl_m2.restore_pose()
-    m2_export_warnings.print_warnings()
+
+    warnings = m2_export_warnings.print_warnings()
+
+    if warnings:
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="Info: M2 Exported with Warnings, check console!!", font_size=32, y_offset=100, color=(1,0.15,0.15,1))
+    else:
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="Info: Successfully exported M2!", font_size=24, y_offset=67)    
+
+    print("\nSuccessfully Exported M2 to " + filepath +
+          "\nTotal export time: ", time.strftime("%M minutes %S seconds", time.gmtime(time.time() - start_time)))
+
     return m2
 
+
 def export_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices):
+    if os.path.exists(filepath):
+        os.remove(filepath)    
     create_m2(version,filepath,selected_only,fill_textures,forward_axis, scale, merge_vertices).write(filepath)

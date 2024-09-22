@@ -46,7 +46,7 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath:
         DoodadSetsCollection.verify_doodad_sets_collection_integrity(bpy.context.scene, wow_model_collection)
 
         # extract textures to cache folder
-        # game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
+        game_data.extract_textures_as_png(project_preferences.cache_dir_path, wmo.motx.get_all_strings())
 
 
         # load all WMO components
@@ -67,6 +67,8 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath:
 
 
 def import_wmo_to_blender_scene_gamedata(filepath: str, client_version: int):
+
+    filepath = filepath.replace('/', '\\')
 
     game_data = load_game_data()
 
