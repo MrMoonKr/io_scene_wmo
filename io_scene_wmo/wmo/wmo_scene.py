@@ -1,4 +1,5 @@
 import hashlib
+import math
 import bpy
 import bmesh
 import typing
@@ -85,7 +86,11 @@ class BlenderWMOScene:
                                               )
 
 
-            mat.wow_wmo_material.terrain_type = str(wmo_material.terrain_type)
+            try:
+                mat.wow_wmo_material.terrain_type = str(wmo_material.terrain_type)
+            except TypeError as e:
+                print('Terrain type not found for ', mat, e)
+                mat.wow_wmo_material.terrain_type = '0'
 
             mat_flags = set()
             bit = 1
@@ -200,7 +205,7 @@ class BlenderWMOScene:
 
             fog_obj = create_fog_object(  name="{}_Fog_{}".format(self.wmo.display_name, str(i).zfill(2))
                                         , location=wmo_fog.position
-                                        # , radius=wmo_fog.big_radius
+                                        #, radius=wmo_fog.big_radius
                                         , color=(wmo_fog.color1[2] / 255,
                                                  wmo_fog.color1[1] / 255,
                                                  wmo_fog.color1[0] / 255,
@@ -213,7 +218,10 @@ class BlenderWMOScene:
             # applying object properties
             fog_obj.wow_wmo_fog.enabled = True
             fog_obj.wow_wmo_fog.ignore_radius = wmo_fog.flags & 0x01
-            fog_obj.wow_wmo_fog.unknown = wmo_fog.flags & 0x10
+            try:
+                fog_obj.wow_wmo_fog.unknown = wmo_fog.flags & 0x10
+            except:
+                fog_obj.wow_wmo_fog.unknown = False
 
             if wmo_fog.small_radius != 0:
                 fog_obj.wow_wmo_fog.inner_radius = wmo_fog.small_radius / wmo_fog.big_radius * 100
@@ -227,10 +235,10 @@ class BlenderWMOScene:
             fog_obj.wow_wmo_fog.start_factor2 = wmo_fog.start_factor2
             fog_obj.wow_wmo_fog.color2 = (wmo_fog.color2[2] / 255, wmo_fog.color2[1] / 255, wmo_fog.color2[0] / 255)
 
-            # move fogs to collection
-            fog_collection.objects.link(fog_obj)
-
             self.bl_fogs.append(fog_obj)
+
+            # move fogs to collection
+            fog_collection.objects.link(fog_obj)            
 
     def load_doodads(self):
 
@@ -413,12 +421,12 @@ class BlenderWMOScene:
 
     def load_groups(self):
 
-        for group in tqdm(self.wmo.groups, desc='Importing groups', ascii=True):
+        for i, group in tqdm(enumerate(self.wmo.groups), desc='Importing groups', ascii=True):
             bl_group = BlenderWMOSceneGroup(self, group)
             self.bl_groups.append(bl_group)
 
             if not bl_group.name == 'antiportal':
-                bl_group.load_object()
+                bl_group.load_object(i)
 
     def build_references(self, export_selected, export_method):
         """ Build WMO references in Blender scene """
@@ -428,10 +436,18 @@ class BlenderWMOScene:
 
         material_id = 0
 
-        for i, group_object in tqdm(enumerate(get_wmo_groups_list(scn)), desc='Building group references', ascii=True):
+        sorted_objects = sorted(get_wmo_groups_list(scn), key=lambda obj: obj.wow_wmo_group.export_order)
+
+        for i, group_object in tqdm(enumerate(sorted_objects), desc='Building group references', ascii=True):
             if (export_selected and not group_object.select_get()) or group_object.hide_get():
                 continue
+
             group_object : bpy.types.Object
+
+            bpy.ops.object.select_all(action='DESELECT')
+            group_object.select_set(True)
+            bpy.context.view_layer.objects.active = group_object  
+
             self.export_group_ids[group_object.name] = i
 
             # self.groups_relations[group_object.name, relations]
@@ -508,9 +524,13 @@ class BlenderWMOScene:
                 raise ReferenceError('\nError:  Material \"{}\" must have a diffuse texture.'.format(mat.name))
 
             diff_texture_1 = mat.wow_wmo_material.diff_texture_1.wow_wmo_texture.path
+            diff_texture_1 = diff_texture_1.replace('/', '\\')
+            diff_texture_1 = diff_texture_1.lower()
 
             diff_texture_2 = mat.wow_wmo_material.diff_texture_2.wow_wmo_texture.path \
                 if mat.wow_wmo_material.diff_texture_2 else ""
+            diff_texture_2 = diff_texture_2.replace('/', '\\')
+            diff_texture_2 = diff_texture_2.lower()
 
             flags = 0
 
@@ -556,6 +576,11 @@ class BlenderWMOScene:
     def save_doodad_sets(self):
         """ Save doodads data from Blender scene to WMO root """
 
+        def normalize_quaternion(quat):
+            w, x, y, z = quat
+            norm = math.sqrt(w ** 2 + x ** 2 + y ** 2 + z ** 2)
+            return (w / norm, x / norm, y / norm, z / norm)  
+
         has_global = False
 
         if len(self.bl_doodad_sets):
@@ -566,11 +591,14 @@ class BlenderWMOScene:
 
                 for doodad in doodads:
 
-                    path = doodad.wow_wmo_doodad.path
+                    path = doodad.wow_wmo_doodad.path.replace('/', '\\')
 
                     position = (doodad.matrix_world @ Vector((0, 0, 0))).to_tuple()
 
                     doodad.rotation_mode = 'QUATERNION'
+
+                    doodad.rotation_quaternion = normalize_quaternion(doodad.rotation_quaternion)  
+
                     rotation = (doodad.rotation_quaternion[1],
                                 doodad.rotation_quaternion[2],
                                 doodad.rotation_quaternion[3],

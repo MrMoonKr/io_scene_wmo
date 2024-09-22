@@ -100,22 +100,12 @@ class M2_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
         col1_row2.operator("scene.m2_add_attachment", text='Attachment', icon='POSE_HLT')
         col1_row2.operator("scene.m2_add_event", text='Event', icon='POSE_HLT')
 
-   
-        # col1_row1.operator("scene.wow_add_liquid", text='Event', icon='PLUGIN')
-        
-        # col1_row2.operator("scene.m2_add_attachment", text='Camera', icon='CAMERA_DATA')
-        # col1_row2.operator("scene.m2_add_attachment", text='Particle Emitter', icon='MOD_PARTICLES')
         col1_row3 = col1_col.row(align=True)
-        # col1_row3.operator("scene.wow_add_light", text='Light', icon='LIGHT')
-        # col1_row3.operator("scene.wow_add_scale_reference", text='Scale', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+
+        col1_row3.operator("scene.wow_m2_texture_import", text='Texture', icon='IMAGE_DATA')
+
         col1_row4 = col1_col.row(align=True)
         col.separator()
-
-        #if game_data_loaded:
-#
-        #    col1_row4.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
-        #                       icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])
-        #    col1_row4.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
 
     @classmethod
     def poll(cls, context):
@@ -134,15 +124,19 @@ class M2_PT_tools_object_mode_actions(bpy.types.Panel):
         col = layout.column(align=True)
         col.separator()
         box_col = col.column(align=True)
+
+        col1_row1 = box_col.row(align=True)  
+    
+        col1_row1.operator("scene.m2_ot_enable_drivers", text='Drivers ON', icon='RADIOBUT_ON')
+        col1_row1.operator("scene.m2_ot_disable_drivers", text='Drivers OFF', icon='RADIOBUT_OFF')
+
         box_col.operator("scene.wow_creature_editor_toggle", text='Creature Editor', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
-        box_col.operator("scene.m2_fill_textures", text='Fill Paths', icon='SEQ_SPLITVIEW')
-        # if bpy.context.selected_objects:
-        #     box_col.operator("scene.wow_wmo_generate_materials", text='Generate materials', icon='MATERIAL')
-        #     box_col.operator("scene.wow_fill_textures", text='Fill texture paths', icon='SEQ_SPLITVIEW')
-        #     box_col.operator("scene.wow_quick_collision", text='Quick collision', icon='MOD_TRIANGULATE')
-        #     box_col.operator("scene.wow_set_portal_dir_alg", text='Set portal direction', icon='ORIENTATION_NORMAL')
-        #     box_col.operator("scene.wow_bake_portal_relations", text='Bake portal relations', icon='FULLSCREEN_EXIT')
-        #     col.separator()
+
+        if bpy.context.selected_objects:
+            box_col.operator("scene.m2_fill_textures", text='Fill Paths', icon='SEQ_SPLITVIEW')
+            
+        if context.object and context.object.type == 'ARMATURE':
+            box_col.operator("object.m2_bone_renamer", text='Rename', icon='CONSOLE')
 
     @classmethod
     def poll(cls, context):

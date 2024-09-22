@@ -100,6 +100,8 @@ def update_m2_mat_node_tree_cycles(bl_mat):
     trans_index = int(''.join(filter(str.isdigit, trans_name)))
     trans_name_var.targets[0].data_path = f'wow_m2_transparency[{trans_index}].value'
     
+    t_mult.label = f'Transparency_{trans_index}_ON'
+    
     driver.expression = trans_name_var.name
 
     bl_mat.node_tree.links.new(tex_image.outputs['Alpha'], t_mult.inputs['Value'])   

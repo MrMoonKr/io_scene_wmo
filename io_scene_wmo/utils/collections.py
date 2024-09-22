@@ -133,7 +133,20 @@ def create_wmo_model_collection(scene: bpy.types.Scene,
 
     col = bpy.data.collections.new(filename) # filename only without extension
     col.wow_wmo.enabled = True
-    col.wow_wmo.dir_path = os.path.dirname(wowpath) # path
+
+    def filepath_wmo(filepath):
+        filepath = filepath.lower()
+        filepath = Path(filepath)
+        filepath_parts = filepath.parts
+
+        try: 
+            world_index = filepath_parts.index('world')
+        except ValueError:
+            return 'World directory not found in the filepath'
+        
+        return str(Path(*filepath_parts[world_index:-1]))
+
+    col.wow_wmo.dir_path = filepath_wmo(filepath)
 
     scene.collection.children.link(col)
     # set the collection as active

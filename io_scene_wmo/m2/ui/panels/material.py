@@ -142,7 +142,6 @@ class M2_PT_material_panel(bpy.types.Panel):
         col.separator()
         col.label(text='Sorting control:')
         col.prop(context.material.wow_m2_material, "priority_plane")
-        col.prop(context.material.wow_m2_material, "layer")
         col.separator()
         col.prop_search(context.material.wow_m2_material, "color",
                         context.scene, "wow_m2_colors", text='Color', icon='COLOR')
@@ -240,21 +239,24 @@ def update_material_texture(self, context):
         for node in obj.active_material.node_tree.nodes:
             if node.name == 'Tex1_image':
                 tex1_image = node
+                tex1_image.image = tex_1
             if node.name == 'Tex2_image':
                 tex2_image = node
-
-        tex1_image.image = tex_1
-        tex2_image.image = tex_2
-
+                tex2_image.image = tex_2       
+        
 def update_transparency(self, context):
     obj = context.object
 
-    if obj.active_material:
+    if obj != None and obj.active_material:
             
         transparency_node = obj.active_material.node_tree.nodes.get('Transparency')
 
         if transparency_node:
-            
+
+            trans_name = obj.active_material.wow_m2_material.transparency
+            trans_index = int(''.join(filter(str.isdigit, trans_name)))                    
+            transparency_node.label = f'Transparency_{trans_index}_OFF'
+
             for driver in transparency_node.id_data.animation_data.drivers:
                 if driver.data_path == 'nodes["Transparency"].inputs[1].default_value':
                     existing_driver = driver.driver
@@ -262,18 +264,14 @@ def update_transparency(self, context):
                     for var in existing_driver.variables:
                         if var.name == 'Transparency':
                             transparency_var = var.targets[0]
-                                
-
-                            trans_name = obj.active_material.wow_m2_material.transparency
-                            trans_index = int(''.join(filter(str.isdigit, trans_name)))
-
-                            
+                                                            
                             transparency_var.data_path = f'wow_m2_transparency[{trans_index}].value'
+                            transparency_node.label = f'Transparency_{trans_index}_ON'
 
 def update_blending(self, context):
     obj = context.object
 
-    if obj.active_material and obj.active_material.wow_m2_material:
+    if obj != None and obj.active_material and obj.active_material.wow_m2_material:
 
         blending_1 = int(obj.active_material.wow_m2_material.texture_1_blending_mode)
         Alpha_mode = obj.active_material.node_tree.nodes.get('Tex1_image')
@@ -381,12 +379,17 @@ class WowM2MaterialPropertyGroup(bpy.types.PropertyGroup):
         update=update_material_texture
     )
 
-    layer: bpy.props.IntProperty(
-        min=0,
-        max=7
-    )  
+    #Removed layer, we can calculate it on export by material index
+    # layer: bpy.props.IntProperty(
+    #     min=0,
+    #     max=7
+    # )  
 
-    priority_plane: bpy.props.IntProperty()
+    priority_plane: bpy.props.IntProperty(
+        min=-127,
+        max=127,
+        default=0
+    )
 
     color: bpy.props.StringProperty(
         name='Color',
@@ -404,7 +407,7 @@ class WowM2MaterialPropertyGroup(bpy.types.PropertyGroup):
 class M2_OT_add_texture_transform(bpy.types.Operator):
     bl_idname = 'scene.wow_m2_geoset_add_texture_transform'
     bl_label = 'Add new UV transform controller'
-    bl_options = {'REGISTER', 'INTERNAL'}
+    bl_options = {'REGISTER', 'INTERNAL', 'UNDO_GROUPED'}
 
     anim_index:  bpy.props.IntProperty()
     channel:  bpy.props.IntProperty(min=1, max=2)

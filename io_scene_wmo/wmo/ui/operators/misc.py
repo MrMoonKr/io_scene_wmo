@@ -1,7 +1,11 @@
+import hashlib
+import math
+import random
 import bpy
 import io
 import os
 import bmesh
+from ....utils.collections import get_current_wow_model_collection
 from .... import PACKAGE_NAME
 from ....utils.misc import load_game_data
 from ....pywowlib.blp import PNG2BLP
@@ -191,20 +195,35 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
     def poll(cls, context):
         return context.scene.wow_scene.type == 'WMO'
 
+    def parse_existing_blp_strings(self, data):
+        existing_blp_strings = set()
+        
+        lines = data.split(b'\r\n')
+        
+        for line in lines:
+            if not line.startswith(b"dir:"):
+                try:
+                    blp_string = line.split(b'\t')[-1].strip()
+                    existing_blp_strings.add(blp_string.decode('utf-8'))
+                except Exception as e:
+                    print(f"Error parsing line: {line} - {str(e)}")
+        
+        return existing_blp_strings
+
+    def generate_random_blp_string(self, existing_blp_strings):
+        while True:
+            random_string = hashlib.md5(str(random.random()).encode()).hexdigest() + ".blp"
+            if random_string not in existing_blp_strings:
+                return random_string
 
     def execute(self, context):
-        # name = 'Deadmines'
-        #md5_path = r'WMO\Dungeon\Test'
-        if not context.scene.wow_scene.game_path:
-            raise Exception("Game path is empty. You must set the model's client path in |Scene properties->WoW Scene-> Game Path| to use this feature.\n(Example : World\wmo\Dungeon\AZ_Deadmines\AZ_Deadmines_A.wmo)")
+        wow_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
 
-        # md5_path = os.path.relpath(os.path.dirname(context.scene.wow_scene.game_path).lower(), 'world')  # wmo\Dungeon\AZ_Deadmines. removes the filename.wmo, then "World"
-        md5_path = os.path.relpath(context.scene.wow_scene.game_path.split('.')[0].lower(), 'world')
-        name = str(context.scene.wow_scene.game_path).split('\\')[-1].split('.')[0]
-        # md5_ref = r'Deadmines'
-        md5_ref = name
-        print("path is : " + md5_path)
-        print("name is : " + name)
+        if not wow_model_collection.wow_wmo.dir_path:
+            raise Exception("Game path is empty. You must set the model's client path in |Collection properties->Directory Path| and name your collection with your wmo name to use this feature.\n(Example : World\wmo\Dungeon\AZ_Deadmines for the path and AZ_Deadmines_A for the collection name")
+        wmo_path = str(wow_model_collection.wow_wmo.dir_path + '\\' + wow_model_collection.name)
+
+        md5_path = os.path.relpath(wmo_path.split('.')[0].lower(), 'world')
         md5_entries = []
 
         game_data = load_game_data()
@@ -216,6 +235,9 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
             raise FileNotFoundError("\nMD5 File <<{}>> not found in WoW file system.".format("textures\\Minimap\\md5translate.trs"))
 
         md5_file = md5_file.read()
+
+        existing_strings = self.parse_existing_blp_strings(file)
+
         ###########
 
         # TODOs:
@@ -235,26 +257,17 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
             bpy.data.scenes["Scene"].camera = bpy.data.objects['MinimapsCamera']
 
         def set_mat_backface_culling():
-            # for wmo_mat in bpy.data.scenes["Scene"].wow_wmo_root_elements.materials:
-
             for group_object in get_wmo_groups_list(bpy.context.scene):
                 for material in group_object.data.materials:
                     material.use_backface_culling = True
-
-            # for wmo_mat in bpy.data.materials:
-            #     wmo_mat.pointer.use_backface_culling = True
 
 
         def disable_object_wmo_render_visiblity():
             for group_object in get_wmo_groups_list(bpy.context.scene):
                 group_object.hide_render = True
 
-            # for obj in bpy.context.scene.objects:
-            #     obj.hide_render = True
-
-            # for wmo_group in bpy.data.scenes["Scene"].wow_wmo_root_elements.groups:
-            #     group_obj = wmo_group.pointer.hide_render = True
-
+            for obj in bpy.context.scene.objects:
+                obj.hide_render = True
 
         def apply_render_settings():
             bpy.context.scene.view_settings.view_transform = 'Filmic'
@@ -270,19 +283,18 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
 
         def iterate_groups():
-            # wmo_outdoor_collection = bpy.data.collections.get('Outdoor')
-            # wmo_indoor_collection = bpy.data.collections.get('Indoor')
-            for i, wmo_group in enumerate(get_wmo_groups_list(bpy.context.scene)):
-                if WoWWMOGroup.is_indoor(wmo_group):
-                    # group_id = wmo_group.pointer.wow_wmo_group.group_id
-                    render_images(wmo_group, i)
+            sorted_objects = sorted(get_wmo_groups_list(bpy.context.scene), key=lambda obj: obj.wow_wmo_group.export_order)
 
+            for i, wmo_group in tqdm(enumerate(sorted_objects)):
+                if WoWWMOGroup.is_indoor(wmo_group) and wmo_group.name != 'antiportal':
+                    group_id = wmo_group.wow_wmo_group.export_order
+                    render_images(wmo_group, group_id)
 
         def render_images(obj, group_id):
             bpy.context.view_layer.objects.active = obj
             camera = bpy.data.cameras["MinimapsCamera"]
-            # output_path = bpy.context.scene.render.filepath
-            if not get_project_preferences().project_dir_path: # if project dir not set in settings, use blender's render path
+
+            if not get_project_preferences().project_dir_path:
                 output_path = bpy.context.scene.render.filepath
             else:
                 output_path = os.path.join(get_project_preferences().project_dir_path, r'textures\Minimap')
@@ -304,25 +316,23 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
 
             def position_camera(bounds, offset_x, offset_y):
-                # Align bottom left corner of camera frame to bottom left corner of bounding box
-                center_offset = 64
-                if camera.ortho_scale == 64:
-                    center_offset = 32
-                elif camera.ortho_scale == 32:
-                    center_offset = 16
-                tile_offset_size = center_offset * 2
+                center_offset = camera.ortho_scale / 2
+                tile_offset_size = camera.ortho_scale
                 tile_x = tile_offset_size * offset_x
                 tile_y = tile_offset_size * offset_y
 
-                cam_position = [(bounds[0] + center_offset + tile_x), (bounds[1] + center_offset + tile_y), (bounds[2])]
+                cam_position = [
+                    bounds[0] + center_offset + tile_x,
+                    bounds[1] + center_offset + tile_y,
+                    bounds[2]
+                ]
                 bpy.data.objects["MinimapsCamera"].location = cam_position
 
 
             def add_md5_entry(offset_x, offset_y, md5_text):
                 offset_name = str(offset_x).zfill(2) + '_' + str(offset_y).zfill(2)
                 md5_a = md5_path + "_" + str(group_id).zfill(3) + '_' + offset_name + '.blp'
-                md5_b = md5_ref + "_" + str(group_id).zfill(3) + '_' + offset_name + '.blp'
-                # md5_text += md5_a + '\t' + md5_b + '\n'
+                md5_b = self.png_name
                 md5_text += md5_a.encode() + b'\t' + md5_b.encode() + b'\r\n'
                 md5_entries.append(md5_text)
 
@@ -331,73 +341,55 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
                 # bm = bmesh.new()
                 # bm.from_object(liquidobj, bpy.context.evaluated_depsgraph_get())
 
-                bpy.context.view_layer.objects.active = liquidobj
-                liquidobj.select_set(True)
-                liquidobj.hide_render = True
-                bpy.ops.object.duplicate()
-                duplicated_object = bpy.context.active_object
+                bm = liquidobj.copy()
+                
+                bpy.context.collection.objects.link(bm)
+                bpy.context.view_layer.update()
+                bpy.ops.object.mode_set(mode = 'OBJECT') 
+                bpy.context.view_layer.objects.active = bm
+                bpy.ops.object.mode_set(mode = 'EDIT')
+    
+                mesh = bm.data
 
-                duplicated_object.select_set(True)
-
-                bpy.ops.object.mode_set(mode='OBJECT')
+                renderflag_layer = mesh.vertex_colors['flag_0']
 
                 def comp_colors(color1, color2):
-                    return all(color1[i] == color2[i] for i in range(3))
+                    for i in range(3):
+                        if color1[i] != color2[i]:
+                            return False
+                    return True
 
                 blue = [0.0, 0.0, 1.0]
-                mesh = duplicated_object.data
-
-                renderflag_layer = mesh.color_attributes['flag_0']
-
-                matching_loop_indices = []
-                if renderflag_layer:
-                    for i, loop_color in enumerate(renderflag_layer.data):
-                        if comp_colors(loop_color.color, blue):
-                            matching_loop_indices.append(i) 
-
-                matching_vertex_indices = set()
-                
-                for loop in mesh.loops:
-                    if loop.index in matching_loop_indices:
-                        matching_vertex_indices.add(loop.vertex_index)
-
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_all(action='DESELECT')
-                bpy.ops.object.mode_set(mode='OBJECT')
-
                 for poly in mesh.polygons:
-                    if any(vertex in matching_vertex_indices for vertex in poly.vertices):
+                    if comp_colors(renderflag_layer.data[poly.loop_indices[0]].color, blue):
                         poly.select = True
 
-                bpy.ops.object.mode_set(mode='EDIT')        
+                # bpy.ops.object.mode_set(mode = 'EDIT')
+                # bpy.ops.object.editmode_toggle()
                 bpy.ops.mesh.delete(type='FACE')
+                bpy.ops.object.mode_set(mode = 'OBJECT')
+                bm.hide_render = False
 
-                bpy.ops.object.mode_set(mode='OBJECT')
-
-                duplicated_object.hide_render = False
-
-                return duplicated_object
-
+                return bm
             
             def render(offset_x, offset_y):
-                offset_name = str(offset_x).zfill(2) + '_' + str(offset_y).zfill(2)
-                png_name = name + "_" + str(group_id).zfill(3) + '_' + offset_name + '.png'
+                self.png_name = self.generate_random_blp_string(existing_strings)
+                png_name = self.png_name.replace('.blp', '')
                 bpy.context.scene.render.filepath = output_path + '\\' + png_name
 
                 obj.hide_render = False
                 # titi liquids
-                liquidobj = obj.wow_wmo_group.liquid_mesh
-                if liquidobj:
-                    bm = renderliquid(liquidobj)
+                #liquidobj = obj.wow_wmo_group.liquid_mesh
+                #if liquidobj:
+                    #bm = renderliquid(liquidobj)
                     
                 bpy.ops.render.render(write_still=True)
-
-                
+  
                 obj.hide_render = True
-                if liquidobj:
+                #if liquidobj:
                     # bm.free()
-                    bm.hide_render = True
-                    bpy.ops.object.delete() # should delete previosuly selected liquid copy
+                    #bm.hide_render = True
+                    #bpy.ops.object.delete() # should delete previosuly selected liquid copy
                 
                 bpy.context.scene.render.filepath = output_path
 
@@ -432,16 +424,15 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
             if bounds_size_x <= 16 and bounds_size_y <= 16:
                 set_render_resolution(32)
-            elif bounds_size_x and bounds_size_y <= 32:
+            elif bounds_size_x <= 32 and bounds_size_y <= 32:
                 set_render_resolution(64)
-            elif bounds_size_x and bounds_size_y <= 64:
+            elif bounds_size_x <= 64 and bounds_size_y <= 64:
                 set_render_resolution(128)
             else:
                 set_render_resolution(256)
 
-
-            tiles_x = int(bounds_size_x / 128) + 1
-            tiles_y = int(bounds_size_y / 128) + 1
+            tiles_x = int(math.ceil(bounds_size_x / 128))
+            tiles_y = int(math.ceil(bounds_size_y / 128))
             for offset_x in range(tiles_x):
                 for offset_y in range(tiles_y):
                     position_camera(bounds[1], offset_x, offset_y)
@@ -450,8 +441,6 @@ class WMO_OT_generate_minimaps(bpy.types.Operator):
 
 
         def write_md5_entries(md5_file):
-            # md5_output = ""
-            # md5_output += "dir: " + os.path.dirname(md5_path) + '\n'
             md5_output = b''
             md5_output += b'dir: ' + os.path.dirname(md5_path).encode() + b'\r\n'
 

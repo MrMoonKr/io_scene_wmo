@@ -160,7 +160,7 @@ class WowM2RibbonPropertyGroup(bpy.types.PropertyGroup):
 
 
     priority_plane: bpy.props.IntProperty(
-        name = "Texture Cols",
+        name = "Priority Plane",
         description = "",
         default = 0
     )

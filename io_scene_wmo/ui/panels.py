@@ -1,4 +1,5 @@
 import bpy
+from ..ui.preferences import get_project_preferences
 from .. import ui_icons
 from ..utils.callbacks import on_release
 from ..utils.custom_object import CustomObject
@@ -79,6 +80,12 @@ class WowScenePropertyGroup(bpy.types.PropertyGroup):
             default='WMO'
     )
 
+    doodadset_mode: bpy.props.BoolProperty(
+        name='Doodadset Mode',
+        description='Enters doodadset editing mode',
+        default=False
+    )
+
     game_path:  bpy.props.StringProperty(
         name='Game path',
         description='A path to the model in WoW filesystem.'
@@ -108,7 +115,7 @@ class WOW_PT_render_settings(bpy.types.Panel):
         col.prop(context.scene.wow_render_settings, "fog_start")
         col.prop(context.scene.wow_render_settings, "fog_end")
 
-        col.label(text='Sun Direciton:')
+        col.label(text='Sun Direction:')
         col.prop(context.scene.wow_render_settings, "sun_direction", text='')
 
 
@@ -240,8 +247,19 @@ def render_top_bar(self, context):
 
     layout = self.layout
     row = layout.row(align=True)
+
+    doodadset_mode = context.scene.wow_scene.doodadset_mode
+
+    if proj_prefs := get_project_preferences():
+       row.prop(proj_prefs, 'export_method_enum', text='Export Folder', icon='FILE_TICK')
+
     if context.scene.wow_scene.type == 'WMO':
+        icon = 'CHECKBOX_HLT' if doodadset_mode else 'CHECKBOX_DEHLT'
+        text = "Doodadset Mode ON" if doodadset_mode else "Doodadset Mode OFF"
+        row.operator("scene.doodadset_mode", text=text, icon=icon)     
         row.operator("scene.save_current_wmo_collection", text="Save current WMO", icon='FILE_TICK')
+    if context.scene.wow_scene.type == 'M2':
+        row.operator("scene.save_current_m2", text="Save current M2", icon='FILE_TICK')   
     row.label(text='WoW Scene:')
     row.prop(context.scene.wow_scene, 'version', text='')
     row.prop(context.scene.wow_scene, 'type', text='')
@@ -258,7 +276,7 @@ menu_import_wmo = lambda self, ctx: self.layout.operator("import_mesh.wmo", text
 menu_export_wmo = lambda self, ctx: self.layout.operator("export_mesh.wmo", text="WoW WMO (.wmo)")
 menu_import_m2 = lambda self, ctx: self.layout.operator("import_mesh.m2", text="WoW M2 (.m2)")
 menu_export_m2 = lambda self, ctx: self.layout.operator("export_mesh.m2", text="WoW M2 (.m2)")
-menu_test_m2 = lambda self, ctx: self.layout.operator("test.m2", text="Test M2 (.m2)")
+#menu_test_m2 = lambda self, ctx: self.layout.operator("test.m2", text="Test M2 (.m2)")
 menu_convert_bones = lambda self, ctx: self.layout.operator("convert_bones.m2", text="Convert Bones To WoW")
 menu_print_m2_warnings = lambda self, ctx: self.layout.operator("print_warnings.m2", text="Print M2 Warnings")
 
@@ -270,7 +288,7 @@ def register():
     bpy.types.TOPBAR_MT_file_import.append(menu_import_m2)
     bpy.types.TOPBAR_MT_file_export.append(menu_export_wmo)
     bpy.types.TOPBAR_MT_file_export.append(menu_export_m2)
-    bpy.types.TOPBAR_MT_file_import.append(menu_test_m2)
+    #bpy.types.TOPBAR_MT_file_import.append(menu_test_m2)
     # TODO: temporary, I don't know how to enable these without a panel
     bpy.types.TOPBAR_MT_file_export.append(menu_convert_bones)
     bpy.types.TOPBAR_MT_file_export.append(menu_print_m2_warnings)
@@ -280,7 +298,7 @@ def unregister():
     unregister_wow_scene_properties()
     bpy.types.TOPBAR_MT_file_import.remove(menu_import_wmo)
     bpy.types.TOPBAR_MT_file_import.remove(menu_import_m2)
-    bpy.types.TOPBAR_MT_file_import.remove(menu_test_m2)
+    #bpy.types.TOPBAR_MT_file_import.remove(menu_test_m2)
     bpy.types.TOPBAR_MT_file_export.remove(menu_export_wmo)
     bpy.types.TOPBAR_MT_file_export.remove(menu_export_m2)
     bpy.types.TOPBAR_HT_upper_bar.remove(render_top_bar)

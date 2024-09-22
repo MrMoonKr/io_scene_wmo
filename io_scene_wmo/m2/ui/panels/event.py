@@ -39,7 +39,8 @@ class M2_PT_event_panel(bpy.types.Panel):
                 and not (context.object.wow_m2_attachment.enabled
                          or context.object.wow_m2_uv_transform.enabled
                          or context.object.wow_m2_camera.enabled
-                         or context.object.wow_m2_ribbon.enabled)
+                         or context.object.wow_m2_ribbon.enabled
+                         or context.object.wow_m2_particle.enabled)
         )
 
 

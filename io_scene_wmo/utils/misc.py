@@ -171,6 +171,20 @@ def resolve_outside_texture_path(filepath: str) -> str:
     lowercase_filepath = os.path.splitext(bpy.path.abspath(lowercase_filepath))[0] + ".blp"
     return lowercase_filepath
 
+def resolve_outside_model_path(filepath: str) -> str:
+    keywords = ["world\\", "dungeon\\", "creature\\", "interface\\", "item\\", "models\\", "spells\\", "textures\\", "tileset\\", "xtextures\\"]
+    lowercase_filepath = filepath.lower()
+    
+    for keyword in keywords:
+        if keyword in lowercase_filepath:
+            index = lowercase_filepath.rfind(keyword)
+            extracted_path = lowercase_filepath[index:]
+            extracted_path = os.path.splitext(extracted_path)[0] + ".m2"
+            normalized_path = os.path.normpath(extracted_path)
+            return normalized_path
+    else:
+        return None
+        
 def get_origin_position():
     loc = bpy.context.scene.cursor.location
 

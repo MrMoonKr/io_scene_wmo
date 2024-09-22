@@ -40,7 +40,17 @@ def wmv_get_last_texture() -> Union[None, str]:
         for line in reversed(lines):
             if 'Loading texture' in line:
                 return line[27:].rstrip("\n")
-                
+            
+def wow_export_get_last_texture() -> Union[None,str]:
+    """Get the path of last texture from WoWExport or similar log."""
+    project_preferences = get_project_preferences()
+    if project_preferences.wow_export_path:
+        lines = open(project_preferences.wow_export_path).readlines()
+
+        for line in reversed(lines):
+            if 'Previewing texture file' in line:
+                return line[35:].split(",", 1)[0].rstrip("\n")
+                            
 def wow_export_get_last_m2() -> Union[None, str]:
     """Get the path of last M2 model from WoWExport or similar log."""
 
@@ -66,3 +76,15 @@ def noggit_red_get_last_m2() -> Union[None, str]:
                 start = line.find("'") + 1
                 end = line.find(".m2") + 3
                 return line[start:end]               
+
+def wow_export_get_last_wmo() -> Union[None, str]:
+    """Get the path of last WMO model from WoWExport or similar log."""
+
+    project_preferences = get_project_preferences()
+    if project_preferences.wow_export_path:
+
+        lines = open(project_preferences.wow_export_path).readlines()
+
+        for line in reversed(lines):
+            if 'Previewing model' in line:
+                return line[28:].split(",", 1)[0].rstrip("\n")

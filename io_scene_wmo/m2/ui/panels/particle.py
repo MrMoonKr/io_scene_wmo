@@ -1,6 +1,25 @@
 import bpy
 from ..enums import *
 
+class TexturePathDefaultButton(bpy.types.Operator):
+    bl_idname = "wow_m2_texture.set_default_texture"
+    bl_label = "Set Default Texture Path"
+
+    def execute(self, context):
+        default_texture_path = "textures\\ShaneCube.blp"
+        context.object.wow_m2_particle.texture.wow_m2_texture.path = default_texture_path   
+        return {'FINISHED'}    
+    
+class ToggleFlagsOperator(bpy.types.Operator):
+    bl_idname = "particles.toggle_flags"
+    bl_label = "Toggle Particle Flags"
+    
+    def execute(self, context):
+        context.scene.show_flags = not context.scene.show_flags   
+        return {'FINISHED'}
+    
+bpy.types.Scene.show_flags = bpy.props.BoolProperty(name="Toggle Particle Flags", default=False)   
+
 class M2_PT_particle_panel(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
@@ -14,16 +33,24 @@ class M2_PT_particle_panel(bpy.types.Panel):
         layout = self.layout
         col = layout.column()
         particle = context.object.wow_m2_particle
+        col.operator("particles.toggle_flags", text="Toggle Particle Flags") 
+        if context.scene.show_flags: 
+            col.prop(particle, 'flags', text='Flags')
+
         col.prop(particle, 'action',text='Action')
         col.prop(particle, 'texture',text='Texture')
+        try:
+            col.prop(particle.texture.wow_m2_texture, "path", text='Path')
+            if len(particle.texture.wow_m2_texture.path) == 0:
+                col.operator(TexturePathDefaultButton.bl_idname, text="Set Default Path", icon='FILEBROWSER') 
+        except:
+            pass
         col.prop(particle, 'geometry_model_filename', text='Geometry Model Filename')
         col.prop(particle, 'recursion_model_filename', text='Recursion Model Filename')
         col.prop(particle, 'blending_type',text="Blending Type")
         col.prop(particle, 'emitter_type',text="Alpha")
         col.prop(particle, 'particle_type',text="Particle Type")
         col.prop(particle, 'side',text="Side")
-        col.label(text='Flags')
-        col.prop(particle, 'flags', text='Flags')
         col.prop(particle, 'particle_color_index',text="Particle Color Index")
         col.prop(particle, 'texture_tile_rotation',text="Texture Tile Rotation")
         col.prop(particle, 'texture_dimensions_rows',text="Texture Dimension Rows")
@@ -122,11 +149,11 @@ class WowM2ParticlePropertyGroup(bpy.types.PropertyGroup):
         name='Blending Type',
         description='',
         items = [
-            ('0','Unknown',''),
-            ('1','Unknown',''),
-            ('2','Unknown',''),
-            ('4','Unknown',''),
-            ('5','Unknown',''),
+            ('0','0: glDisable(GL_BLEND); glDisable(GL_ALPHA_TEST)',''),
+            ('1','1: glBlendFunc(GL_SRC_COLOR, GL_ONE)',''),
+            ('2','2: glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)',''),
+            ('3','3: glDisable(GL_BLEND); glEnable(GL_ALPHA_TEST)',''),
+            ('4','4: glBlendFunc(GL_SRC_ALPHA, GL_ONE)',''),
         ]
     )
 
@@ -151,9 +178,9 @@ class WowM2ParticlePropertyGroup(bpy.types.PropertyGroup):
         name='Particle Type',
         description='',
         items = [
-            ('0','Normal',''),
-            ('1','Large Quad',''),
-            ('2','Unknown',''),
+            ('0','Normal','Normal particle, usual way to go'),
+            ('1','Large Quad','Used in Moonwell water effects'),
+            ('2','Unknown','Used in Deeprun Tram'),
         ]
     )
 
@@ -177,14 +204,14 @@ class WowM2ParticlePropertyGroup(bpy.types.PropertyGroup):
 
     texture_dimensions_rows: bpy.props.IntProperty(
         name='Texture Dimensions Rows',
-        description='',
-        default=0
+        description='Used to divide the used texture in rows',
+        default=1
     )
 
     texture_dimensions_cols: bpy.props.IntProperty(
         name='Texture Dimensions Columns',
-        description='',
-        default=0
+        description='Used to divide the used texture in columns',
+        default=1
     )
 
     emission_speed: bpy.props.FloatProperty(

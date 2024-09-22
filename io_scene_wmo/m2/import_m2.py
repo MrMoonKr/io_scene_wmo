@@ -1,5 +1,6 @@
 import os
 import struct
+import time
 
 import bpy
 from ..utils.misc import load_game_data
@@ -10,6 +11,8 @@ from ..ui.preferences import get_project_preferences
 
 
 def import_m2(version, filepath, is_local_file, time_import_method):
+
+    start_time = time.time()
 
     # get global variables
     project_preferences = get_project_preferences()
@@ -70,7 +73,7 @@ def import_m2(version, filepath, is_local_file, time_import_method):
 
         # extract skins and everything else
         if is_local_file:
-            skin_filepaths = game_data.extract_files(extract_dir, dependencies.skins, 'skin')
+            skin_filepaths = dependencies.skins
         else:
             skin_filepaths = game_data.extract_files(extract_dir, dependencies.skins, 'skin')
 
@@ -94,19 +97,29 @@ def import_m2(version, filepath, is_local_file, time_import_method):
     bl_m2 = m2_scene.BlenderM2Scene(m2_file, project_preferences)
 
     cache_dir = project_preferences.cache_dir_path
-    end_index = filepath.find(cache_dir) + len(cache_dir)
+    end_index = filepath.find(cache_dir) + len(cache_dir) + 1
     m2_filepath = filepath[end_index:]
-    bpy.context.scene.wow_scene.game_path = m2_filepath
 
-    bl_m2.load_armature()
+    if not is_local_file:
+        bpy.context.scene.wow_scene.game_path = m2_filepath
+    else:
+        normalized_path = os.path.normpath(filepath)
+        path_parts = [part.lower() for part in normalized_path.split(os.sep)]
+        wow_root_folders = ["character", "creature", "environments", "item", "spells", "world"]
+        base_path_index = next((path_parts.index(cat) for cat in wow_root_folders if cat in path_parts), 0)
+        
+        bpy.context.scene.wow_scene.game_path = os.sep.join(path_parts[base_path_index:])
+
     #import cProfile
     #def profile_import_animations(instance):
         #cProfile.runctx('instance.load_animations()', globals(), locals(), sort='cumulative')
     #profile_import_animations(bl_m2)
+        
+    bl_m2.load_armature()
     bl_m2.load_animations()
     bl_m2.load_colors(time_import_method)
     bl_m2.load_transparency(time_import_method)
-    bl_m2.load_materials()
+    dbc_textures = bl_m2.load_materials()
     bl_m2.load_geosets()
     bl_m2.load_texture_transforms()
     bl_m2.load_collision()
@@ -117,7 +130,15 @@ def import_m2(version, filepath, is_local_file, time_import_method):
     bl_m2.load_ribbons()
     bl_m2.load_particles(time_import_method)
     bl_m2.load_globalflags()
-    bpy.ops.scene.wow_creature_load_textures(LoadAll=True) 
+
+    if dbc_textures:
+        bpy.ops.scene.wow_creature_load_textures(LoadAll=True) 
+
+    print("\nDone importing M2. \nTotal import time: ",
+          time.strftime("%M minutes %S seconds.", time.gmtime(time.time() - start_time)))
+
+    bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="Info: Successfully imported M2!", font_size=24, y_offset=67)   
+        
     return m2_file
 
 
@@ -134,7 +155,7 @@ def import_m2_gamedata(version, filepath, is_local_file):
     time_import_method = addon_prefs.time_import_method
 
     if time_import_method == 'Convert':
-        bpy.context.scene.render.fps = 24
+        bpy.context.scene.render.fps = 30
         bpy.context.scene.sync_mode = 'NONE'
     else:
         bpy.context.scene.render.fps = 1000

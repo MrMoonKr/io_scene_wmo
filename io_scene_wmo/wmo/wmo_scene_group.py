@@ -274,16 +274,22 @@ class BlenderWMOSceneGroup:
         """ Get indices of a WMO BSP tree nodes """
         # last node in branch
         node_indices = []
-        if nodes[i_node].plane_type & BSPPlaneType.Leaf:
-            for i in range(nodes[i_node].first_face, nodes[i_node].first_face + nodes[i_node].num_faces):
-                node_indices.append(faces[i])
-
-        if nodes[i_node].children[0] != -1:
-            node_indices.extend(self.get_bsp_node_indices(nodes[i_node].children[0], nodes, faces, indices))
-
-        if nodes[i_node].children[1] != -1:
-            node_indices.extend(self.get_bsp_node_indices(nodes[i_node].children[1], nodes, faces, indices))
-
+        try:
+            if nodes[i_node].plane_type & BSPPlaneType.Leaf:
+                for i in range(nodes[i_node].first_face, nodes[i_node].first_face + nodes[i_node].num_faces):
+                    node_indices.append(faces[i])
+        except:
+            pass 
+        try:
+            if nodes[i_node].children[0] != -1:
+                node_indices.extend(self.get_bsp_node_indices(nodes[i_node].children[0], nodes, faces, indices))
+        except:
+            pass   
+        try:
+            if nodes[i_node].children[1] != -1:
+                node_indices.extend(self.get_bsp_node_indices(nodes[i_node].children[1], nodes, faces, indices))
+        except:
+            pass
         return node_indices
 
     def get_collision_indices(self):
@@ -293,14 +299,17 @@ class BlenderWMOSceneGroup:
         node_indices = self.get_bsp_node_indices(0, group.mobn.nodes, group.mobr.faces, group.movi.indices)
         indices = []
         for i in node_indices:
-            if not group.mopy.triangle_materials[i].flags & 0x04:
-                indices.append(group.movi.indices[i * 3])
-                indices.append(group.movi.indices[i * 3 + 1])
-                indices.append(group.movi.indices[i * 3 + 2])
+            try:
+                if not group.mopy.triangle_materials[i].flags & 0x04:
+                    indices.append(group.movi.indices[i * 3])
+                    indices.append(group.movi.indices[i * 3 + 1])
+                    indices.append(group.movi.indices[i * 3 + 2])
+            except:
+                pass
 
         return indices
 
-    def load_object(self):
+    def load_object(self, export_order):
         """ Load WoW WMO group as an object to the Blender scene """
 
         group = self.wmo_group
@@ -323,8 +332,11 @@ class BlenderWMOSceneGroup:
         for i, poly in enumerate(mesh.polygons):
             poly.use_smooth = True
 
-            if group.mopy.triangle_materials[i].material_id == 0xFF:
-                collision_face_ids.append(i)
+            try: 
+                if group.mopy.triangle_materials[i].material_id == 0xFF:
+                    collision_face_ids.append(i)
+            except:
+                pass
 
         # set normals
         custom_normals = [(0.0, 0.0, 0.0)] * len(mesh.loops)
@@ -474,6 +486,7 @@ class BlenderWMOSceneGroup:
             nobj.wow_wmo_vertex_info.vertex_group = collision_vg.name
 
         # add WMO group properties
+        nobj.wow_wmo_group.export_order = export_order
         nobj.wow_wmo_group.description = self.wmo_scene.wmo.mogn.get_string(group.mogp.desc_group_name_ofs)
         nobj.wow_wmo_group.group_dbc_id = int(group.mogp.group_id)
 

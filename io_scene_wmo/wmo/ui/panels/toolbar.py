@@ -1,4 +1,5 @@
 import bpy
+from ....ui.preferences import get_project_preferences
 from ..enums import *
 
 from .common import panel_poll
@@ -135,34 +136,55 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout.split()
 
-        game_data_loaded = hasattr(bpy, "wow_game_data") and bpy.wow_game_data.files
+        if bpy.context.scene.wow_scene.doodadset_mode == False:
+            col = layout.column(align=True)
 
-        col = layout.column(align=True)
+            col.separator()
+            col1_col = col.column(align=True)
+            col1_row0 = col1_col.row(align=True)
+            col1_row1 = col1_col.row(align=True)
+            col1_row2 = col1_col.row(align=True)
 
-        col.separator()
-        col1_col = col.column(align=True)
-        col1_row1 = col1_col.row(align=True)
-        col1_row1.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
-        col1_row1.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
-        col1_row2 = col1_col.row(align=True)
-        col1_row3 = col1_col.row(align=True)
-        col1_row3.operator("scene.wow_add_light", text='Light', icon='LIGHT')
-        col1_row4 = col1_col.row(align=True)
-        col.separator()
+            col1_row3 = col1_col.row(align=True)
+            col1_row4 = col1_col.row(align=True)
+            col1_row4 = col1_col.row(align=True)
+            col1_row5 = col1_col.row(align=True)
+            col.separator()
 
-        if game_data_loaded:
+            if proj_prefs := get_project_preferences():
+                col1_row0.prop(proj_prefs, 'import_method', text='')                  
+                if proj_prefs.import_method == 'DirectPath':
+                    box = col1_row1.box()
+                    box.prop(proj_prefs, "direct_path")  
+            col1_row2.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
+                            icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])        
+            col1_row2.operator("scene.wow_import_last_wmo_from_wmv", text='WMO',
+                            icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])                      
+            col1_row3.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
+            col1_row3.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])                    
+
+            col1_row4.operator("scene.wow_add_light", text='Light', icon='LIGHT')      
+            col1_row4.operator("scene.wow_add_scale_reference", text='Scale',
+                            icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+            col1_row5.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
+        else:
+            col = layout.column(align=True)
+
+            col.separator()
+            col1_col = col.column(align=True)
+            col1_row0 = col1_col.row(align=True)
+            col1_row1 = col1_col.row(align=True)
+            col1_row2 = col1_col.row(align=True)
+            col1_row3 = col1_col.row(align=True)
+            col1_row4 = col1_col.row(align=True)
+            col.separator()
+
+
+            if proj_prefs := get_project_preferences():
+                col1_row0.prop(proj_prefs, 'import_method', text='')                  
 
             col1_row2.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
-                               icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])
-            col1_row2.operator("scene.wow_import_last_wmo_from_wmv", text='WMO',
-                               icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
-            col1_row3.operator("scene.wow_add_scale_reference", text='Scale',
-                               icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
-            # col1_row4.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
-
-        else:
-            col1_col.operator("scene.wow_add_scale_reference", text='Scale',
-                              icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+                            icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD']) 
 
     @classmethod
     def poll(cls, context):
@@ -193,7 +215,7 @@ class WMO_PT_tools_object_mode_actions(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene is not None and context.scene.wow_scene.type == 'WMO'
+        return context.scene is not None and context.scene.wow_scene.type == 'WMO' and bpy.context.scene.wow_scene.doodadset_mode == False
 
 
 class WMO_PT_tools_object_mode_doodads(bpy.types.Panel):

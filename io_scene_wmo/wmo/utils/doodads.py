@@ -38,15 +38,20 @@ def skip(f, n_bytes):
     f.seek(f.tell() + n_bytes)
 
 
-def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
+def import_doodad_model(asset_dir: str, filepath: str, placeholder: bool) -> bpy.types.Object:
     """Import World of Warcraft M2 model to scene."""
 
     game_data = load_game_data()
 
-    m2_path = os.path.splitext(filepath)[0] + ".m2"
-    skin_path = os.path.splitext(filepath)[0] + "00.skin"
-
-    m2_name = os.path.basename(os.path.splitext(m2_path)[0])
+    if placeholder:
+        m2_path = os.path.splitext('Spells\\Errorcube.m2')[0] + ".m2"
+        skin_path = os.path.splitext('Spells\\Errorcube.m2')[0] + "00.skin"
+        real_m2_path = os.path.splitext(filepath)[0] + ".m2"
+        m2_name = os.path.basename(os.path.splitext(real_m2_path)[0])
+    else:
+        m2_path = os.path.splitext(filepath)[0] + ".m2"
+        skin_path = os.path.splitext(filepath)[0] + "00.skin"
+        m2_name = os.path.basename(os.path.splitext(m2_path)[0])
 
     try:
         file, _ = game_data.read_file(m2_path)
@@ -80,6 +85,13 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
     vertices = [(0.0, 0.0, 0.0)] * n_vertices
     normals = [(0.0, 0.0, 0.0)] * n_vertices
     uv_coords = [(0.0, 0.0)] * n_vertices
+
+    # if n_vertices == 0:
+    #     addon_dir = os.path.dirname(__file__)
+    #     placeholder_blend_path = os.path.join(addon_dir, "utils", "placeholders", "placeholder.blend")
+    #     directory = placeholder_blend_path + "\\Object\\"
+    #     bpy.ops.wm.append(filename='placeholder', directory=directory)
+    #     return import_doodad_model(asset_dir, filepath, True)
 
     for i in range(n_vertices):
         vertices[i] = float32.read(f, 3)
@@ -227,8 +239,108 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
     # unpack and convert textures
     game_data.extract_textures_as_png(asset_dir, texture_paths)
 
+    def import_placeholder(addon_relative_path, placeholder_object_name):
+        current_dir = os.path.dirname(__file__)
+        base_dir = os.path.dirname(os.path.dirname(current_dir))
+        blend_path = os.path.join(base_dir, addon_relative_path)
+
+        directory = os.path.join(blend_path, "Object\\")
+
+        try:
+            bpy.ops.wm.append(filename=placeholder_object_name, directory=directory)
+
+            #obj = bpy.ops.wm.append(filename=placeholder_object_name, directory=directory)
+            if placeholder_object_name in bpy.data.objects:
+                placeholder = bpy.data.objects.get(placeholder_object_name)
+                nplaceholder = bpy.data.objects.new(m2_name, placeholder.data.copy())
+                #placeholder_object_name.delete()
+                #placeholder_duplicate = placeholder.copy()
+                #placeholder_duplicate.data = placeholder.data.copy()
+                bpy.data.objects.remove(placeholder, do_unlink=True)
+
+            return nplaceholder
+                
+        except Exception as e:
+            print(f"Failed to import placeholder: {e}")
+            return None
+
     # create object
-    nobj = bpy.data.objects.new(m2_name, mesh)
+    if len(mesh.vertices) == 0 or placeholder:
+        placeholder_object_name = 'Placeholder'
+        addon_relative_path = 'utils\\placeholder\\placeholder.blend'
+        nobj = import_placeholder(addon_relative_path, placeholder_object_name)
+        nobj.wow_wmo_doodad.path = filepath
+        nobj.wow_wmo_doodad.enabled = True
+        image_name = "Placeholder"
+
+        img = bpy.data.images.get('Placeholder_Texture')
+        if not img:
+            img = bpy.data.images.new(name=image_name, width=512, height=512, alpha=True, float_buffer=False)
+            img.generated_type = 'UV_GRID'
+        #img = bpy.data.images['Placeholder_Texture']
+        
+        mat = bpy.data.materials.get('Placeholder')
+        if mat:
+            nobj.data.materials.append(mat)
+
+            for block in bpy.data.meshes:
+                if block.users == 0:
+                    bpy.data.meshes.remove(block)
+
+            for block in bpy.data.materials:
+                if block.users == 0:
+                    bpy.data.materials.remove(block)
+
+            for block in bpy.data.textures:
+                if block.users == 0:
+                    bpy.data.textures.remove(block)
+
+            for block in bpy.data.images:
+                if block.users == 0:
+                    bpy.data.images.remove(block)
+
+            return nobj
+        else:
+            mat = bpy.data.materials.new(name="Placeholder")
+
+            mat.use_nodes = True
+
+            node_tree = mat.node_tree
+            tree_builder = NodeTreeBuilder(node_tree)
+
+            tex_image = tree_builder.add_node('ShaderNodeTexImage', "Texture", 0, 0)
+            tex_image.image = img
+
+            doodad_color= tree_builder.add_node('ShaderNodeAttribute', "DoodadColor", 0, 2)
+
+            mix_rgb = tree_builder.add_node('ShaderNodeMixRGB', "ApplyColor", 1, 1)
+            mix_rgb.inputs['Fac'].default_value = 1.0
+            mix_rgb.blend_type = 'MULTIPLY'
+
+            transparent_bsdf = tree_builder.add_node('ShaderNodeBsdfTransparent', "Transparent", 2, 0)
+            bsdf = tree_builder.add_node('ShaderNodeBsdfDiffuse', "Diffuse", 2, 2)
+
+            mix_shader = tree_builder.add_node('ShaderNodeMixShader', "MixShader", 3, 0)
+            mix_shader.inputs['Fac'].default_value = 1.0
+
+            output = tree_builder.add_node('ShaderNodeOutputMaterial', "Output", 4, 1)
+
+            mat.node_tree.links.new(tex_image.outputs['Color'], mix_rgb.inputs['Color1'])
+
+            mat.node_tree.links.new(doodad_color.outputs['Color'], mix_rgb.inputs['Color2'])
+            mat.node_tree.links.new(mix_rgb.outputs['Color'], bsdf.inputs['Color'])
+            mat.node_tree.links.new(bsdf.outputs['BSDF'], mix_shader.inputs[2])
+            mat.node_tree.links.new(transparent_bsdf.outputs['BSDF'], mix_shader.inputs[1])
+            mat.node_tree.links.new(mix_shader.outputs['Shader'], output.inputs['Surface'])
+            mat.blend_method = 'OPAQUE'
+
+            nobj.data.materials.append(mat)
+
+        return nobj
+    
+    else:
+        nobj = bpy.data.objects.new(m2_name, mesh)
+    
     nobj.wow_wmo_doodad.path = filepath
     nobj.wow_wmo_doodad.enabled = True
 
@@ -316,9 +428,9 @@ def import_doodad_model(asset_dir: str, filepath: str) -> bpy.types.Object:
 def import_doodad(m2_path: str, cache_path: str) -> bpy.types.Object:
 
     try:
-        obj = import_doodad_model(cache_path, m2_path)
+        obj = import_doodad_model(cache_path, m2_path, False)
     except:
-        obj = import_doodad_model(cache_path, 'Spells\\Errorcube.m2')
+        obj = import_doodad_model(cache_path, m2_path, True)
         traceback.print_exc()
         print("\nFailed to import model: <<{}>>. Placeholder is imported instead.".format(m2_path))
 

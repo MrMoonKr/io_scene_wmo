@@ -1,3 +1,5 @@
+import bpy
+
 def can_apply_scale(fcurves,keyframe_count):
     for i in range(keyframe_count):
         x = fcurves[0].keyframe_points[i].co[1] if 0 in fcurves else 1
@@ -25,3 +27,11 @@ def get_bone_groups(obj, vertex, bone_names):
     groups = [el for el in vertex.groups if obj.vertex_groups[el.group].name in bone_names]
     groups.sort(key=lambda x: -x.weight)
     return groups
+
+def _find_final_alias(self, n_global_sequences, alias_next):
+    for i, anim_index in enumerate(self.animations):
+        anim = bpy.context.scene.wow_m2_animations[alias_next + n_global_sequences]
+        if '64' in anim.flags:
+            alias_next = anim.alias_next
+        else:
+            return alias_next + n_global_sequences

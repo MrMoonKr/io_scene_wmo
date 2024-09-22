@@ -21,6 +21,10 @@ class WMO_PT_wmo_group(WBS_PT_object_properties_common, bpy.types.Panel):
         self.layout.use_property_split = True
 
         col = self.layout.column()
+        col.prop(context.object.wow_wmo_group, "export_order")
+
+        col.separator()
+
         col.prop(context.object.wow_wmo_group, "description")
 
         col.separator()
@@ -94,6 +98,12 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
         description='Saved in the WMO file.'
     )
 
+    export_order: bpy.props.IntProperty(
+        name="Export Order",
+        min=0,
+        max=999
+    )
+
     flags:  bpy.props.EnumProperty(
         items=group_flag_enum,
         options={'ENUM_FLAG'},
@@ -143,7 +153,7 @@ class WowWMOGroupPropertyGroup(bpy.types.PropertyGroup):
         type=bpy.types.Object,
         name='Collision',
         description='Invisible collision geometry of this group',
-        poll=lambda self, obj: obj.type == 'MESH'
+        poll=lambda self, obj: obj.type == 'MESH' and obj.name in get_wmo_collection(bpy.context.scene, SpecialCollections.Collision).objects
     )
 
     liquid_mesh: bpy.props.PointerProperty(

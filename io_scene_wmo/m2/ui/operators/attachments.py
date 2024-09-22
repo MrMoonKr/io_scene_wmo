@@ -12,15 +12,12 @@ def set_attachment_types_enum(self, context):
     enum = []
     attachments = [obj.wow_m2_attachment.type for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_attachment.enabled]
 
-    # only add missing atatchment types
-    for field in M2AttachmentTypes:
-
-        # TODO : versions
-        # if version == lichking and field.value > 52 (?): return
-
-        if str(field.value) not in attachments:
-            enum.append((str(field.value), field.name, ""))
-
+    for i, field in enumerate(M2AttachmentTypes):
+        if i not in attachments:
+            if context.scene.wow_scene.version == '2' and i <= 46:
+                enum.append((str(field.value), field.name, ""))
+            elif context.scene.wow_scene.version == '6':
+                enum.append((str(field.value), field.name, ""))
     return enum
 
 class M2_OT_add_attachment(bpy.types.Operator):
@@ -85,6 +82,8 @@ class M2_OT_add_attachment(bpy.types.Operator):
         obj.animation_data_create()
         obj.animation_data.action_blend_type = 'ADD'
 
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="Info: Successfully created attachment: " + obj.name + "!", font_size=24, y_offset=67)
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="You might want to edit the bone parent in object's constraint properties.", font_size=24, y_offset=100)
         self.report({'INFO'}, "Successfully created M2 attachment: " + obj.name + "\nYou might want to edit the bone parent in object's constraint properties.")
 
         # for attachment in attachments:
