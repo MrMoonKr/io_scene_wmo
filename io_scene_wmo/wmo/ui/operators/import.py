@@ -4,7 +4,7 @@ import traceback
 from ....ui.preferences import get_project_preferences
 
 from ...import_wmo import import_wmo_to_blender_scene_gamedata
-from ...utils.wmv import wmv_get_last_wmo, wow_export_get_last_wmo
+from ...utils.wmv import wmv_get_last_wmo, wow_export_get_last_wmo, noggit_red_get_last_wmo
 from ....utils.misc import load_game_data
 
 
@@ -33,9 +33,9 @@ class WMO_OT_import_last_wmo_from_wmv(bpy.types.Operator):
         elif project_preferences.import_method == 'WowExport':       
             if project_preferences.wow_export_path:
                 wmo_path = wow_export_get_last_wmo()
-        #elif project_preferences.import_method == 'NoggitRed':       
-            #if project_preferences.noggit_red_path:
-                #wmo_path = noggit_red_get_last_wmo()
+        elif project_preferences.import_method == 'NoggitRed':       
+            if project_preferences.noggit_red_path:
+                wmo_path = noggit_red_get_last_wmo()
 
         if not wmo_path:
             self.report({'ERROR'}, """Log contains no WMO entries.

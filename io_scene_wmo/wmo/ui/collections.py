@@ -126,7 +126,7 @@ class DoodadSetsCollection(_WMOCollection, SpecialCollection):
                       and col.name in wmo_col_child.children:
                         return True
 
-            return False
+        return False
 
     @classmethod
     def verify_doodad_sets_collection_integrity(cls
@@ -136,12 +136,15 @@ class DoodadSetsCollection(_WMOCollection, SpecialCollection):
         if root_col is None:
             return False
 
-        # cls.verify_root_collection_integrity(root_col, Iterable['SpecialCollection'])
         for child_col in root_col.children:
                 if match_id_name(child_col.name, DoodadSetsCollection.__wbs_collection_name__):
-                    default_global_coll = child_col.children.get("Set_$DefaultGlobal")
+                    default_global_coll = None
+
+                    for col in child_col.children:
+                        if col.name.startswith("Set_$DefaultGlobal"):
+                            default_global_coll = col
+                            break
                     if not default_global_coll:
-                        print("missing!")
                         default_global_coll = bpy.data.collections.new("Set_$DefaultGlobal")
                         child_col.children.link(default_global_coll)
                         default_global_coll.color_tag = 'COLOR_04'
@@ -161,7 +164,6 @@ class DoodadSetsCollection(_WMOCollection, SpecialCollection):
             return False
 
         cls.verify_root_collection_integrity(root_col, special_collection_ts)
-
         cls.verify_doodad_sets_collection_integrity(scene, root_col)
 
         # doodad sets collection of collections

@@ -354,15 +354,15 @@ class BlenderWMOSceneGroup:
             flag_set = nobj.wow_wmo_group.flags
             flag_set.add('0')
             nobj.wow_wmo_group.flags = flag_set
-            vertex_color_layer = mesh.color_attributes.new(name="Col", type='BYTE_COLOR', domain='CORNER')
-            mesh.color_attributes.new(name="Lightmap", type='BYTE_COLOR', domain='CORNER')
+            vertex_color_layer = mesh.color_attributes.new(name="Col", type='BYTE_COLOR', domain='POINT')
+            mesh.color_attributes.new(name="Lightmap", type='BYTE_COLOR', domain='POINT')
 
             pass_index |= BlenderWMOObjectRenderFlags.HasVertexColor
             pass_index |= BlenderWMOObjectRenderFlags.HasLightmap
 
         blendmap = None
         if group.mogp.flags & MOGPFlags.HasTwoMOCV:
-            blendmap = mesh.color_attributes.new(name="Blendmap", type='BYTE_COLOR', domain='CORNER')
+            blendmap = mesh.color_attributes.new(name="Blendmap", type='BYTE_COLOR', domain='POINT')
 
             pass_index |= BlenderWMOObjectRenderFlags.HasBlendmap
 
@@ -393,11 +393,11 @@ class BlenderWMOSceneGroup:
         batch_map_b = None
 
         if group.mogp.n_batches_a != 0:
-            batch_map_a = mesh.color_attributes.new(name="BatchmapTrans", type='BYTE_COLOR', domain='CORNER')
+            batch_map_a = mesh.color_attributes.new(name="BatchmapTrans", type='BYTE_COLOR', domain='POINT')
             pass_index |= BlenderWMOObjectRenderFlags.HasBatchA
 
         if group.mogp.n_batches_b != 0:
-            batch_map_b = mesh.color_attributes.new(name="BatchmapInt", type='BYTE_COLOR', domain='CORNER')
+            batch_map_b = mesh.color_attributes.new(name="BatchmapInt", type='BYTE_COLOR', domain='POINT')
             pass_index |= BlenderWMOObjectRenderFlags.HasBatchB
 
         # nobj.wow_wmo_vertex_info.batch_map = batch_map.name
@@ -435,34 +435,42 @@ class BlenderWMOSceneGroup:
                                 (batch.start_triangle + group.moba.batches[i].n_triangles) // 3)] = batch.material_id
 
         # set layer data
-        for i, loop in enumerate(mesh.loops):
+        for vertex_index, vertex in enumerate(mesh.vertices):
 
             if vertex_color_layer is not None:
 
-                mesh.color_attributes['Col'].data[i].color = (linear(group.mocv.vert_colors[loop.vertex_index][2] / 255),
-                                                           linear(group.mocv.vert_colors[loop.vertex_index][1] / 255),
-                                                           linear(group.mocv.vert_colors[loop.vertex_index][0] / 255),
-                                                           1.0)
+                mesh.color_attributes['Col'].data[vertex_index].color = (
+                    linear(group.mocv.vert_colors[vertex_index][2] / 255),
+                    linear(group.mocv.vert_colors[vertex_index][1] / 255),
+                    linear(group.mocv.vert_colors[vertex_index][0] / 255),
+                    1.0
+                )
 
-                mesh.color_attributes['Lightmap'].data[i].color = (linear(group.mocv.vert_colors[loop.vertex_index][3] / 255),
-                                                                linear(group.mocv.vert_colors[loop.vertex_index][3] / 255),
-                                                                linear(group.mocv.vert_colors[loop.vertex_index][3] / 255),
-                                                                1.0)
+                mesh.color_attributes['Lightmap'].data[vertex_index].color = (
+                    linear(group.mocv.vert_colors[vertex_index][3] / 255),
+                    linear(group.mocv.vert_colors[vertex_index][3] / 255),
+                    linear(group.mocv.vert_colors[vertex_index][3] / 255),
+                    1.0
+                )
 
             if blendmap is not None:
                 mocv_layer = group.mocv2 if group.mogp.flags & MOGPFlags.HasVertexColor else group.mocv
-                mesh.color_attributes['Blendmap'].data[i].color = (linear(mocv_layer.vert_colors[loop.vertex_index][3] / 255),
-                                                                linear(mocv_layer.vert_colors[loop.vertex_index][3] / 255),
-                                                                linear(mocv_layer.vert_colors[loop.vertex_index][3] / 255),
-                                                                1.0)
+                mesh.color_attributes['Blendmap'].data[vertex_index].color = (
+                    linear(mocv_layer.vert_colors[vertex_index][3] / 255),
+                    linear(mocv_layer.vert_colors[vertex_index][3] / 255),
+                    linear(mocv_layer.vert_colors[vertex_index][3] / 255),
+                    1.0
+                )
 
             if batch_map_a:
-                mesh.color_attributes['BatchmapTrans'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_a_range \
-                    else (0, 0, 0, 0)
+                mesh.color_attributes['BatchmapTrans'].data[vertex_index].color = (
+                    (1, 1, 1, 1) if vertex_index in batch_a_range else (0, 0, 0, 0)
+                )
 
             if batch_map_b:
-                mesh.color_attributes['BatchmapInt'].data[i].color = (1, 1, 1, 1) if loop.vertex_index in batch_b_range \
-                    else (0, 0, 0, 0)
+                mesh.color_attributes['BatchmapInt'].data[vertex_index].color = (
+                    (1, 1, 1, 1) if vertex_index in batch_b_range else (0, 0, 0, 0)
+                )
         '''
         # set faces material
         for i in range(len(mesh.polygons)):

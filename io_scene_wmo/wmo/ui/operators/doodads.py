@@ -9,7 +9,7 @@ from ....utils.misc import find_nearest_object
 from ....third_party.tqdm import tqdm
 from ..custom_objects import WoWWMODoodad, WoWWMOGroup
 
-from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection, DoodadSetsCollection
+from ...ui.collections import get_wmo_collection, get_current_wow_model_collection, get_or_create_collection, DoodadSetsCollection, get_wmo_groups_list
 from ...ui.enums import SpecialCollections
 
 
@@ -33,7 +33,7 @@ class WMO_OT_wmv_import_doodad_from_wmv(bpy.types.Operator):
             if wmo_model_collection:
                 for set_collection in get_wmo_collection(scene, SpecialCollections.Doodads).children:
                     DoodadSetsCollection.verify_doodad_sets_collection_integrity(scene, wmo_model_collection)
-                    if set_collection.name == "Set_$DefaultGlobal":
+                    if set_collection.name.startswith("Set_$DefaultGlobal"):
                         active_set_collection = set_collection
                         self.report({'INFO'}, "No Doodad Set collection selected, importing it to [Set_$DefaultGlobal].")
             else:
@@ -103,11 +103,11 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
         result = (mathutils.Vector(corner_min) - mathutils.Vector(corner_max))
         return (abs(result.x) + abs(result.y) + abs(result.z)) / 3
 
-    def gen_doodad_color(self, obj, group):
+    def gen_doodad_color(self, obj, group, wmo_model_collection):
 
         mesh = group.data
 
-        if 'Col' not in mesh.vertex_colors:
+        if 'Col' not in mesh.color_attributes:
             return 0.5, 0.5, 0.5, 1.0
 
         radius = self.get_object_radius(obj)
@@ -128,9 +128,19 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
         if not polygons:
             polygons.append(kd_tree.find(obj.location))
 
+        color_layer = mesh.color_attributes["Col"]
+
+        is_corner_domain = (color_layer.domain == 'CORNER')
+
         for poly in polygons:
-            for loop_index in mesh.polygons[poly[1]].loop_indices:
-                colors.append(mesh.vertex_colors['Col'].data[loop_index].color)
+            if is_corner_domain:
+                for loop_index in mesh.polygons[poly[1]].loop_indices:
+                # colors.append(mesh.vertex_colors['Col'].data[loop_index].color)
+                    colors.append(color_layer.data[loop_index].color)
+
+            else:
+                for vertex_index in mesh.polygons[poly[1]].vertices:
+                    colors.append(color_layer.data[vertex_index].color)
 
         if not colors:
             return 0.5, 0.5, 0.5, 1.0
@@ -142,33 +152,43 @@ class WMO_OT_doodads_bake_color(bpy.types.Operator):
 
         final_color = final_color / len(colors)
 
-        flags = bpy.context.scene.wow_wmo_root.flags
+        flags = wmo_model_collection.wow_wmo.flags
 
-        if "2" in flags and WoWWMOGroup.is_indoor(obj):
-            final_color += mathutils.Vector(tuple([c / 2 for c in bpy.context.scene.wow_wmo_root.ambient_color]))
+        if "2" in flags and WoWWMOGroup.is_indoor(group):
+            final_color += mathutils.Vector(tuple([c / 2 for c in wmo_model_collection.wow_wmo.ambient_color]))
 
         return final_color
 
     def execute(self, context):
 
-        doodad_counter = 0
+        wmo_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+        if wmo_model_collection:
 
-        groups = [obj for obj in bpy.context.scene.objects if WoWWMOGroup.match(obj)]
+            doodad_counter = 0
 
-        for index, obj in enumerate(tqdm(bpy.context.selected_objects, desc='Baking doodad colors', ascii=True)):
-            if WoWWMODoodad.match(obj):
+            groups = [obj for obj in get_wmo_groups_list(bpy.context.scene)]
 
-                group = find_nearest_object(obj, groups)
+            for index, obj in enumerate(tqdm(bpy.context.selected_objects, desc='Baking doodad colors', ascii=True)):
+                if WoWWMODoodad.match(obj):
 
-                if '0' not in group.wow_wmo_group.flags or not group.data.vertex_colors.get('Col'):
-                    continue
+                    doodad_counter += 1
 
-                vertex_color = self.gen_doodad_color(obj, group)
+                    group = find_nearest_object(obj, groups)
 
-                color = [x for x in vertex_color]
-                obj.wow_wmo_doodad.color = color
+                    if not group:
+                        self.report({'ERROR'}, "No WMO group found.")
+                        continue
 
-                doodad_counter += 1
+                    group.data.color_attributes.get(('Col'))
+                    if '0' not in group.wow_wmo_group.flags or not group.data.color_attributes.get('Col'):
+                        self.report({'ERROR'}, "Nearest group object({}) of doodad {} does not have vertex colors.".format(group.name,obj))
+                        continue
+
+                    vertex_color = self.gen_doodad_color(obj, group, wmo_model_collection)
+
+                    color = [x for x in vertex_color]
+                    obj.wow_wmo_doodad.color = color
+
 
         if doodad_counter:
             self.report({'INFO'}, "Done baking colors to {} doodad instances.".format(doodad_counter))
