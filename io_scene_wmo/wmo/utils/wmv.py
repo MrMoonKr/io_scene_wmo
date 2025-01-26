@@ -77,6 +77,20 @@ def noggit_red_get_last_m2() -> Union[None, str]:
                 end = line.find(".m2") + 3
                 return line[start:end]               
 
+def noggit_red_get_last_wmo() -> Union[None, str]:
+    """Get the path of last WMO model from Noggit Red or similar log."""
+
+    project_preferences = get_project_preferences()
+    if project_preferences.noggit_red_path:
+
+        lines = open(project_preferences.noggit_red_path).readlines()
+
+        for line in reversed(lines):
+            if 'Loaded  file' in line and 'wmo' in line:
+                start = line.find("'") + 1
+                end = line.find(".wmo") + 4
+                return line[start:end]    
+            
 def wow_export_get_last_wmo() -> Union[None, str]:
     """Get the path of last WMO model from WoWExport or similar log."""
 
