@@ -21,6 +21,7 @@ class BlenderWMOSceneGroup:
         self.bl_object: bpy.types.Object = obj
         self.name = wmo_scene.wmo.mogn.get_string(wmo_group.mogp.group_name_ofs)
         self.has_blending: bool = False
+        self.bounding_box_base: bpy.types.Object = None
 
         self.lights_relations: List[int] = []
         self.doodads_relations:  List[int] = []
@@ -411,7 +412,7 @@ class BlenderWMOSceneGroup:
         new_obj.hide_viewport = False
         new_obj.hide_select = False
 
-        scale = (
+        size = (
             max_corner[0] - min_corner[0],
             max_corner[1] - min_corner[1],
             max_corner[2] - min_corner[2],
@@ -422,8 +423,9 @@ class BlenderWMOSceneGroup:
             (min_corner[2] + max_corner[2]) / 2,
         )
 
-        new_obj.scale = scale
-        new_obj.location = center
+        # new_obj.scale = scale
+        new_obj.scale = size  # (size[0] / 2, size[1] / 2, size[2] / 2)
+        new_obj.location = min_corner # center
 
         # wireframe_modifier = new_obj.modifiers.new(name="Wireframe", type='WIREFRAME')
         # wireframe_modifier.thickness = 0.01
@@ -489,11 +491,11 @@ class BlenderWMOSceneGroup:
         # recurse
         #  child on negative side of dividing plane
         if bsp_node.children[0] != -1:
-            self.create_BSP_plane(bsp_node.children[0], negative_min, negative_max, depth+1)
+            self.create_BSP_render(bsp_node.children[0], negative_min, negative_max, depth+1)
  
         # on positive side
         if bsp_node.children[1] != -1:
-            self.create_BSP_plane(bsp_node.children[1], positive_min, positive_max, depth+1)
+            self.create_BSP_render(bsp_node.children[1], positive_min, positive_max, depth+1)
 
 
     def load_object(self, export_order):
@@ -681,7 +683,7 @@ class BlenderWMOSceneGroup:
             nobj.wow_wmo_vertex_info.vertex_group = collision_vg.name
 
         #render BSP bounding boxes for debugging only
-        render_BSP_nodes = False
+        render_BSP_nodes = True
         if render_BSP_nodes:
             self.create_BSP_render(0, group.mogp.bounding_box_corner1, group.mogp.bounding_box_corner2, 0) # group BB
 
