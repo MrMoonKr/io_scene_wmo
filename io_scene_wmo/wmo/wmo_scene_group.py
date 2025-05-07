@@ -308,6 +308,193 @@ class BlenderWMOSceneGroup:
                 pass
 
         return indices
+    
+
+    def create_bb_base_object(self):
+        if "BBBase" in bpy.data.objects:
+            return bpy.data.objects["BBBase"]
+
+        mesh =  bpy.data.meshes.get("SharedBBMesh")
+        if mesh is None:
+            verts = [
+                (0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0),
+                (0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1),
+            ]
+
+        edges = [
+        (0, 1), (1, 2), (2, 3), (3, 0),
+        (4, 5), (5, 6), (6, 7), (7, 4),
+        (0, 4), (1, 5), (2, 6), (3, 7),
+        ]
+            
+        faces = [
+            # (0, 1, 2, 3), (4, 5, 6, 7),
+            # (0, 1, 5, 4), (2, 3, 7, 6),
+            # (1, 2, 6, 5), (0, 3, 7, 4),
+        ]
+        mesh = bpy.data.meshes.new("SharedBBMesh")
+        mesh.from_pydata(verts, edges, faces)
+        mesh.update()
+
+        # if "TransparentBoxMaterial" not in bpy.data.materials:
+        #     mat = bpy.data.materials.new(name="TransparentBoxMaterial")
+        #     mat.use_nodes = True
+        #     mat.blend_method = 'BLEND'
+        #     mat.shadow_method = 'NONE'
+        #     nodes = mat.node_tree.nodes
+        #     links = mat.node_tree.links
+        #     nodes.clear()
+        #     output = nodes.new("ShaderNodeOutputMaterial")
+        #     transparent = nodes.new("ShaderNodeBsdfTransparent")
+        #     diffuse = nodes.new("ShaderNodeBsdfDiffuse")
+        #     mix = nodes.new("ShaderNodeMixShader")
+        #     mix.inputs['Fac'].default_value = 0.7
+        #     links.new(diffuse.outputs['BSDF'], mix.inputs[1])
+        #     links.new(transparent.outputs['BSDF'], mix.inputs[2])
+        #     links.new(mix.outputs['Shader'], output.inputs['Surface'])
+        # mat = bpy.data.materials["TransparentBoxMaterial"]
+
+        # wireframe mat
+        if "BBSharedMaterial" not in bpy.data.materials:
+            mat = bpy.data.materials.new(name="BBSharedMaterial")
+            mat.use_nodes = True
+            mat.blend_method = 'BLEND'
+            mat.shadow_method = 'NONE'
+
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            nodes.clear()
+
+            output = nodes.new(type='ShaderNodeOutputMaterial')
+            # wireframe_shader = nodes.new(type='ShaderNodeWireframe')
+            diffuse_shader = nodes.new(type='ShaderNodeBsdfDiffuse')
+
+            # Set wireframe color to yellow
+            # wireframe_shader.inputs['Color'].default_value = (1, 1, 0, 1)
+
+            # links.new(wireframe_shader.outputs['BSDF'], diffuse_shader.inputs['Color'])
+            links.new(diffuse_shader.outputs['BSDF'], output.inputs['Surface'])
+        mat = bpy.data.materials.get("BBSharedMaterial")
+
+        mesh.materials.clear()
+        mesh.materials.append(mat)
+
+        base_obj = bpy.data.objects.new("BBBase", mesh)
+
+        coll_name = "BSP tree boxes"
+        if coll_name not in bpy.data.collections:
+            collection = bpy.data.collections.new(coll_name)
+            bpy.context.collection.children.link(collection)
+        else:
+            collection = bpy.data.collections[coll_name]
+
+        collection.objects.link(base_obj)
+
+        base_obj.hide_set(True)
+        base_obj.hide_render = True
+        base_obj.hide_viewport = True
+        base_obj.hide_select = True
+
+        return base_obj
+
+    def create_bb_instance_from_base(self, min_corner, max_corner, name="BBInstance"):
+        base_obj = self.bounding_box_base
+
+        if (base_obj is None):
+            base_obj = self.create_bb_base_object()
+
+        new_obj = base_obj.copy()
+        new_obj.data = base_obj.data
+        new_obj.name = name
+        new_obj.hide_set(False)
+        new_obj.hide_render = False
+        new_obj.hide_viewport = False
+        new_obj.hide_select = False
+
+        scale = (
+            max_corner[0] - min_corner[0],
+            max_corner[1] - min_corner[1],
+            max_corner[2] - min_corner[2],
+        )
+        center = (
+            (min_corner[0] + max_corner[0]) / 2,
+            (min_corner[1] + max_corner[1]) / 2,
+            (min_corner[2] + max_corner[2]) / 2,
+        )
+
+        new_obj.scale = scale
+        new_obj.location = center
+
+        # wireframe_modifier = new_obj.modifiers.new(name="Wireframe", type='WIREFRAME')
+        # wireframe_modifier.thickness = 0.01
+
+        new_obj.display_type = 'SOLID'
+        new_obj.show_wire = True
+
+        bpy.data.collections["BSP tree boxes"].objects.link(new_obj)
+        # bpy.context.collection.objects.link(new_obj)
+        # return new_obj
+
+    def create_BSP_render(self, i_node, bounding_box_min, bounding_box_max, depth):
+
+        bsp_node = self.wmo_group.mobn.nodes[i_node]
+
+        # print(f"group {self.name} node {i_node} type {bsp_node.plane_type}")
+
+        if bsp_node.plane_type & BSPPlaneType.Leaf:
+            # final leaf, create BB
+            self.create_bb_instance_from_base(bounding_box_min, bounding_box_max, f"{self.name}BSP Depth {depth}")
+            # print(f"draw bb for node {i_node}")
+            return
+
+        negative_min, negative_max = None, None
+        positive_min, positive_max = None, None
+
+        # set plane intersection
+        if bsp_node.plane_type == BSPPlaneType.YZ_plane:
+            # divide_pos = (center_x + bsp_node.dist, center_y, center_z)
+            divide_pos = (bsp_node.dist, 0, 0)
+
+            # preview plane
+            # TODO, gotta use instancing
+            # bpy.ops.mesh.primitive_plane_add(location=divide_pos, rotation=(0, -math.pi/2, 0))  # Rotate -90° around Y-axis
+            # obj = bpy.context.view_layer.objects.active
+            # obj.name = f"{self.name}typeX"
+            # obj.hide_set(False)
+
+            # intersect the bounding box
+            negative_min = bounding_box_min
+            negative_max = (min(bounding_box_max[0], bsp_node.dist), bounding_box_max[1], bounding_box_max[2])
+            positive_min = (max(bounding_box_min[0], bsp_node.dist), bounding_box_min[1], bounding_box_min[2])
+            positive_max = bounding_box_max
+
+        elif bsp_node.plane_type == BSPPlaneType.XZ_plane:
+            negative_min = bounding_box_min
+            negative_max = (bounding_box_max[0], min(bounding_box_max[1], bsp_node.dist), bounding_box_max[2])
+
+            positive_min = (bounding_box_min[0], max(bounding_box_min[1], bsp_node.dist), bounding_box_min[2])
+            positive_max = bounding_box_max
+            
+
+        elif bsp_node.plane_type == BSPPlaneType.XY_plane:
+            negative_min = bounding_box_min
+            negative_max = (bounding_box_max[0], bounding_box_max[1], min(bounding_box_max[2], bsp_node.dist))
+            positive_min = (bounding_box_min[0], bounding_box_min[1], max(bounding_box_min[2], bsp_node.dist))
+            positive_max = bounding_box_max
+        
+        else:
+            print(f"error node {i_node} has type {bsp_node.plane_type}")
+            return
+
+        # recurse
+        #  child on negative side of dividing plane
+        if bsp_node.children[0] != -1:
+            self.create_BSP_plane(bsp_node.children[0], negative_min, negative_max, depth+1)
+ 
+        # on positive side
+        if bsp_node.children[1] != -1:
+            self.create_BSP_plane(bsp_node.children[1], positive_min, positive_max, depth+1)
+
 
     def load_object(self, export_order):
         """ Load WoW WMO group as an object to the Blender scene """
@@ -492,6 +679,11 @@ class BlenderWMOSceneGroup:
             collision_vg = nobj.vertex_groups.new(name="Collision")
             collision_vg.add(collision_indices, 1.0, 'ADD')
             nobj.wow_wmo_vertex_info.vertex_group = collision_vg.name
+
+        #render BSP bounding boxes for debugging only
+        render_BSP_nodes = False
+        if render_BSP_nodes:
+            self.create_BSP_render(0, group.mogp.bounding_box_corner1, group.mogp.bounding_box_corner2, 0) # group BB
 
         # add WMO group properties
         nobj.wow_wmo_group.export_order = export_order
