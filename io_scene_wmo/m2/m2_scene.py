@@ -2661,8 +2661,17 @@ class BlenderM2Scene:
 
         def write_bone(cpd, pair):
             for path in cpd.get_paths():
-                bone = re.search('"(.+?)"',path).group(1)
-                curve_type = re.search('([a-zA-Z_]+)$',path).group(0)
+                bone_str = re.search('"(.+?)"',path)
+                if not bone_str:
+                    print(f"Warning: FCurve {path} doesn't reference a bone")
+                    continue
+                bone = bone_str.group(1)
+
+                curve_type_str = re.search('([a-zA-Z_]+)$',path)
+                if not curve_type_str:
+                    print(f"Warning: FCurve {path} doesn't have a proper type")
+                    continue
+                curve_type = curve_type_str.group(0)
 
                 if not bone in self.bone_ids:
                     print(f"Warning: FCurve {path} references non-existing bone {bone}")

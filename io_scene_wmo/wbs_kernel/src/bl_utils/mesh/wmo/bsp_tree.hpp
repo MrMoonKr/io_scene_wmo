@@ -50,7 +50,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
   private:
 
     void _generate_bsp();
-    std::int16_t _add_node(BoundingBox  const& box, std::vector<std::uint32_t> const& faces_in_box);
+    std::int16_t _add_node(BoundingBox  const& box, std::vector<std::uint32_t> const& faces_in_box, int depth);
 
     // Return true if AABB and triangle overlap
     [[nodiscard]]
@@ -79,7 +79,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
     // split box in two smaller ones, at dist calculated internally
     [[nodiscard]]
-    static std::tuple<float, BoundingBox, BoundingBox> _split_box(BoundingBox const& box, BSPPlaneType axis);
+    std::tuple<float, BoundingBox, BoundingBox> _split_box(BoundingBox const& box, BSPPlaneType axis, const std::vector<std::uint32_t>& faces_in_box);
 
     std::vector<math_utils::Vector3D> const& _vertices;
     std::vector<std::uint16_t> const& _triangle_indices;

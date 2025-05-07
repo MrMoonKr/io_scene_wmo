@@ -28,22 +28,30 @@ void BSPTree::_generate_bsp()
     faces[i] = i;
   }
 
-  _add_node(_bb_box, faces);
+  _add_node(_bb_box, faces, 0);
 }
 
-std::int16_t BSPTree::_add_node(const BoundingBox& box, const std::vector<std::uint32_t>& faces_in_box)
+std::int16_t BSPTree::_add_node(const BoundingBox& box, const std::vector<std::uint32_t>& faces_in_box, int depth)
 {
+  // Max depth for safety, blizz WMOs rarely seem to go beyond depth 9. We're doing something really wrong if we reach that
+  const int MAX_DEPTH = 16;
+  const int MIN_FACES = _node_size / 2;
+  constexpr float MIN_SPLIT_RATIO = 0.2f;
+  constexpr float MAX_DUPLICATION_RATIO = 1.3f;
+
   std::int16_t i_node = _nodes.size();
 
   BSPNode& node = _nodes.emplace_back();
 
+  uint32_t total_size  = faces_in_box.size();
+
   // part contain less than 30 polygons, lets end this, add final node
-  if (faces_in_box.size() <= _node_size)
+  if (depth > MAX_DEPTH || total_size <= _node_size)
   {
     node.plane_type = BSPPlaneType::Leaf;
     node.children[0] = -1;
     node.children[1] = -1;
-    node.num_faces = faces_in_box.size();
+    node.num_faces = total_size;
     node.first_face = _faces.size();
     node.dist = 0.f;
 
@@ -75,46 +83,51 @@ std::int16_t BSPTree::_add_node(const BoundingBox& box, const std::vector<std::u
     plane_type = BSPPlaneType::XY_plane;
   }
 
-  auto [split_dist, child1_box, child2_box] = BSPTree::_split_box(box, plane_type);
+  auto [split_dist, child1_box, child2_box] = BSPTree::_split_box(box, plane_type, faces_in_box);
 
 
   // caculate faces in child1 box
-  std::vector<std::uint32_t> child1_faces;
+  std::vector<std::uint32_t> child1_faces, child2_faces;
   for (auto f : faces_in_box)
   {
-    std::array<Vector3D, 3> tri = {_vertices[_triangle_indices[f * 3]]
-                                  , _vertices[_triangle_indices[f * 3 + 1]]
-                                  , _vertices[_triangle_indices[f * 3 + 2]]};
-
-    if (BSPTree::_collide_box_tri(child1_box, tri))
-      child1_faces.emplace_back(f);
+      std::array<Vector3D, 3> tri = {
+          _vertices[_triangle_indices[f * 3]],
+          _vertices[_triangle_indices[f * 3 + 1]],
+          _vertices[_triangle_indices[f * 3 + 2]]
+      };
+      if (_collide_box_tri(child1_box, tri))
+        child1_faces.push_back(f);
+      if (_collide_box_tri(child2_box, tri))
+        child2_faces.push_back(f);
   }
 
-  // calculate faces in child2 box
-  std::vector<std::uint32_t> child2_faces;
-  for (auto f : faces_in_box)
+  uint32_t child1_size = child1_faces.size();
+  uint32_t child2_size = child2_faces.size();
+
+  float duplication_ratio = (float)(child1_size + child2_size) / total_size;
+  float ratio = float(std::min(child1_size, child2_size)) / float(total_size); // distribution ratio between the two children
+  // allow up to 20% duplicated faces
+  if ( (duplication_ratio > MAX_DUPLICATION_RATIO /*&& total_size <= (_node_size * 2)*/) // detect ineffective splits, if size didn't reduce, it will recurse endlessly. Mostly caused by duplicate faces
+      || child1_size < MIN_FACES || child2_size < MIN_FACES // hard minimum requirement to avoid tiny leaves.
+      || (ratio < MIN_SPLIT_RATIO && total_size <= (_node_size * 1.5f)) // soft balance requirement to avoid very lopsided splits
+     ) // the 1.5 and 2.0 _node_size checks are too make sure we don't return too early on too large nodes
   {
-    std::array<Vector3D, 3> tri = {_vertices[_triangle_indices[f * 3]]
-        , _vertices[_triangle_indices[f * 3 + 1]]
-        , _vertices[_triangle_indices[f * 3 + 2]]};
-
-    if (BSPTree::_collide_box_tri(child2_box, tri))
-      child2_faces.emplace_back(f);
+      // fallback to leaf
+      node.plane_type = BSPPlaneType::Leaf;
+      node.children[0] = -1;
+      node.children[1] = -1;
+      node.num_faces = total_size;
+      node.first_face = _faces.size();
+      node.dist = 0.f;
+  
+      _faces.reserve(_faces.size() + total_size);
+      _faces.insert(_faces.end(), faces_in_box.begin(), faces_in_box.end());
+      return i_node;
   }
 
-  std::int16_t i_child1;
-  std::int16_t i_child2;
   // don't add child if there is no faces inside
-
-  if (child1_faces.empty())
-    i_child1 = -1;
-  else
-    i_child1 = _add_node(child1_box, child1_faces);
-
-  if (child2_faces.empty())
-    i_child2 = -1;
-  else
-    i_child2 = _add_node(child2_box, child2_faces);
+  std::int16_t i_child1 = child1_faces.empty() ? -1 : _add_node(child1_box, std::move(child1_faces), depth + 1);
+  std::int16_t i_child2 = child2_faces.empty() ? -1 : _add_node(child2_box, std::move(child2_faces), depth + 1);
 
   auto& this_node = _nodes[i_node]; // needed here because of reference invalidation
   this_node.plane_type = plane_type;
@@ -127,25 +140,51 @@ std::int16_t BSPTree::_add_node(const BoundingBox& box, const std::vector<std::u
   return i_node;
 }
 
-std::tuple<float, BoundingBox, BoundingBox> BSPTree::_split_box(BoundingBox const& box, BSPPlaneType axis)
+std::tuple<float, BoundingBox, BoundingBox> BSPTree::_split_box(BoundingBox const& box, BSPPlaneType axis, const std::vector<std::uint32_t>& faces_in_box)
 {
-  /*
-        # compute average of vertice positions
-        """count = 0
-        sum = 0
-        for iFace in range(len(facesInBox)):
-            sum += vertices[indices[facesInBox[iFace] * 3]][axis]
-            sum += vertices[indices[facesInBox[iFace] * 3 + 1]][axis]
-            sum += vertices[indices[facesInBox[iFace] * 3 + 2]][axis]
-            count += 1
-        splitDist = sum / count
-
-        # if split is out of box, just split in half
-        if(splitDist <= box[0][axis] or splitDist >= box[1][axis]):"""
-   */
-
   assert(axis != BSPPlaneType::Leaf);
-  float split_dist = (box.min[axis] + box.max[axis]) / 2;
+
+  float split_dist = 0.0f;
+
+  // get average pos
+  /*
+  int count = 0;
+  float sum = 0.0f;
+  for (uint32_t f : faces_in_box)
+  {
+    sum += _vertices[_triangle_indices[f * 3]][axis];
+    sum += _vertices[_triangle_indices[f * 3 + 1]][axis];
+    sum += _vertices[_triangle_indices[f * 3 + 2]][axis];
+    count ++;
+  }
+  float split_dist = sum / count;
+
+*/
+
+  // get median position
+  std::vector<float> positions;
+  for (uint32_t f : faces_in_box)
+  {
+      const auto& v0 = _vertices[_triangle_indices[f * 3]];
+      const auto& v1 = _vertices[_triangle_indices[f * 3 + 1]];
+      const auto& v2 = _vertices[_triangle_indices[f * 3 + 2]];
+
+      positions.push_back(v0[axis]);
+      positions.push_back(v1[axis]);
+      positions.push_back(v2[axis]);
+  }
+  // Sort the positions along the axis to find the median
+  std::sort(positions.begin(), positions.end());
+  // Calculate the median
+  split_dist = positions[positions.size() / 2];
+  /////
+
+  // if split is out of box, just use center
+  if (split_dist <= box.min[axis] || split_dist >= box.max[axis] || split_dist == 0.0f)
+  {
+    // center of Bounding box
+    split_dist = (box.min[axis] + box.max[axis]) / 2;
+  }
 
   BoundingBox new_box1 = box;
   new_box1.max[axis] = split_dist;
@@ -154,7 +193,7 @@ std::tuple<float, BoundingBox, BoundingBox> BSPTree::_split_box(BoundingBox cons
   new_box2.min[axis] = split_dist;
 
   //split dist absolute coordinate on split axis
-  //ret_splitDist = splitDist - ((box[0][axis] + box[1][axis]) / 2)
+  // auto ret_splitDist = split_dist - ((box.min[axis] + box.max[axis]) / 2);
 
   return {split_dist, new_box1, new_box2};
 }
