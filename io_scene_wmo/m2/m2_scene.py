@@ -319,20 +319,7 @@ class BlenderM2Scene:
             else: # DBC tetxure
 
                 tetxname = get_texture_type_name(texture.type)
-                tex = bpy.data.images.new(os.path.basename(tetxname), 256, 256)   
-
-                from .ui.panels.creature_editor import get_creature_model_data, get_creature_display_infos
-                
-                try:
-                    cr_model_data_entries = get_creature_model_data(self, bpy.context)
-                    
-                    bpy.context.scene.wow_m2_creature.CreatureModelData = cr_model_data_entries[1][0]
-                    
-                    cr_display_infos = get_creature_display_infos(self, bpy.context)
-
-                    bpy.context.scene.wow_m2_creature.CreatureDisplayInfo = cr_display_infos[1][0]
-                except IndexError:
-                    print("Creature model data or display info couldnt be loaded")
+                tex = bpy.data.images.new(os.path.basename(tetxname), 256, 256)
 
         tex.wow_m2_texture.enabled = True
         tex.wow_m2_texture.flags = parse_bitfield(texture.flags, 0x2)

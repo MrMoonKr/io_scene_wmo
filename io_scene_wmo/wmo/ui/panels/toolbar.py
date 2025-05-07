@@ -60,6 +60,7 @@ def update_wow_wmo_culling(self, context):
 
 def get_doodad_sets(self, context):
     has_global = False
+    global_col = None
     doodad_set_collections = set()
     doodad_sets = []
 
@@ -67,17 +68,18 @@ def get_doodad_sets(self, context):
     if wmo_model_collection:
         for set_collection in get_or_create_collection(wmo_model_collection, SpecialCollections.Doodads.name).children:
 
-            if set_collection.name != "Set_$DefaultGlobal":
+            if "Set_$DefaultGlobal" not in set_collection.name:
                 doodad_set_collections.add(set_collection)
             else:
                 has_global = True
+                global_col = set_collection
 
     for index, set_collection in enumerate(sorted(doodad_set_collections, key=lambda x: x.name), 1 + has_global):
         doodad_sets.append((set_collection.name, set_collection.name, "", 'SCENE_DATA', index))
 
     doodad_sets.insert(0, ("None", "No set", "", 'X', 0))
     if has_global:
-        doodad_sets.insert(1, ("Set_$DefaultGlobal", "Set_$DefaultGlobal", "", 'WORLD', 1))
+        doodad_sets.insert(1, (global_col.name, "Set_$DefaultGlobal", "", 'WORLD', 1))
 
     return doodad_sets
 
@@ -127,6 +129,7 @@ class WMO_PT_tools_object_mode_display(bpy.types.Panel):
 
 
 class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
+    
     bl_label = 'Add to scene'
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -134,11 +137,19 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
     bl_category = 'WMO'
 
     def draw(self, context):
+
         layout = self.layout.split()
 
-        if bpy.context.scene.wow_scene.doodadset_mode == False:
-            col = layout.column(align=True)
+        wow_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
 
+        col = layout.column(align=True)
+
+        if wow_model_collection:
+            col.label(text=f'WMO: {wow_model_collection.name}')
+            col.separator()
+
+
+        if bpy.context.scene.wow_scene.doodadset_mode == False:
             col.separator()
             col1_col = col.column(align=True)
             col1_row0 = col1_col.row(align=True)
@@ -168,8 +179,6 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
                             icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
             col1_row5.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
         else:
-            col = layout.column(align=True)
-
             col.separator()
             col1_col = col.column(align=True)
             col1_row0 = col1_col.row(align=True)

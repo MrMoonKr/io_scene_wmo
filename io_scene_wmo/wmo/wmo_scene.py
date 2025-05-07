@@ -10,6 +10,7 @@ from bmesh.types import BMVert
 from math import sqrt, atan2, pi
 from typing import Dict, List
 
+
 from .bl_render import update_wmo_mat_node_tree, load_wmo_shader_dependencies, BlenderWMOMaterialRenderFlags
 from .utils.fogs import create_fog_object
 from .utils.materials import add_ghost_material, load_texture
@@ -19,6 +20,7 @@ from ..ui.preferences import get_project_preferences
 from ..utils.misc import find_nearest_object
 from ..wbs_kernel.wmo_utils import CWMOGeometryBatcher, WMOGeometryBatcherMeshParams
 from .ui.collections import get_wmo_collection, SpecialCollections, get_wmo_groups_list
+from ..utils.collections import get_current_wow_model_collection
 
 from ..pywowlib.file_formats.wmo_format_root import GroupInfo, PortalInfo, PortalRelation, Fog
 from ..pywowlib.wmo_file import WMOFile
@@ -407,7 +409,10 @@ class BlenderWMOScene:
 
     def load_properties(self):
         """ Load global WoW WMO properties """
-        properties = bpy.context.scene.wow_wmo_root
+
+        wow_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+        
+        properties = wow_model_collection.wow_wmo
         properties.ambient_color = (self.wmo.mohd.ambient_color[0] / 255,
                                     self.wmo.mohd.ambient_color[1] / 255,
                                     self.wmo.mohd.ambient_color[2] / 255,
@@ -590,10 +595,19 @@ class BlenderWMOScene:
             return (w / norm, x / norm, y / norm, z / norm)  
 
         has_global = False
+        set_counter = 1
 
         if len(self.bl_doodad_sets):
 
             for set_name, doodads in tqdm(self.bl_doodad_sets.items(), desc='Saving doodad sets', ascii=True):
+                
+                if set_name.startswith("Set_$DefaultGlobal"):
+                    if not has_global:
+                        set_name = "Set_$DefaultGlobal"
+                        has_global = True
+                    else:
+                        set_name = f"Set_{set_counter:03}"
+                        set_counter += 1
 
                 self.wmo.add_doodad_set(set_name, len(doodads))
 
@@ -622,9 +636,6 @@ class BlenderWMOScene:
                         flags |= int(flag)
 
                     self.wmo.add_doodad(path, position, rotation, scale, doodad_color, flags)
-
-                if set_name == "Set_$DefaultGlobal":
-                    has_global = True
 
         if not has_global:
             self.wmo.add_doodad_set("Set_$DefaultGlobal", 0)
@@ -858,6 +869,10 @@ class BlenderWMOScene:
 
     def save_root_header(self):
 
+        wow_model_collection = get_current_wow_model_collection(bpy.context.scene, 'wow_wmo')
+
+        properties = wow_model_collection.wow_wmo
+
         scene = bpy.context.scene
 
         self.wmo.mver.version = 17
@@ -878,13 +893,13 @@ class BlenderWMOScene:
         self.wmo.mohd.bounding_box_corner2 = bb[1]
 
         # DBC foreign keys
-        self.wmo.mohd.id = scene.wow_wmo_root.wmo_id
-        self.wmo.mosb.skybox = scene.wow_wmo_root.skybox_path
+        self.wmo.mohd.id = properties.wmo_id
+        self.wmo.mosb.skybox = properties.skybox_path
 
-        self.wmo.mohd.ambient_color = [int(scene.wow_wmo_root.ambient_color[0] * 255),
-                                       int(scene.wow_wmo_root.ambient_color[1] * 255),
-                                       int(scene.wow_wmo_root.ambient_color[2] * 255),
-                                       int(scene.wow_wmo_root.ambient_color[3] * 255)]
+        self.wmo.mohd.ambient_color = [int(properties.ambient_color[0] * 255),
+                                       int(properties.ambient_color[1] * 255),
+                                       int(properties.ambient_color[2] * 255),
+                                       int(properties.ambient_color[3] * 255)]
 
         self.wmo.mohd.n_materials = len(self.wmo.momt.materials)
         self.wmo.mohd.n_groups = len(self.wmo.mogi.infos)
@@ -894,7 +909,7 @@ class BlenderWMOScene:
         self.wmo.mohd.n_doodads = len(self.wmo.modd.definitions)
         self.wmo.mohd.n_sets = len(self.wmo.mods.sets)
 
-        flags = scene.wow_wmo_root.flags
+        flags = properties.flags
         if "0" in flags:
             self.wmo.mohd.flags |= 0x01
         if "2" in flags:
@@ -903,7 +918,7 @@ class BlenderWMOScene:
             self.wmo.mohd.flags |= 0x08
         # if "3" in flags:
         #     self.wmo.mohd.flags |= 0x4
-        version = int(bpy.context.scene.wow_scene.version)
+        version = int(scene.wow_scene.version)
         if version >= WoWVersions.WOTLK:
             self.wmo.mohd.flags |= 0x4
 
