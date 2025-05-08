@@ -255,9 +255,8 @@ std::tuple<float, BoundingBox, BoundingBox> BSPTree::_split_box(BoundingBox cons
   // if split is out of box, just use center
   if (split_dist <= box.min[axis] || split_dist >= box.max[axis] || split_dist == 0.0f)
   {
-    std::cout << "[BSPTree] split_dist out of bound = " << axis << std::endl;
+    // std::cout << "[BSPTree] split_dist out of bound = " << axis << std::endl;
     // center of Bounding box
-
     split_dist = (box.min[axis] + box.max[axis]) / 2;
   }
 
