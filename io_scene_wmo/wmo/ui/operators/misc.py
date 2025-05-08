@@ -71,10 +71,9 @@ class WMO_OT_quick_collision(bpy.types.Operator):
 
     leaf_size:  bpy.props.IntProperty(
         name="Node max size",
-        description="Max count of faces for a node in bsp tree",
-        default=60,
-        min=10,
-        soft_max=2500
+        description="Max count of faces for a node in bsp tree. 0 = Dynamic based on face count",
+        default=0, min=0,
+        soft_max=1000
     )
 
     clean_up:  bpy.props.BoolProperty(

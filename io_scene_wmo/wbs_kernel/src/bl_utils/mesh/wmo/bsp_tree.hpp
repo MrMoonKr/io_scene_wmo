@@ -49,7 +49,7 @@ namespace wbs_kernel::bl_utils::mesh::wmo
 
   private:
 
-    void _generate_bsp();
+    void _generate_bsp(int max_depth);
     std::int16_t _add_node(BoundingBox  const& box, std::vector<std::uint32_t> const& faces_in_box, int depth);
 
     // Return true if AABB and triangle overlap
