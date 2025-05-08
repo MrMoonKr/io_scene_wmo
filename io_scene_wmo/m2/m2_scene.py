@@ -11,7 +11,7 @@ from mathutils import Vector
 from ..ui.preferences import get_project_preferences
 from ..third_party.tqdm import tqdm
 
-from .bl_render import update_m2_mat_node_tree
+from .bl_render import load_m2_shader_dependencies, update_m2_mat_node_tree
 from ..render.m2.shaders import M2ShaderPermutations
 from ..utils.misc import parse_bitfield, construct_bitfield, load_game_data
 from ..utils.misc import resolve_texture_path, get_origin_position, get_objs_boundbox_world, get_obj_boundbox_center, \
@@ -349,6 +349,8 @@ class BlenderM2Scene:
             "7": "BlendAdd"
         }
 
+        if 'UV Picker' not in bpy.data.node_groups:
+            load_m2_shader_dependencies(reload_shader=True)                                                  
         def create_m2_material(mat_flags, priority_plane, texture1, t1_flags, t1_bl_mode, t1_mapping, 
                                texture_count, transparency=None, color=None, texture2=None, t2_flags=None, t2_bl_mode=None, t2_mapping=None):
            
@@ -384,7 +386,7 @@ class BlenderM2Scene:
             update_m2_mat_node_tree(blender_mat)   
                    
             return blender_mat
-        
+            
         print("\nImporting materials.")
 
         skin = self.m2.skins[0]
@@ -2506,11 +2508,12 @@ class BlenderM2Scene:
             def get_curves(self, path):
                 return self.compounds[path]
 
-            def ensure_track_length(self, track, seq_id, anim_count, value_type=None):
+            def ensure_track_length(self, track, seq_id, anim_count, value_type=None, fill_tracks=False):
+
                 while len(track.timestamps) <= seq_id:
                     track.timestamps.add(M2Array(uint32))
 
-                if seq_id > 0:
+                if seq_id > 0 or fill_tracks:
                     while len(track.timestamps) < anim_count:
                         track.timestamps.add(M2Array(uint32))
 
@@ -2518,7 +2521,7 @@ class BlenderM2Scene:
                     while len(track.values) <= seq_id:
                         track.values.add(M2Array(value_type))
 
-                    if seq_id > 0:
+                    if seq_id > 0 or fill_tracks:
                         while len(track.values) < anim_count:
                             track.values.add(M2Array(value_type))
 
@@ -2531,7 +2534,7 @@ class BlenderM2Scene:
                 anim_count = self.n_animations
 
                 if fill_tracks and path not in self.compounds:
-                    self.ensure_track_length(m2_track, self.seq_id, anim_count, value_type)
+                    self.ensure_track_length(m2_track, self.seq_id, anim_count, value_type, fill_tracks)                 
                     return
                 
                 fcurves = self.get_curves(path)
@@ -2594,7 +2597,7 @@ class BlenderM2Scene:
                         if cur_time != time:
                             raise ValueError(f'\n\nTrack index {j} frame {j} has a different time value ({cur_time}) from index 0 ({time}) in bone: {path} from action: {self.pair.action.name}')
                 
-                self.ensure_track_length(m2_track, self.seq_id, anim_count, value_type)
+                self.ensure_track_length(m2_track, self.seq_id, anim_count, value_type, fill_tracks)
 
                 m2_times = m2_track.timestamps[self.seq_id]
                 m2_values = m2_track.values[self.seq_id] if value_type is not None else None
@@ -2615,7 +2618,7 @@ class BlenderM2Scene:
                     #     if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
                     #         seq_durations[self.seq_id] = max(33, time)
                     if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
-                        seq_durations[self.seq_id] = time  
+                        seq_durations[self.seq_id] = max(33, time)
 
         def write_light(cpd, pair):
             m2_light = self.m2.root.lights.values[self.light_ids[pair.object.name]]
@@ -2644,7 +2647,7 @@ class BlenderM2Scene:
         def write_attachment(cpd, pair):
             m2_attachment = self.m2.root.attachments.values[self.attachment_ids[pair.object.name]]
             cpd.write_track('wow_m2_attachment.animate',
-                1, m2_attachment.animate_attached,boolean,lambda x: bool(x))
+                1, m2_attachment.animate_attached,boolean,lambda x: bool(x), fill_tracks=True)
 
         def write_bone(cpd, pair):
             for path in cpd.get_paths():
@@ -2660,9 +2663,9 @@ class BlenderM2Scene:
                     continue
                 curve_type = curve_type_str.group(0)
 
-                if not bone in self.bone_ids:
-                    print(f"Warning: FCurve {path} references non-existing bone {bone}")
-                    continue
+                #if not bone in self.bone_ids:
+                    #print(f"Warning: FCurve {path} references non-existing bone {bone}")
+                    #continue
 
                 m2_bone = self.m2.root.bones.values[self.bone_ids[bone]]
                 m2_bone.flags = m2_bone.flags | 512
@@ -2677,7 +2680,7 @@ class BlenderM2Scene:
                         )), fill_tracks = False
                     )
 
-                if curve_type == 'scale':
+                elif curve_type == 'scale':
                     def convert_scale(scale):                  
                         if self.forward_axis == 'X+' or self.forward_axis == 'X-':
                             scale = (scale[1],scale[0],scale[2])
@@ -2687,7 +2690,7 @@ class BlenderM2Scene:
                     cpd.write_track(path,3,m2_bone.scale,vec3D,convert_scale, fill_tracks = False)
 
                 # TODO: this probably doesn't work if bone is not at 0,0,0
-                if curve_type == 'location':
+                elif curve_type == 'location':
                     cpd.write_track(path,3,m2_bone.translation,vec3D,
                         lambda x: self._convert_vec((x[1],-x[0],x[2])), fill_tracks = False)
 
@@ -2707,10 +2710,11 @@ class BlenderM2Scene:
                     if index < len(bpy.context.scene.wow_m2_colors):
                         col_name = bpy.context.scene.wow_m2_colors[index].name
                     else:
-                        print(f'Error: Color: wow_m2_color[{index}] is animated but doesn\'t actually exist in the scene, create it or remove it from the animation')
-                        raise Exception(f'\n\nError: Color: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
+                        print(f'Error: Color: wow_m2_color[{index}] is animated but doesn\'t actually exist in the scene, create it or consider removing it from the animation')
+                        col_name = None               
+                        #raise Exception(f'\n\nError: Color: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
                                         
-                    if col_name in self.color_ids:
+                    if col_name is not None and col_name in self.color_ids:
                         old_index = self.color_ids[col_name]
                         assert old_index == index,f'Color {col_name} has multiple ids: {index},{old_index}'
                     else:
@@ -2729,10 +2733,11 @@ class BlenderM2Scene:
                     if index < len(bpy.context.scene.wow_m2_color_alpha):
                         col_name = bpy.context.scene.wow_m2_color_alpha[index].name
                     else:
-                        print(f'Error: Color Alpha: wow_m2_color_alpha[{index}] is animated but doesn\'t actually exist in the scene, create it or remove it from the animation')
-                        raise Exception(f'\n\nError: Color Alpha: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
-
-                    if data_path == 'value':
+                        col_name = None
+                        print(f'Error: Color Alpha: wow_m2_color_alpha[{index}] is animated but doesn\'t actually exist in the scene, create it or consider removing it from the animation')
+                        #raise Exception(f'\n\nError: Color Alpha: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
+                    
+                    if col_name is not None and data_path == 'value':
                         cpd.write_track(path,1,col.alpha,fixed16,lambda x: int(x * 0x7fff))
 
                 if path.startswith("wow_m2_transparency"):
@@ -2752,16 +2757,17 @@ class BlenderM2Scene:
                     if index < len(bpy.context.scene.wow_m2_transparency):
                         weight_name = bpy.context.scene.wow_m2_transparency[index].name
                     else:
-                        print(f'Error: Transparency: wow_m2_transparency[{index}] is animated but doesn\'t actually exist in the scene, create it or remove it from the animation')
-                        raise Exception(f'\n\nError: Transparency: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
+                        print(f'Error: Transparency: wow_m2_transparency[{index}] is animated but doesn\'t actually exist in the scene, create it or consider removing it from the animation')
+                        weight_name = None
+                        #raise Exception(f'\n\nError: Transparency: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
+                    if weight_name is not None:
+                        if weight_name in self.transparency_ids:
+                            old_index = self.transparency_ids[weight_name]
+                            assert old_index == index,f'Transparency {weight_name} has multiple ids: {index},{old_index}'
+                        else:
+                            self.transparency_ids[weight_name] = index
 
-                    if weight_name in self.transparency_ids:
-                        old_index = self.transparency_ids[weight_name]
-                        assert old_index == index,f'Transparency {weight_name} has multiple ids: {index},{old_index}'
-                    else:
-                        self.transparency_ids[weight_name] = index
-
-                    cpd.write_track(path,1,weight,fixed16, lambda x: int(x*0x7fff))   
+                        cpd.write_track(path,1,weight,fixed16, lambda x: int(x*0x7fff))
 
         def write_event(cpd, pair):
             m2_event = self.m2.root.events[self.event_ids[pair.object.name]]
@@ -2850,7 +2856,7 @@ class BlenderM2Scene:
             #cpd.write_track("wow_m2_particle.tail_cell_track",1,m2_particle.tail_cell_track,uint16,
                 #lambda x: int(x))
             cpd.write_track("wow_m2_particle.active",1,m2_particle.enabled_in,uint8,
-                lambda x: int(x))
+                lambda x: int(x), fill_tracks = True)
 
         def write_camera(cpd, pair):
             m2_camera = self.m2.root.cameras[self.camera_ids[pair.object.name]]
@@ -2899,7 +2905,7 @@ class BlenderM2Scene:
                     int(wow_seq.animation_id),
                     wow_seq.chain_index, # titi, to test
                     (0,0), # set it later
-                    wow_seq.move_speed,
+                    wow_seq.move_speed * self.scale,
                     construct_bitfield(wow_seq.flags),
                     convert_frequency_percentage(wow_seq.frequency),
                     (wow_seq.replay_min, wow_seq.replay_max),
@@ -3050,7 +3056,7 @@ class BlenderM2Scene:
             # security checks
 
             if not mesh.uv_layers.active:
-                raise Exception("Mesh <<{}>> has no UV map.".format(obj.name))
+                raise Exception("Mesh <<{}>> has no UV Map.".format(obj.name))
             
             ntexanim = 0
             tt_controller_id_uv1 = None
@@ -3059,7 +3065,8 @@ class BlenderM2Scene:
             # apply all modifiers
             if len(obj.modifiers):
                 for modifier in obj.modifiers:
-                    bpy.ops.object.modifier_apply(modifier=modifier.name)
+                    if 'M2TexTransform' not in modifier.name:
+                        bpy.ops.object.modifier_apply(modifier=modifier.name)
             
             #Temporal console to hide Blender's removing vertices messages
             temporal_console_output = io.StringIO()
@@ -3209,7 +3216,7 @@ class BlenderM2Scene:
 
                 if num_bones > 64:
                     bpy.data.objects.remove(new_obj, do_unlink=True)  
-                    raise Exception(f"\n\nWarning: The number of bones affecting the mesh: {obj.name} is {num_bones}, which exceeds the limit of 64! Separate it into more meshes, and try again")
+                    raise Exception(f"\n\nWarning: The number of bones affecting the mesh: {obj.name} is {num_bones}, which exceeds the limit of 64! Separate it into more objects, and try again")
 
             else:
                 bone_indices = [[0, 0, 0, 0] for _ in mesh.vertices]
@@ -3236,9 +3243,8 @@ class BlenderM2Scene:
                             else:
                                 first_path = tex_type
 
-                        if bl_texture.wow_m2_texture.texture_type == 0:
-                            if fill_textures and not wow_path:
-                                wow_path = resolve_texture_path(bl_texture.filepath)
+                        if bl_texture.wow_m2_texture.texture_type == 0 and fill_textures and not wow_path:                        
+                            wow_path = resolve_texture_path(bl_texture.filepath)
                         
                         self.m2.add_texture(wow_path,
                                             construct_bitfield(bl_texture.wow_m2_texture.flags),
