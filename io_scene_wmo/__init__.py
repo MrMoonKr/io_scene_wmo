@@ -22,7 +22,7 @@
 bl_info = {
     "name": "WoW Blender Studio",
     "author": "Skarn",
-    "version": (1, 0, 2),
+    "version": (1, 0, 3),
     "blender": (3, 4, 0),
     "description": "Import-Export WoW M2-WMO",
     "category": "Import-Export"
