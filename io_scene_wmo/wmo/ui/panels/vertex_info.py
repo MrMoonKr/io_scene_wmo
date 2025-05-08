@@ -33,9 +33,9 @@ class WowVertexInfoPropertyGroup(bpy.types.PropertyGroup):
 
     node_size:  bpy.props.IntProperty(
         name="Node max size",
-        description="Max count of faces for a node in bsp tree",
-        default=1500, min=1,
-        soft_max=5000
+        description="Max count of faces for a node in bsp tree on export. 0 = Dynamic based on face count",
+        default=0, min=0,
+        soft_max=1000
         )
 
 

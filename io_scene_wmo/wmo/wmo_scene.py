@@ -174,6 +174,14 @@ class BlenderWMOScene:
             obj = bpy.data.objects.new(light_name, light)
             obj.location = self.wmo.molt.lights[i].position
 
+            if wmo_light.type in {0, 2, 3}:
+                light.type = 'POINT'
+            elif wmo_light.type == 1:
+                light.type = 'SPOT'
+
+            # TODO set rotation for spot lights. currently wmo_light.unknown1
+            
+
             light.color = (wmo_light.color[2] / 255, wmo_light.color[1] / 255, wmo_light.color[0] / 255)
             light.energy = wmo_light.intensity
 
