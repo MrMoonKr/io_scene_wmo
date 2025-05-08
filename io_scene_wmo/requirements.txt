@@ -6,3 +6,5 @@ profilehooks
 tqdm
 imgui
 typeguard
+numpy
+cython

@@ -2,6 +2,7 @@ import bpy
 import time
 import os
 import struct
+import timeit
 
 from ..utils.misc import load_game_data
 from ..utils.collections import get_current_wow_model_collection, create_wmo_model_collection, SpecialCollection
@@ -35,7 +36,11 @@ def import_wmo_to_blender_scene(filepath: str, client_version: int, wowfilepath:
 
     with DepsgraphLock():
         wmo = WMOFile(client_version, filepath=filepath)
-        wmo.read()
+        # wmo.read()
+        execution_time  = timeit.timeit(lambda: wmo.read(), number=1)
+        ms_time = execution_time * 1000
+        print(f"Pywowlib WMO read time : {ms_time:.4f} ms")
+
         wmo_scene = BlenderWMOScene(wmo=wmo, prefs=project_preferences)
 
         # set wmo model collection
