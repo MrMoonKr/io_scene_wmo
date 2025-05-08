@@ -43,8 +43,9 @@ BSPTree::BSPTree(std::vector<math_utils::Vector3D> const& vertices
 }
   float combinedRatio = std::max(ratioFaces, ratioDiag);
 
-  int minDepth = 6;
-  int maxDepth = 10;
+  constexpr int minDepth = 6;
+  constexpr int maxDepth = 10;
+
 
   int computedDepth = minDepth + static_cast<int>((maxDepth - minDepth) * combinedRatio);
 
@@ -61,9 +62,13 @@ BSPTree::BSPTree(std::vector<math_utils::Vector3D> const& vertices
                              //? 1 
                              //: std::max(total_faces / 750, 1u);
 
-      unsigned node_size = ratioFaces * 1024.0f;
-      unsigned clamped = std::clamp(node_size, 1u, 1024u);
-      _node_size = clamped;
+    constexpr unsigned int min_node_size = 10;
+    constexpr unsigned int max_node_size = 1024;
+
+    unsigned node_size = ratioFaces * 1024.0f;
+    unsigned clamped = std::clamp(node_size, min_node_size, max_node_size);
+    _node_size = clamped;
+
   }
   else
   {
