@@ -683,7 +683,7 @@ class BlenderWMOSceneGroup:
             nobj.wow_wmo_vertex_info.vertex_group = collision_vg.name
 
         #render BSP bounding boxes for debugging only
-        render_BSP_nodes = True
+        render_BSP_nodes = False
         if render_BSP_nodes:
             self.create_BSP_render(0, group.mogp.bounding_box_corner1, group.mogp.bounding_box_corner2, 0) # group BB
 
