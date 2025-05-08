@@ -97,9 +97,9 @@ def import_m2(version, filepath, is_local_file, time_import_method):
     bl_m2 = m2_scene.BlenderM2Scene(m2_file, project_preferences)
 
     cache_dir = project_preferences.cache_dir_path
-    end_index = filepath.find(cache_dir) + len(cache_dir) + 1
+    end_index = filepath.find(cache_dir) + len(cache_dir)
     m2_filepath = filepath[end_index:]
-
+    
     if not is_local_file:
         bpy.context.scene.wow_scene.game_path = m2_filepath
     else:
@@ -109,6 +109,10 @@ def import_m2(version, filepath, is_local_file, time_import_method):
         base_path_index = next((path_parts.index(cat) for cat in wow_root_folders if cat in path_parts), 0)
         
         bpy.context.scene.wow_scene.game_path = os.sep.join(path_parts[base_path_index:])
+        
+        print('Normalized path', normalized_path)
+        print('path_parts', path_parts)
+        print('base_path_index', base_path_index)
 
     #import cProfile
     #def profile_import_animations(instance):
