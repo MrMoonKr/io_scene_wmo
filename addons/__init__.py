@@ -21,9 +21,9 @@
 
 bl_info = {
     "name": "WoW Blender Studio",
-    "author": "Skarn",
-    "version": (1, 0, 3),
-    "blender": (3, 4, 0),
+    "author": "MrMoonKr, Skarn",
+    "version": (1, 1, 0),
+    "blender": (4, 4, 0),
     "description": "Import-Export WoW M2-WMO",
     "category": "Import-Export"
 }
@@ -33,20 +33,23 @@ import sys
 import traceback
 import bpy
 import bpy.utils.previews
+from bpy.types import ImagePreview
 from bpy.props import StringProperty
+from bpy.utils.previews import ImagePreviewCollection
 from . import auto_load
 
-PACKAGE_NAME = __package__
+
+PACKAGE_NAME    = __package__
 
 # include custom lib vendoring dir
-parent_dir = os.path.abspath(os.path.dirname(__file__))
-vendor_dir = os.path.join(parent_dir, 'third_party')
+parent_dir      = os.path.abspath( os.path.dirname( __file__ ) )
+vendor_dir      = os.path.join( parent_dir, 'third_party' )
 
-sys.path.append(vendor_dir)
+sys.path.append( vendor_dir )
 
 # load custom icons
-ui_icons = {}
-pcoll = None
+ui_icons: dict[str,int] = {}
+pcoll: ImagePreviewCollection = None
 
 
 
@@ -56,10 +59,12 @@ def register():
 
     pcoll = bpy.utils.previews.new()
 
-    icons_dir = os.path.join(os.path.dirname(__file__), "icons")
+    icons_dir = os.path.join( os.path.dirname( __file__ ), "icons" )
 
-    for file in os.listdir(icons_dir):
-        pcoll.load(os.path.splitext(file)[0].upper(), os.path.join(icons_dir, file), 'IMAGE')
+    for file in os.listdir( icons_dir ):
+        pcoll.load( name=os.path.splitext(file)[0].upper(), 
+                    filepath=os.path.join( icons_dir, file ), 
+                    filetype='IMAGE' )
 
     for name, icon_file in pcoll.items():
         ui_icons[name] = icon_file.icon_id
@@ -83,7 +88,7 @@ def unregister():
         traceback.print_exc()
 
     global pcoll
-    bpy.utils.previews.remove(pcoll)
+    bpy.utils.previews.remove( pcoll )
 
     global ui_icons
     ui_icons = {}
