@@ -54,6 +54,8 @@ pcoll: ImagePreviewCollection = None
 
 
 def register():
+    print( "[io_scene_wmo] register() 호출됨..." )
+    
     global pcoll
     global ui_icons
 
@@ -80,6 +82,8 @@ def register():
 
 
 def unregister():
+    print( "[io_scene_wmo] unregister() 호출됨..." )
+    
     try:
         auto_load.unregister()
         print("Unregistered WoW Blender Studio")
