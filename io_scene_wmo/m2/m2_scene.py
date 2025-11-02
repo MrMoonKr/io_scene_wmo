@@ -1,30 +1,41 @@
+import ctypes
+import io
 import os
 import re
-
-from math import sqrt, isinf, asin, atan2, sin, cos
+import sys
+import traceback
 from functools import partial
+from math import asin, atan2, cos, isinf, sin, sqrt
 
 import bpy
-import sys, io
-import ctypes
 from mathutils import Vector
-from ..ui.preferences import get_project_preferences
-from ..third_party.tqdm import tqdm
 
-from .bl_render import load_m2_shader_dependencies, update_m2_mat_node_tree
-from ..render.m2.shaders import M2ShaderPermutations
-from ..utils.misc import parse_bitfield, construct_bitfield, load_game_data
-from ..utils.misc import resolve_texture_path, get_origin_position, get_objs_boundbox_world, get_obj_boundbox_center, \
-    get_obj_radius
-from .ui.enums import mesh_part_id_menu, TEXTURE_TYPES, get_texture_type_name
-from .ui.panels.camera import update_follow_path_constraints
-from .ui.panels.animation_editor import convert_frequency_percentage, get_frequency_percentage
-from ..pywowlib.enums.m2_enums import M2SkinMeshPartID, M2AttachmentTypes, M2EventTokens, M2SequenceNames
-from ..pywowlib.file_formats.wow_common_types import *
+from ..pywowlib.enums.m2_enums import M2AttachmentTypes, M2EventTokens, M2SequenceNames, M2SkinMeshPartID
 from ..pywowlib.file_formats.m2_format import *
-from ..pywowlib.m2_file import M2File
+from ..pywowlib.file_formats.wow_common_types import *
 from ..pywowlib.io_utils.types import vec3D
-from .util import _find_final_alias, make_fcurve_compound,get_bone_groups
+from ..pywowlib.m2_file import M2File
+from ..render.m2.shaders import M2ShaderPermutations
+from ..third_party.tqdm import tqdm
+from ..ui.preferences import get_project_preferences
+from ..utils.misc import (
+    construct_bitfield,
+    get_obj_boundbox_center,
+    get_obj_radius,
+    get_objs_boundbox_world,
+    get_origin_position,
+    load_game_data,
+    parse_bitfield,
+    resolve_texture_path,
+)
+from . import bl_render
+from . import util as util
+from .bl_render import load_m2_shader_dependencies, update_m2_mat_node_tree
+from .operations import m2_action_logger as log
+from .ui.enums import TEXTURE_TYPES, get_texture_type_name, mesh_part_id_menu
+from .ui.panels.animation_editor import convert_frequency_percentage, get_frequency_percentage
+from .ui.panels.camera import update_follow_path_constraints
+from .util import get_bone_groups, make_fcurve_compound, _find_final_alias
 
 class BlenderM2Scene:
     """ This class is used for assembling a Blender scene from an M2 file or saving the scene back to it."""
@@ -60,6 +71,7 @@ class BlenderM2Scene:
         self.scale = 1
         self.rig = None
         self.collision_mesh = None
+        self.color_transparency = None
         self.settings = prefs
         self.actions = {} # maps action names to actions
         self.final_textures = {}
@@ -67,277 +79,274 @@ class BlenderM2Scene:
         self.final_events = {}
 
         self.scene = bpy.context.scene
+        
+        render = self.scene.render
+        self.fps = render.fps / render.fps_base
 
-    def load_colors(self, timestamp_convert):
+    def convert_timestamps(self, timestamps, convert=True):
+        """Convert a list (or iterable) of timestamps to frames if convert=True."""
+        for i, ts in enumerate(timestamps):
+            if convert:
+                yield i, int(round(ts * (self.fps / 1000)))
+            else:
+                yield i, ts
 
+    def load_colors(self, collection, timestamp_convert):
+        """Import M2 color animation data into the unified color_transparency object."""
+
+        # --- Internal animation helpers ---
         def animate_color(anim_pair, color_track, color_index, anim_index):
-
             action = anim_pair.action
-
             try:
                 frames = color_track.timestamps[anim_index]
                 track = color_track.values[anim_index]
             except IndexError:
                 return
-
-            if not len(frames):
+            if not frames:
                 return
 
-            # create fcurve
-            f_curves = [action.fcurves.new(data_path='wow_m2_colors[{}].color'.format(color_index),
-                                           index=k, action_group='Color_{}'.format(color_index)) for k in range(3)]
+            fcurves = [
+                action.fcurves.new(
+                    data_path=f"wow_m2_color_transparency.colors[{color_index}].color",
+                    index=k,
+                    action_group=f"Color_{color_index}"
+                )
+                for k in range(3)
+            ]
+            for fc in fcurves:
+                fc.keyframe_points.add(len(frames))
 
-            # init keyframes on the curve
-            for f_curve in f_curves:
-                f_curve.keyframe_points.add(len(frames))
-
-            # set translation values for each channel
-            for i, timestamp in enumerate(frames):
-                if timestamp_convert == 'Convert':
-                    frame = int(round( timestamp * ( bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000 )))
-                else: 
-                    frame = timestamp
-
+            for i, frame in self.convert_timestamps(frames, convert=(timestamp_convert == "Convert")):
                 for j in range(3):
-                    keyframe = f_curves[j].keyframe_points[i]
-                    keyframe.co = frame, track[i][j]
-                    keyframe.interpolation = 'LINEAR' if color_track.interpolation_type == 1 else 'CONSTANT'
+                    key = fcurves[j].keyframe_points[i]
+                    key.co = frame, track[i][j]
+                    key.interpolation = "LINEAR" if color_track.interpolation_type == 1 else "CONSTANT"
 
         def animate_alpha(anim_pair, alpha_track, color_index, anim_index):
-
             action = anim_pair.action
-
             try:
                 frames = alpha_track.timestamps[anim_index]
                 track = alpha_track.values[anim_index]
             except IndexError:
                 return
-
-            if not len(frames):
+            if not frames:
                 return
 
-            # create fcurve
-            f_curve = action.fcurves.new(data_path='wow_m2_color_alpha[{}].value'.format(color_index),
-                                         index=0, action_group='Color_{}_Alpha'.format(color_index))
+            fcurve = action.fcurves.new(
+                data_path=f"wow_m2_color_transparency.colors[{color_index}].alpha",
+                index=0,
+                action_group=f"Color_{color_index}_Alpha"
+            )
+            fcurve.keyframe_points.add(len(frames))
 
-            # init keyframes on the curve
-            f_curve.keyframe_points.add(len(frames))
+            for i, frame in self.convert_timestamps(frames, convert=(timestamp_convert == "Convert")):
+                key = fcurve.keyframe_points[i]
+                key.co = frame, track[i] / 0x7FFF
+                key.interpolation = "LINEAR" if alpha_track.interpolation_type == 1 else "CONSTANT"
 
-            # set translation values for each channel
-            for i, timestamp in enumerate(frames):
-                if timestamp_convert == 'Convert':
-                    frame = int(round( timestamp * ( bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000 )))
-                else: 
-                    frame = timestamp
+        # --- Create or reuse unified controller ---
+        obj, props = util.ensure_color_transparency_controller(collection)
+        self.color_transparency = obj
 
-                keyframe = f_curve.keyframe_points[i]
-                keyframe.co = frame, track[i] / 0x7FFF
-                keyframe.interpolation = 'LINEAR' if alpha_track.interpolation_type == 1 else 'CONSTANT'
-
-        if not len(self.m2.root.colors):
-            print("\nNo colors found to import.")
+        if not self.m2.root.colors:
+            log.info("No colors found to import.")
             return
 
-        else:
-            print("\nImporting colors.")
+        # --- Main loop ---
+        for i, m2_color in tqdm(enumerate(self.m2.root.colors), total=len(self.m2.root.colors), desc="Importing Colors", ascii=True):
+            # --- Create color slot ---
+            c = props.colors.add()
+            c.name = f"Color_{i}"
 
-        bpy.context.scene.animation_data_create()
-        bpy.context.scene.animation_data.action_blend_type = 'ADD'
-        n_global_sequences = len(self.global_sequences)
-
-        for i, m2_color in enumerate(self.m2.root.colors):
-            bl_color = bpy.context.scene.wow_m2_colors.add()
-            bl_color.name = 'Color_{}'.format(i)
-            bl_color.color = (1.0, 1.0, 1.0)
-
-            bl_alpha = bpy.context.scene.wow_m2_color_alpha.add()
-            bl_alpha.name = 'Color_{}_Alpha'.format(i)
-            bl_alpha.value = 1.0
-
-            # load global sequences
+            # --- Global sequences ---
             for j, seq_index in enumerate(self.global_sequences):
                 anim = bpy.context.scene.wow_m2_animations[j]
-
-                if anim.is_alias: # skip alias anims
+                if anim.is_alias:
                     continue
-                anim_pair = None
-                for pair in anim.anim_pairs:
-                    if pair.type == 'SCENE':
-                        anim_pair = pair
-                        break
-                
+
+                anim_pair = next((p for p in anim.anim_pairs if p.object == obj), None)
+                if not anim_pair:
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = "OBJECT"
+                    anim_pair.object = obj
+
+                # Only create an action if there’s something to animate
+                needs_color = (m2_color.color.global_sequence == seq_index)
+                needs_alpha = (m2_color.alpha.global_sequence == seq_index)
+                if not (needs_color or needs_alpha):
+                    continue
+
+                # Ensure action exists
+                self._bl_create_action(anim_pair, f"Color_{i}_GlobalSeq_{j}")
+
                 if not anim_pair.action:
-                    print("\nFailed to animate color #{}, no action for global seq #{}".format(i, j))
+                    log.warn(f"Failed to animate color #{i}, no action for global seq #{j}")
                     continue
 
-                if m2_color.color.global_sequence == seq_index:
+                if needs_color:
                     animate_color(anim_pair, m2_color.color, i, 0)
-
-                if m2_color.alpha.global_sequence == seq_index:
+                if needs_alpha:
                     animate_alpha(anim_pair, m2_color.alpha, i, 0)
 
-            # load animations
+            # --- Per-animation ---
             for j, anim_index in enumerate(self.animations):
-                anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
-
-                if anim.is_alias: # skip alias anims
+                anim = bpy.context.scene.wow_m2_animations[j + len(self.global_sequences)]
+                if anim.is_alias:
                     continue
-                anim_pair = None
-                for pair in anim.anim_pairs:
-                    if pair.type == 'SCENE':
-                        anim_pair = pair
-                        break
-                
+
+                anim_pair = next((p for p in anim.anim_pairs if p.object == obj), None)
+                if not anim_pair:
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = "OBJECT"
+                    anim_pair.object = obj
+
+                # Only create an action if this color isn’t controlled by a global sequence
+                needs_color = (m2_color.color.global_sequence < 0)
+                needs_alpha = (m2_color.alpha.global_sequence < 0)
+                if not (needs_color or needs_alpha):
+                    continue
+
+                self._bl_create_action(anim_pair, f"Color_{i}_Anim_{anim_index}")
+
                 if not anim_pair.action:
-                    print("\nFailed to animate color #{}, no action for anim #{}".format(i, (j - n_global_sequences)))
-                    print(anim.name)
-                    continue   
+                    log.warn(f"Failed to animate color #{i}, no action for anim #{anim_index}")
+                    continue
 
-                if m2_color.color.global_sequence < 0:
+                if needs_color:
                     animate_color(anim_pair, m2_color.color, i, anim_index)
-
-                if m2_color.alpha.global_sequence < 0:
+                if needs_alpha:
                     animate_alpha(anim_pair, m2_color.alpha, i, anim_index)
 
-    def load_transparency(self, timestamp_convert):
+        log.info(f"Imported {len(self.m2.root.colors)} colors into {obj.name}.")
 
+    def load_transparency(self, collection, timestamp_convert):
+        """Import M2 transparency (texture weight) animation data into the unified color_transparency object."""
+
+        # --- Helper for animation ---
         def animate_transparency(anim_pair, trans_track, trans_index, anim_index):
-
             action = anim_pair.action
-
             try:
                 frames = trans_track.timestamps[anim_index]
                 track = trans_track.values[anim_index]
             except IndexError:
                 return
-
-            if not len(frames):
+            if not frames:
                 return
 
-            # create fcurve
-            f_curve = action.fcurves.new(data_path='wow_m2_transparency[{}].value'.format(trans_index),
-                                         index=0, action_group='Transparency_{}'.format(trans_index))
+            fcurve = action.fcurves.new(
+                data_path=f"wow_m2_color_transparency.transparencies[{trans_index}].value",
+                index=0,
+                action_group=f"Transparency_{trans_index}"
+            )
+            fcurve.keyframe_points.add(len(frames))
 
-            # init keyframes on the curve
-            f_curve.keyframe_points.add(len(frames))
+            for i, frame in self.convert_timestamps(frames, convert=(timestamp_convert == "Convert")):
+                key = fcurve.keyframe_points[i]
+                key.co = frame, track[i] / 0x7FFF
+                key.interpolation = "LINEAR" if trans_track.interpolation_type == 1 else "CONSTANT"
 
-            # set translation values for each channel
-            for i, timestamp in enumerate(frames):
-                if timestamp_convert == 'Convert':
-                    frame = int(round( timestamp * ( bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000 )))
-                else: 
-                    frame = timestamp
+        # --- Create or reuse unified controller ---
+        obj, props = util.ensure_color_transparency_controller(collection)
+        self.color_transparency = obj
 
-                keyframe = f_curve.keyframe_points[i]
-                keyframe.co = frame, track[i] / 0x7FFF
-                keyframe.interpolation = 'LINEAR' if trans_track.interpolation_type == 1 else 'CONSTANT'
-
-        if not len(self.m2.root.texture_weights):
-            print("\nNo transparency tracks found to import.")
+        if not self.m2.root.texture_weights:
+            log.info("No transparency tracks found to import.")
             return
 
-        else:
-            print("\nImporting transparency.")
+        # --- Main loop ---
+        for i, m2_trans in tqdm(enumerate(self.m2.root.texture_weights), total=len(self.m2.root.texture_weights), desc="Importing Transparency", ascii=True):
+            # --- Create transparency slot ---
+            t = props.transparencies.add()
+            t.name = f"Transparency_{i}"
 
-        bpy.context.scene.animation_data_create()
-        bpy.context.scene.animation_data.action_blend_type = 'ADD'
-        n_global_sequences = len(self.global_sequences)
-
-        for i, m2_transparency in enumerate(self.m2.root.texture_weights):
-            bl_transparency = bpy.context.scene.wow_m2_transparency.add()
-            bl_transparency.name = 'Transparency_{}'.format(i)
-
-            # load global sequences
+            # --- Global sequences ---
             for j, seq_index in enumerate(self.global_sequences):
                 anim = bpy.context.scene.wow_m2_animations[j]
-
-                if anim.is_alias: # skip alias anims
-                    continue
-                anim_pair = None
-                for pair in anim.anim_pairs:
-                    if pair.type == 'SCENE':
-                        anim_pair = pair
-                        break
-                
-                if not anim_pair.action:
-                    print("\nFailed to animate transparency #{}, no action for global seq #{}".format(i, j))
+                if anim.is_alias:
                     continue
 
-                if m2_transparency.global_sequence == seq_index:
-                    animate_transparency(anim_pair, m2_transparency, i, 0)
+                anim_pair = next((p for p in anim.anim_pairs if p.object == obj), None)
+                if not anim_pair:
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = "OBJECT"
+                    anim_pair.object = obj
 
-            # load animations
+                self._bl_create_action(anim_pair, f"Transparency_{i}_GlobalSeq_{j}")
+
+                if m2_trans.global_sequence == seq_index:
+                    animate_transparency(anim_pair, m2_trans, i, 0)
+
+            # --- Per-animation ---
             for j, anim_index in enumerate(self.animations):
-                anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
-
-                if anim.is_alias: # skip alias anims
+                anim = bpy.context.scene.wow_m2_animations[j + len(self.global_sequences)]
+                if anim.is_alias:
                     continue
-                anim_pair = None
-                for pair in anim.anim_pairs:
-                    if pair.type == 'SCENE':
-                        anim_pair = pair
-                        break
 
-                if not anim_pair.action:
-                    print("\nFailed to animate transparency #{}, no action for anim #{}".format(i, (j - n_global_sequences)))
-                    print(anim.name)
-                    continue
-                if m2_transparency.global_sequence < 0:
-                    animate_transparency(anim_pair, m2_transparency, i, anim_index)
+                anim_pair = next((p for p in anim.anim_pairs if p.object == obj), None)
+                if not anim_pair:
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = "OBJECT"
+                    anim_pair.object = obj
 
-    def load_texture(self,index):
-        # textureid = self.m2.root.texture_lookup_table[index]
+                self._bl_create_action(anim_pair, f"Transparency_{i}_Anim_{anim_index}")
+
+                if m2_trans.global_sequence < 0:
+                    animate_transparency(anim_pair, m2_trans, i, anim_index)
+
+        log.info(f"Imported {len(self.m2.root.texture_weights)} transparency tracks into {obj.name}.")
+
+    def load_texture(self, index):
+        """Load or create a texture for the given M2 texture index."""
+
+        # Return already-loaded texture if available
         if index in self.loaded_textures:
             return self.loaded_textures[index]
-
 
         texture = self.m2.root.textures[index]
         tex_path_png = ""
 
-
-        if texture.type == 0:  # check if texture is hardcoded
-
+        # --- Resolve texture path ---
+        if texture.type == 0:  # Hardcoded texture
             try:
-                tex_path_blp = self.m2.texture_path_map[texture.fdid] \
-                    if texture.fdid else self.m2.texture_path_map[texture.filename.value]
-
-                tex_path_png = os.path.splitext(tex_path_blp)[0] + '.png'
+                tex_path_blp = (
+                    self.m2.texture_path_map[texture.fdid]
+                    if texture.fdid
+                    else self.m2.texture_path_map[texture.filename.value]
+                )
+                tex_path_png = os.path.splitext(tex_path_blp)[0] + ".png"
             except KeyError:
                 pass
 
         tex = None
+
+        # --- Try loading PNG texture if available ---
         if tex_path_png:
-            #print("tex path : " + tex_path_png)
             try:
                 tex = bpy.data.images.load(tex_path_png)
             except RuntimeError:
-                print("\nWarning: failed to load texture \"{}\".".format(tex_path_png))
+                log.warn(f"Failed to load texture '{tex_path_png}'.")
 
+        # --- Create placeholder texture if loading failed ---
         if not tex:
-            if texture.type == 0: # hardcoded
+            if texture.type == 0:  # Hardcoded texture
                 tex = bpy.data.images.new(os.path.basename(texture.filename.value), 256, 256)
-            else: # DBC tetxure
+            else:  # DBC texture
+                tex_name = get_texture_type_name(texture.type)
+                tex = bpy.data.images.new(os.path.basename(tex_name), 256, 256)
 
-                tetxname = get_texture_type_name(texture.type)
-                tex = bpy.data.images.new(os.path.basename(tetxname), 256, 256)
-
+        # --- Apply M2 texture metadata ---
         tex.wow_m2_texture.enabled = True
         tex.wow_m2_texture.flags = parse_bitfield(texture.flags, 0x2)
         tex.wow_m2_texture.texture_type = str(texture.type)
         tex.wow_m2_texture.path = texture.filename.value
 
-        # titi test textures ui
-        #slot = bpy.context.scene.wow_m2_root_elements.textures.add()
-        #slot.pointer = tex
-
+        # Cache loaded texture
         self.loaded_textures[index] = tex
         return tex
-        ####
 
     def load_materials(self):
-
+        """Import M2 material data and build Blender material objects."""
         dbc_textures = False
-
         BLENDING_MODES_DICT = {
             "0": "Opaque",
             "1": "AlphaKey",
@@ -346,79 +355,98 @@ class BlenderM2Scene:
             "4": "Add",
             "5": "Mod",
             "6": "Mod2X",
-            "7": "BlendAdd"
+            "7": "BlendAdd",
         }
 
-        if 'UV Picker' not in bpy.data.node_groups:
-            load_m2_shader_dependencies(reload_shader=True)                                                  
-        def create_m2_material(mat_flags, priority_plane, texture1, t1_flags, t1_bl_mode, t1_mapping, 
-                               texture_count, transparency=None, color=None, texture2=None, t2_flags=None, t2_bl_mode=None, t2_mapping=None):
-           
-            blender_mat = bpy.data.materials.new(name='Unknown')
-            
+        if "UV Picker" not in bpy.data.node_groups:
+            load_m2_shader_dependencies(reload_shader=True)
+
+        def create_m2_material(
+            mat_flags,
+            priority_plane,
+            texture1,
+            t1_flags,
+            t1_bl_mode,
+            t1_mapping,
+            texture_count,
+            transparency=None,
+            color=None,
+            texture2=None,
+            t2_flags=None,
+            t2_bl_mode=None,
+            t2_mapping=None,
+        ):
+            blender_mat = bpy.data.materials.new(name="Unknown")
+
             if transparency is not None:
                 blender_mat.wow_m2_material.transparency = transparency
             if color is not None:
                 blender_mat.wow_m2_material.color = color
-            
+
             blender_mat.wow_m2_material.flags = mat_flags
             blender_mat.wow_m2_material.priority_plane = priority_plane
 
-            #Texture1
-            blender_mat.wow_m2_material.texture_1 = texture1            
+            # Texture 1
+            blender_mat.wow_m2_material.texture_1 = texture1
             blender_mat.wow_m2_material.texture_1_render_flags = t1_flags
             blender_mat.wow_m2_material.texture_1_blending_mode = t1_bl_mode
             blender_mat.wow_m2_material.texture_1_mapping = t1_mapping
 
-            #Texture2
+            # Texture 2
             if texture_count == 2:
                 blender_mat.wow_m2_material.texture_2 = texture2
                 blender_mat.wow_m2_material.texture_2_render_flags = t2_flags
                 blender_mat.wow_m2_material.texture_2_blending_mode = t2_bl_mode
                 blender_mat.wow_m2_material.texture_2_mapping = t2_mapping
 
-                blender_mat.name = 'T1_{}_({})_T2_{}_({})'.format(
-                                    texture1.name, BLENDING_MODES_DICT.get(str(t1_bl_mode), "Unknown"), texture2.name, BLENDING_MODES_DICT.get(str(t2_bl_mode), "Unknown"))
+                blender_mat.name = (
+                    f"T1_{texture1.name}({BLENDING_MODES_DICT.get(str(t1_bl_mode), 'Unknown')})_"
+                    f"T2_{texture2.name}({BLENDING_MODES_DICT.get(str(t2_bl_mode), 'Unknown')})"
+                )
             else:
-                blender_mat.name = 'T1_{}_({})'.format(
-                    texture1.name, BLENDING_MODES_DICT.get(str(t1_bl_mode), "Unknown"))          
+                blender_mat.name = (
+                    f"T1_{texture1.name}({BLENDING_MODES_DICT.get(str(t1_bl_mode), 'Unknown')})"
+                )
 
-            update_m2_mat_node_tree(blender_mat)   
-                   
+            update_m2_mat_node_tree(blender_mat)
             return blender_mat
-            
-        print("\nImporting materials.")
 
         skin = self.m2.skins[0]
-
         flags = parse_bitfield(self.m2.root.global_flags, 0x10)
-
         unique_materials = {}
 
-        for k, tex_unit in enumerate(skin.texture_units):
+        for k, tex_unit in tqdm(enumerate(skin.texture_units), total=len(skin.texture_units), desc="Importing Materials", ascii=True):
             try:
-                m2_mat = self.m2.root.materials[tex_unit.material_index] 
+                m2_mat = self.m2.root.materials[tex_unit.material_index]
             except IndexError:
-                print('\n')
-                m2_mat_error_message = f"Material with index {tex_unit.material_index} not found in M2 file. This may indicate a corrupt M2 file."
-                raise IndexError(m2_mat_error_message) from None
+                msg = (
+                    f"Material with index {tex_unit.material_index} not found in M2 file. "
+                    f"This may indicate a corrupt M2 file."
+                )
+                raise IndexError(msg) from None
 
-            if tex_unit.texture_count == 2 and '8' not in flags:
-                try: 
-                    m2_mat2 = self.m2.root.materials[tex_unit.material_index+1] 
+            # Handle second texture material if applicable
+            if tex_unit.texture_count == 2 and "8" not in flags:
+                try:
+                    m2_mat2 = self.m2.root.materials[tex_unit.material_index + 1]
                 except IndexError as e:
-                    print("\nMaterial for second texture not found, using first texture material:", e)
+                    log.warn(f"Material for second texture not found, using first texture material: {e}")
                     m2_mat2 = m2_mat
 
             t1_flags = t2_flags = ()
             tex1 = t1_bl_mode = t1_mapping = None
             tex2 = t2_bl_mode = t2_mapping = None
-       
+
+            # --- Load textures ---
             for i in range(tex_unit.texture_count):
                 try:
-                    texid = self.m2.root.texture_lookup_table[tex_unit.texture_combo_index + i]
+                    texid = self.m2.root.texture_lookup_table[
+                        tex_unit.texture_combo_index + i
+                    ]
                 except IndexError as e:
-                    print("\nTexture not found, probably messed up m2:", e)
+                    log.warn(f"Texture not found, probably invalid M2: {e}")
+                    continue
+
                 tex = self.load_texture(texid)
                 if i == 0:
                     tex1 = tex
@@ -427,306 +455,347 @@ class BlenderM2Scene:
 
                 texture = self.m2.root.textures[texid]
                 if texture.type != 0:
-                    #We'll use this for loading dbc textures after finishing the import
-                    dbc_textures = True
+                    dbc_textures = True  # Will trigger DBC texture import later
 
-            # bind transparency to material
+            # --- Transparency binding ---
             if tex_unit.texture_weight_combo_index >= 0:
-                real_tw_index = self.m2.root.transparency_lookup_table[tex_unit.texture_weight_combo_index]
-                transparency = bpy.context.scene.wow_m2_transparency[real_tw_index]
-                transparency = transparency.name
+                real_tw_index = self.m2.root.transparency_lookup_table[
+                    tex_unit.texture_weight_combo_index
+                ]
+                transparency = self.color_transparency.wow_m2_color_transparency.transparencies[real_tw_index].name
+            else:
+                transparency = None
 
-            # bind color to material
+            # --- Color binding ---
             color = None
             if tex_unit.color_index >= 0:
                 try:
-                    color = bpy.context.scene.wow_m2_colors[tex_unit.color_index]
-                    color = color.name
-                except:
-                    print(f'TexUnit {k}, references a non-existing color {tex_unit.color_index}, importing without color')
+                    color = self.color_transparency.wow_m2_color_transparency.colors[tex_unit.color_index].name
+                except Exception:
+                    log.warn(
+                        f"TexUnit {k} references non-existing color {tex_unit.color_index}, importing without color."
+                    )
 
-            int_to_enum_mapping = {
-                -1: "Env",
-                0: "UVMap",
-                1: "UVMap.001",
-            }
+            # --- Mapping IDs ---
+            int_to_enum_mapping = {-1: "Env", 0: "UVMap", 1: "UVMap.001"}
 
-            # filling material settings
+            # --- Material parameters ---
             mat_flags = parse_bitfield(tex_unit.flags, 0x80)
             t1_flags = parse_bitfield(m2_mat.flags, 0x800)
-            t1_bl_mode = str(m2_mat.blending_mode)           
-            t1_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index])
-            texture_count = 2 if tex_unit.texture_count == 2  else 1
-                
-            if texture_count == 2 and '8' in flags: #M2 is using global flag for second material override
-                #print("Second material override flag is activated")
+            t1_bl_mode = str(m2_mat.blending_mode)
+            t1_mapping = int_to_enum_mapping.get(
+                self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index]
+            )
+            texture_count = 2 if tex_unit.texture_count == 2 else 1
+
+            # --- Handle dual-texture cases ---
+            if texture_count == 2 and "8" in flags:  # Global flag overrides
                 try:
-                    t2_flags = parse_bitfield(self.m2.root.texture_combiner_combos[tex_unit.shader_id], 0x800)
-                    t2_bl_mode = str(self.m2.root.texture_combiner_combos[tex_unit.shader_id+1])
-                    t2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index+1])
-                except:
-                    print('Texture 2 Flags and Blending Mode not found, trying to use index 0')
+                    t2_flags = parse_bitfield(
+                        self.m2.root.texture_combiner_combos[tex_unit.shader_id], 0x800
+                    )
+                    t2_bl_mode = str(
+                        self.m2.root.texture_combiner_combos[tex_unit.shader_id + 1]
+                    )
+                    t2_mapping = int_to_enum_mapping.get(
+                        self.m2.root.tex_unit_lookup_table[
+                            tex_unit.texture_coord_combo_index + 1
+                        ]
+                    )
+                except Exception:
+                    log.warn("Texture 2 flags or blending mode not found, falling back to index 0.")
                     t2_flags = parse_bitfield(self.m2.root.texture_combiner_combos[0], 0x800)
                     t2_bl_mode = str(self.m2.root.texture_combiner_combos[1])
                     try:
-                        t2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index+1])
-                    except:
-                        print('Second UVMap not found, using first one')
-                        t2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index])
-            elif texture_count == 2 and '8' not in flags:
-                    t2_flags = parse_bitfield(m2_mat2.flags, 0x800)  # render flags
-                    t2_bl_mode = str(m2_mat2.blending_mode)
-                    try: 
-                        t2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index+1])
-                    except IndexError as e:
-                        print("Mapping for second texture not found, using first texture mapping", e)
-                        t2_mapping = int_to_enum_mapping.get(self.m2.root.tex_unit_lookup_table[tex_unit.texture_coord_combo_index])
-                    
-        
+                        t2_mapping = int_to_enum_mapping.get(
+                            self.m2.root.tex_unit_lookup_table[
+                                tex_unit.texture_coord_combo_index + 1
+                            ]
+                        )
+                    except Exception:
+                        log.warn("Second UVMap not found, using first one.")
+                        t2_mapping = int_to_enum_mapping.get(
+                            self.m2.root.tex_unit_lookup_table[
+                                tex_unit.texture_coord_combo_index
+                            ]
+                        )
+
+            elif texture_count == 2 and "8" not in flags:
+                t2_flags = parse_bitfield(m2_mat2.flags, 0x800)
+                t2_bl_mode = str(m2_mat2.blending_mode)
+                try:
+                    t2_mapping = int_to_enum_mapping.get(
+                        self.m2.root.tex_unit_lookup_table[
+                            tex_unit.texture_coord_combo_index + 1
+                        ]
+                    )
+                except IndexError as e:
+                    log.warn(f"Mapping for second texture not found, using first texture mapping: {e}")
+                    t2_mapping = int_to_enum_mapping.get(
+                        self.m2.root.tex_unit_lookup_table[
+                            tex_unit.texture_coord_combo_index
+                        ]
+                    )
+
             priority_plane = tex_unit.priority_plane
 
-            if not tex_unit.skin_section_index in self.materials:
+            # --- Store material by skin section ---
+            if tex_unit.skin_section_index not in self.materials:
                 self.materials[tex_unit.skin_section_index] = []
 
             material_key = (
-                tuple(mat_flags), priority_plane,
-                tex1.name, tuple(t1_flags), t1_bl_mode, t1_mapping,
+                tuple(mat_flags),
+                priority_plane,
+                tex1.name,
+                tuple(t1_flags),
+                t1_bl_mode,
+                t1_mapping,
                 texture_count,
-                transparency, color,
-                tex2.name if tex2 else None, tuple(t2_flags), t2_bl_mode, t2_mapping
+                transparency,
+                color,
+                tex2.name if tex2 else None,
+                tuple(t2_flags),
+                t2_bl_mode,
+                t2_mapping,
             )
-            
+
             if material_key in unique_materials:
                 material = unique_materials[material_key]
             else:
                 material = create_m2_material(
-                    mat_flags, priority_plane,
-                    tex1, t1_flags, t1_bl_mode, t1_mapping,
-                    texture_count, transparency, color,
-                    tex2, t2_flags, t2_bl_mode, t2_mapping
+                    mat_flags,
+                    priority_plane,
+                    tex1,
+                    t1_flags,
+                    t1_bl_mode,
+                    t1_mapping,
+                    texture_count,
+                    transparency,
+                    color,
+                    tex2,
+                    t2_flags,
+                    t2_bl_mode,
+                    t2_mapping,
                 )
-                 
                 unique_materials[material_key] = material
-            
+
             self.materials[tex_unit.skin_section_index].append((material, tex_unit))
-        
+
+        log.info(f"Imported {sum(len(mats) for mats in self.materials.values())} materials.")
+
         return dbc_textures
 
-    def load_armature(self):
-        if not len(self.m2.root.bones):
-            print("\nNo armature found to import.")
-            return
-        
-        print("\nImporting armature")
+    def load_armature(self, collection):
+        bones = self.m2.root.bones
+        model_name = self.m2.root.name.value
 
-        # Create armature
-        armature = bpy.data.armatures.new('{}_Armature'.format(self.m2.root.name.value))
-        rig = bpy.data.objects.new(self.m2.root.name.value, armature)
-        rig.location = (0, 0, 0)
+        if not bones:
+            log.info("No armature found to import.")
+            return
+
+        # Create armature and rig object
+        armature = bpy.data.armatures.new(f"{model_name}_Armature")
+        rig = bpy.data.objects.new(model_name, armature)
+        rig.location = (0.0, 0.0, 0.0)
         self.rig = rig
 
-        # Link the object to the scene
-        bpy.context.collection.objects.link(rig)
+        # Link the armature to the scene and activate it
+        util._link_to_single_collection(rig, collection)
+        
         bpy.context.view_layer.objects.active = rig
-
         bpy.context.view_layer.update()
 
-        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.object.mode_set(mode="EDIT")
 
-        bpy.context.object.data.layers[1] = True
-        bpy.context.object.data.layers[2] = True
-        bpy.context.object.data.layers[3] = True
-        bpy.context.object.data.layers[4] = True
+        # Enable layers 1–4 for organization
+        for i in range(1, 5):
+            bpy.context.object.data.layers[i] = True
 
-        for i, bone in enumerate(self.m2.root.bones):  # add bones to armature.
+        # Create bones
+        for i, bone in tqdm(enumerate(self.m2.root.bones), total=len(self.m2.root.bones), desc="Importing Armature Bones", ascii=True):
             bl_edit_bone = armature.edit_bones.new(bone.name)
             bl_edit_bone.head = Vector(bone.pivot)
+            bl_edit_bone.tail = bl_edit_bone.head + Vector((0.1, 0.0, 0.0))  # small offset along X
 
-            bl_edit_bone.tail.x = bl_edit_bone.head.x + 0.1  # TODO: mess with bones parenting even more
-            bl_edit_bone.tail.y = bl_edit_bone.head.y
-            bl_edit_bone.tail.z = bl_edit_bone.head.z
-
-            bl_edit_bone.wow_m2_bone.sort_index = i
-            bl_edit_bone.wow_m2_bone.flags = parse_bitfield(bone.flags)
-            bl_edit_bone.wow_m2_bone.submesh_id = bone.submesh_id
-            bl_edit_bone.wow_m2_bone.bone_name_crc = ctypes.c_int(bone.bone_name_crc).value
+            wow_bone = bl_edit_bone.wow_m2_bone
+            wow_bone.sort_index = i
+            wow_bone.flags = parse_bitfield(bone.flags)
+            wow_bone.submesh_id = bone.submesh_id
+            wow_bone.bone_name_crc = ctypes.c_int(bone.bone_name_crc).value
 
             try:
-                bl_edit_bone.wow_m2_bone.key_bone_id = str(bone.key_bone_id)
+                wow_bone.key_bone_id = str(bone.key_bone_id)
             except TypeError:
-                print('\nFailed to set keybone ID \"{}\". Unknown keybone ID'.format(bone.key_bone_id))          
-                
-            if 'AT_' in bone.name:
-                bl_edit_bone.layers[0] = False
-                bl_edit_bone.layers[1] = False
-                bl_edit_bone.layers[2] = False
-                bl_edit_bone.layers[3] = True
-                bl_edit_bone.layers[4] = False
-            elif 'ET' in bone.name:
-                bl_edit_bone.layers[0] = False
-                bl_edit_bone.layers[1] = False
-                bl_edit_bone.layers[2] = False
-                bl_edit_bone.layers[3] = False
-                bl_edit_bone.layers[4] = True
-            elif 'Bone_' in bone.name:
-                bl_edit_bone.layers[0] = False
-                bl_edit_bone.layers[1] = False
-                bl_edit_bone.layers[2] = True
-                bl_edit_bone.layers[3] = False
-                bl_edit_bone.layers[4] = False
+                log.warn(f"Failed to set keybone ID '{bone.key_bone_id}'. Unknown keybone ID.")
+
+            # Assign layers based on bone naming convention
+            layers = bl_edit_bone.layers
+            layers[:] = [False] * 32  # reset all layers to False first
+
+            if "AT_" in bone.name:
+                layers[3] = True
+            elif "ET" in bone.name:
+                layers[4] = True
+            elif "Bone_" in bone.name:
+                layers[2] = True
             elif bone.key_bone_id == -1:
-                bl_edit_bone.layers[0] = False
-                bl_edit_bone.layers[1] = True
-                bl_edit_bone.layers[2] = False
-                bl_edit_bone.layers[3] = False     
-                bl_edit_bone.layers[4] = False         
-            else:
-                bl_edit_bone.layers[1] = False
-                bl_edit_bone.layers[2] = False
-                bl_edit_bone.layers[3] = False
-                bl_edit_bone.layers[4] = False
-            
-            print('Bone number:', i, bone.name, bone.bone_name_crc)
+                layers[1] = True
 
-        # link children to parents
-        for i, bone in enumerate(self.m2.root.bones):
+            log.debug(f"Bone {i}: name='{bone.name}', crc={bone.bone_name_crc}")
+
+        # Link children to parents
+        for bone in bones:
             if bone.parent_bone >= 0:
-                bl_edit_bone = armature.edit_bones[bone.name]
-                parent = armature.edit_bones[self.m2.root.bones[bone.parent_bone].name]
-                bl_edit_bone.parent = parent
+                child = armature.edit_bones[bone.name]
+                parent = armature.edit_bones[bones[bone.parent_bone].name]
+                child.parent = parent
 
-        bpy.context.view_layer.update()  # update scene.
-        bpy.ops.object.mode_set(mode='OBJECT')  # return to object mode. 
+        bpy.context.view_layer.update()
+        bpy.ops.object.mode_set(mode="OBJECT")
 
-    @staticmethod
-    def _populate_bl_fcurve(f_curves, frames, track, length, callback, interp_type):
+        log.info(f"Imported armature with {len(bones)} bones for '{model_name}'.")
 
-        # init keyframes on the curve
+    def _populate_bl_fcurve(self, f_curves, frames, track, length, callback, interp_type):
+        """Populate Blender FCurves with keyframe data from an M2 track."""
+        
+        # --- Initialize keyframe points for all FCurves ---
+        frame_count = len(frames)
         for f_curve in f_curves:
-            f_curve.keyframe_points.add(len(frames))
+            f_curve.keyframe_points.add(frame_count)
 
-        # set values for each channel
-            
+        # --- Retrieve timestamp conversion mode ---
         preferences = get_project_preferences()
-        timestamp_convert = preferences.time_import_method
+        convert = (preferences.time_import_method == "Convert")
 
-        if track:
-
-            for j, timestamp in enumerate(frames):
+        # --- Populate keyframes ---
+        for j, frame in self.convert_timestamps(frames, convert=convert):
+            if track:
                 value = callback(value=track[j])
-                if timestamp_convert == 'Convert':
-                    frame = int(round( timestamp * ( bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000 )))
-                else: 
-                    frame = timestamp
 
-                for k in range(len(value)):
+                # Convert vector to a tuple
+                if isinstance(value, Vector):
+                    value = tuple(value)
+
+                # Ensure we're always working with a list of floats, even single channel
+                values = value if isinstance(value, (tuple, list)) else [value]
+
+                for k, v in enumerate(values):
                     keyframe = f_curves[k].keyframe_points[j]
-                    keyframe.co = frame, value[k]
+                    keyframe.co = (float(frame), float(v))
                     keyframe.interpolation = interp_type
-
-        else:
-
-            for j, timestamp in enumerate(frames):
-                if timestamp_convert == 'Convert':
-                    frame = int(round( timestamp * ( bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000 )))
-                else: 
-                    frame = timestamp
+            else:
+                # Trackless FCurve (e.g. boolean toggle or empty channel)
                 keyframe = f_curves[0].keyframe_points[j]
-                keyframe.co = frame, True
+                keyframe.co = (float(frame), 1.0)
                 keyframe.interpolation = interp_type
 
-    def _bl_create_sequences(self, m2_obj, m2_track_name, prefix, bl_obj, bl_obj_name, bl_track_name, track_count, conv):
-        # Create tracks (and actions, as needed) for all sequences for a specific M2Track
-        track = getattr(m2_obj,m2_track_name)
+    def _bl_create_sequences(self, m2_obj, m2_track_name: str, prefix: str, bl_obj, bl_obj_name: str, bl_track_name: str, track_count: int, conv):
+        """Create Blender FCurves for all animation sequences for a specific M2Track."""
+
+        track = getattr(m2_obj, m2_track_name)
         seq_name_table = M2SequenceNames()
         n_global_sequences = len(self.global_sequences)
+        data_path = f"{bl_obj_name}.{bl_track_name}"
 
-        # M2Track uses global sequences
+        # --- Handle Global Sequences ---
         if track.global_sequence >= 0:
-            global_seq_str = str(track.global_sequence).zfill(3)
-            # action_name = f'{prefix}_{i}_{bl_obj.name}_Global_sequence_{global_seq_str}'
-            action_name = f'{prefix}_{bl_obj.name}_Global_sequence_{global_seq_str}'
+            global_seq_str = f"{track.global_sequence:03}"
+            action_name = f"{prefix}_{bl_obj.name}_Global_sequence_{global_seq_str}"
 
-            # Create new animation pair if action doesn't already exist
+            # Get or create action for the global sequence
             if action_name in self.actions:
                 action = self.actions[action_name]
             else:
-                sequence = bpy.context.scene.wow_m2_animations[self.global_sequences[track.global_sequence]]
-                # pair = sequence.anim_pairs.add()
+                sequence_index = self.global_sequences[track.global_sequence]
+                sequence = bpy.context.scene.wow_m2_animations[sequence_index]
                 anim_pair = sequence.anim_pairs.add()
                 anim_pair.object = bl_obj
-                anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair,action_name)
+                anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair, action_name)
                 action = self.actions[action_name] = anim_pair.action
 
+            # Create the fcurves for this track
             self._bl_create_fcurves(
-                anim_pair.action,
-                '',
-                conv,
-                track_count,
-                0,
-                bl_obj_name+'.'+bl_track_name,
-                track
+                action,
+                action_group="",
+                callback=conv,
+                length=track_count,
+                anim_index=0,
+                data_path=data_path,
+                anim_track=track,
             )
-        # M2Track uses normal sequences
-        else:
-            for j, anim_index in enumerate(self.animations):
-                anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
-                sequence = self.m2.root.sequences[anim_index]
-                if track.timestamps.n_elements > anim_index:
-                    if not len(track.timestamps[anim_index]):
-                        continue
-                field_name = seq_name_table.get_sequence_name(sequence.id) 
-                action_name = f'{prefix}_{bl_obj.name}_{str(j).zfill(3)}_{sequence.variation_index}'
+            return  # Global sequences handled; exit early
 
-                # Create new animation pair if action doesn't already exist
-                if action_name in self.actions:
-                    action = self.actions[action_name]
-                else:
-                    anim_pair = anim.anim_pairs.add()
-                    anim_pair.type = 'OBJECT'
-                    anim_pair.object = bl_obj
-                    anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair,action_name)
-                    action = self.actions[action_name] = anim_pair.action
+        # --- Handle Normal Sequences ---
+        for j, anim_index in enumerate(self.animations):
+            anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
+            sequence = self.m2.root.sequences[anim_index]
 
-                self._bl_create_fcurves(
-                    action,
-                    '',
-                    conv,
-                    track_count,
-                    j,
-                    bl_obj_name+'.'+bl_track_name,
-                    track
-                )
+            # Skip if timestamps are missing or empty
+            if track.timestamps.n_elements <= anim_index or not len(track.timestamps[anim_index]):
+                continue
 
-    @staticmethod
-    def _bl_create_fcurves(action, action_group, callback, length, anim_index, data_path, anim_track):
+            # Construct a readable action name
+            field_name = seq_name_table.get_sequence_name(sequence.id)
+            action_name = f"{prefix}_{bl_obj.name}_{j:03}_{sequence.variation_index}"
 
-        if anim_track.timestamps.n_elements > anim_index:
+            # Get or create action for this animation
+            if action_name in self.actions:
+                action = self.actions[action_name]
+            else:
+                anim_pair = anim.anim_pairs.add()
+                anim_pair.type = "OBJECT"
+                anim_pair.object = bl_obj
+                anim_pair.action = BlenderM2Scene._bl_create_action(anim_pair, action_name)
+                action = self.actions[action_name] = anim_pair.action
 
-            frames = anim_track.timestamps[anim_index]
+            # Create the fcurves for this track
+            self._bl_create_fcurves(
+                action,
+                action_group="",
+                callback=conv,
+                length=track_count,
+                anim_index=j,
+                data_path=data_path,
+                anim_track=track,
+            )
 
-            try:
-                track = anim_track.values[anim_index]
-            except AttributeError:
-                track = None
+    def _bl_create_fcurves(self, action, action_group, callback, length, anim_index, data_path, anim_track):
+        """Create Blender FCurves for an M2 animation track."""
 
-            if frames:
-                t_fcurves = [action.fcurves.new(data_path=data_path, index=k, action_group=action_group)
-                             for k in range(length)]
+        # --- Ensure valid animation index ---
+        if anim_track.timestamps.n_elements <= anim_index:
+            return  # Nothing to do
 
-                BlenderM2Scene._populate_bl_fcurve(t_fcurves, frames, track, length, callback,
-                                                   'LINEAR' if anim_track.interpolation_type == 1 else 'CONSTANT')
+        frames = anim_track.timestamps[anim_index]
+
+        # --- Try to get value track (optional) ---
+        track = getattr(anim_track, "values", None)
+        track = track[anim_index] if track and len(track) > anim_index else None
+
+        if not frames:
+            return  # No keyframes to process
+
+        # --- Create new FCurves ---
+        t_fcurves = [
+            action.fcurves.new(data_path=data_path, index=k, action_group=action_group)
+            for k in range(length)
+        ]
+
+        # --- Determine interpolation type ---
+        interp_type = "LINEAR" if getattr(anim_track, "interpolation_type", 0) == 1 else "CONSTANT"
+
+        # --- Populate the FCurves ---
+        self._populate_bl_fcurve(t_fcurves, frames, track, length, callback, interp_type)
 
     @staticmethod
     def _bl_create_action(anim_pair, name: str) -> bpy.types.Action:
+        """Create or return an existing Blender Action for the given animation pair."""
 
-        if not anim_pair.action:
-
+        # If no action exists, create one and assign it
+        if not getattr(anim_pair, "action", None):
             action = bpy.data.actions.new(name=name)
             action.use_fake_user = True
             anim_pair.action = action
-
-            return action
 
         return anim_pair.action
 
@@ -742,110 +811,109 @@ class BlenderM2Scene:
     def _bl_convert_track_tuple(value=None):
         return value
 
-    def _bl_add_sequence(self, name: str = "Sequence", is_global: bool = False, is_alias: bool = False):
+    def _bl_add_sequence(self, name: str = "Sequence", is_global: bool = False, is_alias: bool = False) -> bpy.types.PropertyGroup:
+        """Create and register a new M2 animation sequence in the Blender scene."""
+
         seq = self.scene.wow_m2_animations.add()
         seq.is_global_sequence = is_global
 
-        # register scene in the sequence
-        anim_pair_scene = seq.anim_pairs.add()
-        anim_pair_scene.type = 'SCENE'
-        anim_pair_scene.scene = bpy.context.scene
+        # --- Rig-level animation pair only ---
+        anim_pair_rig = seq.anim_pairs.add()
+        anim_pair_rig.type = "OBJECT"
+        anim_pair_rig.object = self.rig
 
-        # register rig in the sequence
-        anim_pair = seq.anim_pairs.add()
-        anim_pair.type = 'OBJECT'
-        anim_pair.object = self.rig
-
+        # --- Create and assign actions ---
         if not is_alias:
-            action = bpy.data.actions.new(name='SC_{}'.format(name))
-            action.use_fake_user = True
-            anim_pair_scene.action = action
-
-            action = bpy.data.actions.new(name=name)
-            action.use_fake_user = True
-            anim_pair.action = action
+            anim_pair_rig.action = self._bl_create_action(anim_pair_rig, name)
 
         return seq
 
-    def _bl_load_sequences(self):
-        #anim_data_table = M2SequenceNames()
 
-        # import global sequence animations
-        for i in range(len(self.m2.root.global_sequences)):
-            self._bl_add_sequence(name='Global_Sequence_{}'.format(str(i).zfill(3)), is_global=True)
+    def _bl_load_sequences(self):
+        """Load M2 animation sequences and register them as Blender animation sequences."""
+
+        # --- Import global sequences ---
+        for i, _ in enumerate(self.m2.root.global_sequences):
+            seq_name = f"Global_Sequence_{i:03}"
+            self._bl_add_sequence(name=seq_name, is_global=True)
             self.global_sequences.append(len(self.scene.wow_m2_animations) - 1)
 
-        m2_sequences = sorted(enumerate(self.m2.root.sequences),
-                              key=lambda item: (item[0], item[1].id, item[1].variation_index))
+        # --- Sort and import regular sequences ---
+        m2_sequences = sorted(
+            enumerate(self.m2.root.sequences),
+            key=lambda item: (item[0], item[1].id, item[1].variation_index),
+        )
 
-        # import animation sequence
-        for i, pair in enumerate(m2_sequences):
-            idx, sequence = pair
-
-            # create sequence
+        for i, (idx, sequence) in enumerate(m2_sequences):
+            # --- Sequence naming ---
             field_name = self.anim_data_table.get_sequence_name(sequence.id)
-            name = '{}_UnkAnim'.format(str(i).zfill(3)) \
-                if not field_name else "{}_{}_({})".format(str(i).zfill(3), field_name, sequence.variation_index)
+            name = (
+                f"{i:03}_{field_name}_({sequence.variation_index})"
+                if field_name else f"{i:03}_UnkAnim"
+            )
 
-            # check if sequence is an alias
-            is_alias = sequence.flags & 0x40
-
-            # create sequence
+            # --- Check alias ---
+            is_alias = bool(sequence.flags & 0x40)
             anim = self._bl_add_sequence(name=name, is_global=False, is_alias=is_alias)
 
-            # find real animation index
+            # --- Handle alias sequences ---
             if is_alias:
                 anim.is_alias = True
-
                 for j, seq in m2_sequences:
                     anim.alias_next = j
                     if j == sequence.alias_next:
                         self.alias_animation_lookup[i] = j
                         break
 
-            # add animation properties
+            # --- Animation properties ---
             anim.animation_id = str(sequence.id)
             anim.flags = parse_bitfield(sequence.flags, 0x800)
 
-            # titi set primary seq flag - WBS doesnt export .anim files 
-            if not "32" in anim.flags:
-                # anim.flags.add(str(32))
-                anim.flags |= {str(32)}
+            if "32" not in anim.flags:
+                anim.flags |= {"32"}
+
             anim.move_speed = sequence.movespeed
             anim.frequency = get_frequency_percentage(sequence.frequency)
             anim.replay_min = sequence.replay.minimum
             anim.replay_max = sequence.replay.maximum
             anim.VariationNext = sequence.variation_next
+
+            # --- Bounds ---
             anim.use_preset_bounds = True
-            anim.preset_bounds_min_x = sequence.bounds.extent.min[0]
-            anim.preset_bounds_min_y = sequence.bounds.extent.min[1]
-            anim.preset_bounds_min_z = sequence.bounds.extent.min[2]
-            anim.preset_bounds_max_x = sequence.bounds.extent.max[0]
-            anim.preset_bounds_max_y = sequence.bounds.extent.max[1]
-            anim.preset_bounds_max_z = sequence.bounds.extent.max[2]
+            anim.preset_bounds_min_x, anim.preset_bounds_min_y, anim.preset_bounds_min_z = sequence.bounds.extent.min
+            anim.preset_bounds_max_x, anim.preset_bounds_max_y, anim.preset_bounds_max_z = sequence.bounds.extent.max
             anim.preset_bounds_radius = sequence.bounds.radius
+
+            # --- Duration / blending ---
             anim.use_preset_duration = False
             anim.duration = sequence.duration
 
             if self.m2.root.version >= M2Versions.WOD:
                 anim.blend_time_in = sequence.blend_time_in
                 anim.blend_time_out = sequence.blend_time_out
-
             else:
                 anim.blend_time = sequence.blend_time
 
             self.animations.append(idx)
 
+
     @staticmethod
     def _bl_create_action_group(action: bpy.types.Action, name: str) -> str:
         if name not in action.groups:
             action.groups.new(name=name)
-
         return name
 
-    def load_animations(self):
 
-        # TODO: pre-wotlk
+    def load_animations(self):
+        """Imports animation data for the current M2 rig into Blender."""
+
+        if not self.m2.root.sequences and not self.m2.root.global_sequences:
+            log.info("No animation data found to import.")
+            return
+
+        if not self.rig:
+            log.warn("Armature not found — skipping animation import.")
+            return
 
         def bl_convert_trans_track(value=None, bl_bone=None, bone=None):
             return bl_bone.bone.matrix_local.inverted() @ (Vector(bone.pivot) + Vector(value))
@@ -854,169 +922,180 @@ class BlenderM2Scene:
             return value.to_quaternion()
 
         def bl_convert_scale_track(value=None):
-
             value = list(value)
-
             for i, val in enumerate(value):
                 if isinf(val):
-                    print("\nWarning: Fixed infinite scale value!")  #TODO: figure out infinite values there
+                    log.warn("Infinite scale value fixed to 1.0")
                     value[i] = 1.0
+            return (value[1], value[0], value[2])
 
-            return tuple((value[1], value[0], value[2]))
-        
+        # --- Alias resolver (only rig now) ---
         def load_alias_actions():
-
-            scene = self.scene      
-                
+            scene = self.scene
             n_global_sequences = len(self.m2.root.global_sequences)
+
             for i, anim_index in enumerate(self.animations):
                 anim = scene.wow_m2_animations[i + n_global_sequences]
-                scene_action = anim.anim_pairs[0].action
-                action = anim.anim_pairs[1].action
+                action = anim.anim_pairs[0].action
                 alias_next = anim.alias_next
 
                 final_alias = _find_final_alias(self, n_global_sequences, alias_next)
 
-                if not action and not scene_action:
-                    alias_anim = scene.wow_m2_animations[final_alias]
-                    alias_scene_action = alias_anim.anim_pairs[0].action
-                    alias_action = alias_anim.anim_pairs[1].action
-                    anim.anim_pairs[0].action = alias_scene_action
-                    anim.anim_pairs[1].action = alias_action 
-
-        if not len(self.m2.root.sequences) and not len(self.m2.root.global_sequences):
-            print("\nNo animation data found to import.")
-            return
-        else:
-            print("\nImporting animations.")
-
-        if not self.rig:
-            print("\nArmature is not present on the scene. Skipping animation import. M2 is most likely corrupted.")
-            return
-
-        # create animation data for rig and set it as an active object
-        scene = self.scene
-        rig = self.rig
-        rig.animation_data_create()
-        rig.animation_data.action_blend_type = 'ADD'
-        bpy.context.view_layer.objects.active = rig
-
-        self._bl_load_sequences()
-
-        # import fcurves
-        for bone in self.m2.root.bones:
-            bl_bone = rig.pose.bones[bone.name]
-
-            is_global_seq_trans = bone.translation.global_sequence >= 0
-            is_global_seq_rot = bone.rotation.global_sequence >= 0
-            is_global_seq_scale = bone.scale.global_sequence >= 0
-
-            glob_sequences = self.global_sequences
-
-            # write global sequence fcurves
-            if is_global_seq_trans:
-                action = scene.wow_m2_animations[glob_sequences[bone.translation.global_sequence]].anim_pairs[1].action
-                self._bl_create_action_group(action, bone.name)
-                self._bl_create_fcurves(action, bone.name, partial(bl_convert_trans_track, bl_bone=bl_bone, bone=bone),
-                                        3, 0, 'pose.bones["{}"].location'.format(bl_bone.name), bone.translation)
-
-            if is_global_seq_rot:
-                action = scene.wow_m2_animations[glob_sequences[bone.rotation.global_sequence]].anim_pairs[1].action
-                self._bl_create_action_group(action, bone.name)
-                self._bl_create_fcurves(action, bone.name, partial(bl_convert_rot_track), 4, 0,
-                                        'pose.bones["{}"].rotation_quaternion'.format(bl_bone.name), bone.rotation)
-
-            if is_global_seq_scale:
-                action = scene.wow_m2_animations[glob_sequences[bone.scale.global_sequence]].anim_pairs[1].action
-                self._bl_create_action_group(action, bone.name)
-                self._bl_create_fcurves(action, bone.name, partial(bl_convert_scale_track), 3, 0,
-                                        'pose.bones["{}"].scale'.format(bl_bone.name), bone.scale)
-
-            # write regular animation fcurves
-            n_global_sequences = len(self.m2.root.global_sequences)
-            for i, anim_index in enumerate(self.animations):
-                anim = scene.wow_m2_animations[i + n_global_sequences]
-                action = anim.anim_pairs[1].action
-
                 if not action:
+                    alias_anim = scene.wow_m2_animations[final_alias]
+                    anim.anim_pairs[0].action = alias_anim.anim_pairs[0].action
+
+        try:
+            scene = self.scene
+            rig = self.rig
+
+            rig.animation_data_create()
+            rig.animation_data.action_blend_type = "ADD"
+            bpy.context.view_layer.objects.active = rig
+
+            self._bl_load_sequences()
+
+            # --- Import per-bone fcurves ---
+            for bone in tqdm(self.m2.root.bones, total=len(self.m2.root.bones), desc="Importing Animations", ascii=True):
+                try:
+                    bl_bone = rig.pose.bones[bone.name]
+                except KeyError:
+                    log.warn(f"Bone '{bone.name}' missing — skipping.")
                     continue
 
-                # translate bones
-                if not is_global_seq_trans and bone.translation.timestamps.n_elements > anim_index:
-                    self._bl_create_action_group(action, bone.name)
-                    self._bl_create_fcurves(action, bone.name, partial(bl_convert_trans_track, bl_bone=bl_bone,
-                                            bone=bone), 3, anim_index,
-                                            'pose.bones["{}"].location'.format(bl_bone.name),
-                                            bone.translation)
+                is_global_seq_trans = bone.translation.global_sequence >= 0
+                is_global_seq_rot = bone.rotation.global_sequence >= 0
+                is_global_seq_scale = bone.scale.global_sequence >= 0
+                glob_sequences = self.global_sequences
+                n_global_sequences = len(self.m2.root.global_sequences)
 
-                # rotate bones
-                if not is_global_seq_rot and bone.rotation.timestamps.n_elements > anim_index:
+                # --- Global sequences ---
+                if is_global_seq_trans:
+                    action = scene.wow_m2_animations[glob_sequences[bone.translation.global_sequence]].anim_pairs[0].action
                     self._bl_create_action_group(action, bone.name)
-                    self._bl_create_fcurves(action, bone.name, partial(bl_convert_rot_track), 4,
-                                            anim_index,'pose.bones["{}"].rotation_quaternion'.format(bl_bone.name),
-                                            bone.rotation)
+                    self._bl_create_fcurves(
+                        action, bone.name,
+                        partial(bl_convert_trans_track, bl_bone=bl_bone, bone=bone),
+                        3, 0,
+                        f'pose.bones["{bl_bone.name}"].location',
+                        bone.translation,
+                    )
 
-                # scale bones
-                if not is_global_seq_scale and bone.scale.timestamps.n_elements > anim_index:
+                if is_global_seq_rot:
+                    action = scene.wow_m2_animations[glob_sequences[bone.rotation.global_sequence]].anim_pairs[0].action
                     self._bl_create_action_group(action, bone.name)
-                    self._bl_create_fcurves(action, bone.name, partial(bl_convert_scale_track), 3, anim_index,
-                                            'pose.bones["{}"].scale'.format(bl_bone.name),
-                                            bone.scale)
-        load_alias_actions()
+                    self._bl_create_fcurves(
+                        action, bone.name,
+                        partial(bl_convert_rot_track),
+                        4, 0,
+                        f'pose.bones["{bl_bone.name}"].rotation_quaternion',
+                        bone.rotation,
+                    )
 
-    def load_geosets(self):
+                if is_global_seq_scale:
+                    action = scene.wow_m2_animations[glob_sequences[bone.scale.global_sequence]].anim_pairs[0].action
+                    self._bl_create_action_group(action, bone.name)
+                    self._bl_create_fcurves(
+                        action, bone.name,
+                        partial(bl_convert_scale_track),
+                        3, 0,
+                        f'pose.bones["{bl_bone.name}"].scale',
+                        bone.scale,
+                    )
+
+                # --- Regular animations ---
+                for i, anim_index in enumerate(self.animations):
+                    anim = scene.wow_m2_animations[i + n_global_sequences]
+                    action = anim.anim_pairs[0].action
+                    if not action:
+                        continue
+
+                    if not is_global_seq_trans and bone.translation.timestamps.n_elements > anim_index:
+                        self._bl_create_action_group(action, bone.name)
+                        self._bl_create_fcurves(
+                            action, bone.name,
+                            partial(bl_convert_trans_track, bl_bone=bl_bone, bone=bone),
+                            3, anim_index,
+                            f'pose.bones["{bl_bone.name}"].location',
+                            bone.translation,
+                        )
+
+                    if not is_global_seq_rot and bone.rotation.timestamps.n_elements > anim_index:
+                        self._bl_create_action_group(action, bone.name)
+                        self._bl_create_fcurves(
+                            action, bone.name,
+                            partial(bl_convert_rot_track),
+                            4, anim_index,
+                            f'pose.bones["{bl_bone.name}"].rotation_quaternion',
+                            bone.rotation,
+                        )
+
+                    if not is_global_seq_scale and bone.scale.timestamps.n_elements > anim_index:
+                        self._bl_create_action_group(action, bone.name)
+                        self._bl_create_fcurves(
+                            action, bone.name,
+                            partial(bl_convert_scale_track),
+                            3, anim_index,
+                            f'pose.bones["{bl_bone.name}"].scale',
+                            bone.scale,
+                        )
+
+            load_alias_actions()
+            log.info(f"Imported {len(self.m2.root.sequences)} animations ({len(self.m2.root.global_sequences)} global sequences).")
+
+        except Exception as e:
+            log.error(f"Animation import FAILED: {e}")
+            traceback.print_exc()
+
+    def load_geosets(self, collection):
+        """Import geosets (submeshes) from the M2 model into Blender."""
 
         if not len(self.m2.root.vertices):
-            print("\nNo mesh geometry found to import.")
+            log.info("No mesh geometry found to import.")
             return
 
-        else:
-            print("\nImporting geosets.")
-
         skin = self.m2.skins[0]
+        for smesh_i, smesh in tqdm(enumerate(skin.submeshes), total=len(skin.submeshes), desc="Importing Geosets", ascii=True):
+            # --- Collect geometry data ---
+            vertices = [
+                self.m2.root.vertices[skin.vertex_indices[i]].pos
+                for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)
+            ]
 
-        for smesh_i, smesh in enumerate(skin.submeshes):
+            normals = [
+                self.m2.root.vertices[skin.vertex_indices[i]].normal
+                for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)
+            ]
 
-            vertices = [self.m2.root.vertices[skin.vertex_indices[i]].pos
-                        for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)]
+            tex_coords = [
+                self.m2.root.vertices[skin.vertex_indices[i]].tex_coords
+                for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)
+            ]
 
-            normals = [self.m2.root.vertices[skin.vertex_indices[i]].normal
-                       for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)]
+            tex_coords2 = [
+                self.m2.root.vertices[skin.vertex_indices[i]].tex_coords2
+                for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)
+            ]
 
-            tex_coords = [self.m2.root.vertices[skin.vertex_indices[i]].tex_coords
-                          for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)]
+            triangles = [
+                [skin.triangle_indices[i + j] - smesh.vertex_start for j in range(3)]
+                for i in range(smesh.index_start, smesh.index_start + smesh.index_count, 3)
+            ]
 
-            tex_coords2 = [self.m2.root.vertices[skin.vertex_indices[i]].tex_coords2
-                          for i in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count)]
-
-            triangles = [[skin.triangle_indices[i + j] - smesh.vertex_start for j in range(3)]
-                         for i in range(smesh.index_start, smesh.index_start + smesh.index_count, 3)]
-
-            # create mesh
+            # --- Create mesh ---
             mesh = bpy.data.meshes.new(self.m2.root.name.value)
             mesh.from_pydata(vertices, [], triangles)
 
             for poly in mesh.polygons:
                 poly.use_smooth = True
 
-            # set normals
-            #for index, vertex in enumerate(mesh.vertices):
-                #vertex.normal = normals[index]
-            
-            # set normals
-            #custom_normals = [(0.0, 0.0, 0.0)] * len(mesh.loops)
-            #mesh.use_auto_smooth = True
-
-            # Set custom normals
-            #mesh.create_normals_split()
-            #mesh.normals_split_custom_set_from_vertices(normals)
-
+            # --- Set normals ---
             mesh.auto_smooth_angle = 3.14159
             mesh.use_auto_smooth = True
             custom_normals = [normals[loop.vertex_index] for loop in mesh.loops]
-            mesh.normals_split_custom_set(custom_normals)            
+            mesh.normals_split_custom_set(custom_normals)
 
-            # set uv
+            # --- Create UV layers ---
             mesh.uv_layers.new(name="UVMap")
             uv_layer1 = mesh.uv_layers[0]
             for i in range(len(uv_layer1.data)):
@@ -1029,51 +1108,60 @@ class BlenderM2Scene:
                 uv = tex_coords2[mesh.loops[i].vertex_index]
                 uv_layer2.data[i].uv = (uv[0], 1 - uv[1])
 
-            # set textures and materials
+            # --- Assign materials ---
             for material, tex_unit in self.materials[smesh_i]:
                 mesh.materials.append(material)
 
-            # get object name
+            # --- Determine sub-collection ---
             name = M2SkinMeshPartID.get_mesh_part_name(smesh.skin_section_id)
-            obj = bpy.data.objects.new(name if name else 'Geoset', mesh)
-            bpy.context.collection.objects.link(obj)
+            sub_name = name if name else "Unknown"
+            sub_collection = util.get_or_create_collection(sub_name, parent=collection, color_tag='COLOR_04')
+
+            # --- Create object ---
+            obj = bpy.data.objects.new(name if name else "Geoset", mesh)
+            util._link_to_single_collection(obj, sub_collection)
 
             try:
                 obj.wow_m2_geoset.mesh_part_group = name
                 obj.wow_m2_geoset.mesh_part_id = str(smesh.skin_section_id)
             except TypeError:
-                print('Warning: unknown mesh part ID \"{}\"'.format(smesh.skin_section_id))
+                log.warn(f"Unknown mesh part ID '{smesh.skin_section_id}'.")
+
+            # Rename object if it matches a known part name
             for item in mesh_part_id_menu(obj.wow_m2_geoset, None):
                 if item[0] == smesh.skin_section_id:
                     obj.name = item[1]
 
+            # --- Parent and rig binding ---
             if self.rig:
-                obj.parent = self.rig
-
-                # bind armature to geometry
-                armature_modifier = obj.modifiers.new(name="Armature", type='ARMATURE')
+                armature_modifier = obj.modifiers.new(name="Armature", type="ARMATURE")
                 armature_modifier.object = self.rig
 
                 vgroups = {}
                 for j in range(smesh.vertex_start, smesh.vertex_start + smesh.vertex_count):
                     m2_vertex = self.m2.root.vertices[skin.vertex_indices[j]]
 
-                    for b_index, bone_index in enumerate(filter(lambda x: x >= 0, m2_vertex.bone_indices)):
-                        vgroups.setdefault(self.m2.root.bones[bone_index].name, []).append(
-                            (j - smesh.vertex_start, m2_vertex.bone_weights[b_index] / 255))
+                    for b_index, bone_index in enumerate(
+                        filter(lambda x: x >= 0, m2_vertex.bone_indices)
+                    ):
+                        bone_name = self.m2.root.bones[bone_index].name
+                        vgroups.setdefault(bone_name, []).append(
+                            (j - smesh.vertex_start, m2_vertex.bone_weights[b_index] / 255)
+                        )
 
-                for name in vgroups.keys():
-                    if len(vgroups[name]) > 0:
+                for name, verts in vgroups.items():
+                    if verts:
                         grp = obj.vertex_groups.new(name=name)
-                        for (v, w) in vgroups[name]:
-                            grp.add([v], w, 'ADD')
+                        for v, w in verts:
+                            grp.add([v], w, "ADD")
 
             self.geosets.append(obj)
             
-            #slot = bpy.context.scene.wow_m2_root_elements.geosets.add()
-            #slot.pointer = obj
+        # --- Log success ---
+        log.info(f"Imported {len(self.geosets)} geosets.")
 
-    def load_texture_transforms(self):
+    def load_texture_transforms(self, collection):
+        """Import texture transformation animations (translation, rotation, scaling) for UVs."""
 
         def bl_convert_trans_track(value=None):
             return Vector((0, 0, 0)) + Vector((-value[0], value[1], value[2]))
@@ -1081,239 +1169,328 @@ class BlenderM2Scene:
         def bl_convert_rot_track(value=None):
             return value[3], -value[1], value[0], value[2]
 
+        # --- Validation ---
         if not self.geosets:
-            print('\nNo geosets found. Skipping texture transform import')
+            log.info("No geosets found. Skipping texture transform import.")
             return
-        else:
-            print('\nImporting texture transforms')
 
         skin = self.m2.skins[0]
 
-        for smesh_pair, obj in zip(enumerate(skin.submeshes), self.geosets):
-            smesh_i, smesh = smesh_pair
+        for smesh_i, smesh in tqdm(enumerate(skin.submeshes), total=len(skin.submeshes), desc="Importing Texture Transforms", ascii=True):
+            obj = self.geosets[smesh_i]
 
             for _, tex_unit in self.materials[smesh_i]:
+                texture_count = 2 if tex_unit.texture_count > 1 else 1
 
-                for i in range(2 if tex_unit.texture_count > 1 else 1):
-
+                for i in range(texture_count):
                     combo_index = tex_unit.texture_transform_combo_index + i
 
+                    # --- Lookup transform index ---
                     try:
-                        tex_tranform_index = self.m2.root.texture_transforms_lookup_table[combo_index]
-                    except IndexError as e:
-                        print(f'Texture Animation with index {combo_index} doesn\'t exist in the m2, not importing it, check it out')
+                        tex_transform_index = self.m2.root.texture_transforms_lookup_table[combo_index]
+                    except IndexError:
+                        log.warn(
+                            f"Texture animation with index {combo_index} doesn't exist in the M2 — skipping."
+                        )
                         continue
-                
-                    if tex_tranform_index >= 0 & self.m2.root.texture_transforms_lookup_table[combo_index] != -1:
 
-                        c_obj = self.uv_transforms.get(tex_tranform_index)
+                    if tex_transform_index < 0 or self.m2.root.texture_transforms_lookup_table[combo_index] == -1:
+                        continue
 
-                        try:
-                            tex_transform = self.m2.root.texture_transforms[tex_tranform_index]
-                        except IndexError as e:
-                            print(f'Texture animation {tex_tranform_index} not found, skipping import')
-                            continue
-                    
-                        seq_name_table = M2SequenceNames()
-                        n_global_sequences = len(self.global_sequences)
+                    c_obj = self.uv_transforms.get(tex_transform_index)
 
-                        TT_Controllers = [obj for obj in bpy.data.objects if obj.wow_m2_uv_transform.enabled]
+                    # --- Retrieve transform data ---
+                    try:
+                        tex_transform = self.m2.root.texture_transforms[tex_transform_index]
+                    except IndexError:
+                        log.warn(f"Texture animation {tex_transform_index} not found — skipping import.")
+                        continue
 
-                        if not c_obj:
-                            bpy.ops.object.empty_add(type='SINGLE_ARROW', location=(0, 0, 0))
-                            c_obj = bpy.context.view_layer.objects.active
-                            c_obj.name = "TT_Controller_{}".format(len(TT_Controllers))
-                            c_obj.wow_m2_uv_transform.enabled = True
-                            c_obj = bpy.context.view_layer.objects.active
-                            c_obj.rotation_mode = 'QUATERNION'
-                            c_obj.empty_display_size = 0.5
-                            c_obj.animation_data_create()
-                            c_obj.animation_data.action_blend_type = 'ADD'
+                    seq_name_table = M2SequenceNames()
+                    n_global_sequences = len(self.global_sequences)
+                    TT_controllers = [o for o in bpy.data.objects if o.wow_m2_uv_transform.enabled]
 
-                            self.uv_transforms[tex_tranform_index] = c_obj
+                    # --- Create or reuse controller object ---
+                    if not c_obj:
+                        bpy.ops.object.empty_add(type="SINGLE_ARROW", location=(0, 0, 0))
+                        c_obj = bpy.context.view_layer.objects.active
+                        c_obj.name = f"TT_Controller_{len(TT_controllers)}"
+                        c_obj.wow_m2_uv_transform.enabled = True
+                        c_obj.rotation_mode = "QUATERNION"
+                        c_obj.empty_display_size = 0.5
+                        c_obj.animation_data_create()
+                        c_obj.animation_data.action_blend_type = "ADD"
+                        util._link_to_single_collection(c_obj, collection)
+                        self.uv_transforms[tex_transform_index] = c_obj
+                        create_actions = True
+                    else:
+                        create_actions = False
 
-                            create_actions = True
-                        else:
-                            create_actions = False
+                    # --- Assign controller to material slot ---
+                    material = obj.active_material
+                    obj.active_material = material.copy()
+                    if i == 0:
+                        obj.active_material.wow_m2_material.texture_1_animation = c_obj
+                    else:
+                        obj.active_material.wow_m2_material.texture_2_animation = c_obj
 
+                    # --- Add UV warp modifier ---
+                    bpy.context.view_layer.objects.active = obj
+                    bpy.ops.object.modifier_add(type="UV_WARP")
+                    uv_transform = bpy.context.object.modifiers[-1]
+                    uv_transform.name = f"M2TexTransform_{i + 1}"
+                    uv_transform.object_from = obj
+                    uv_transform.object_to = c_obj
+                    uv_transform.uv_layer = "UVMap" if not i else "UVMap.001"
 
-                        if i == 0:
-                            material = obj.active_material
-                            obj.active_material = material.copy()
-                            obj.active_material.wow_m2_material.texture_1_animation = c_obj
-                        else:
-                            material = obj.active_material
-                            obj.active_material = material.copy()                            
-                            obj.active_material.wow_m2_material.texture_2_animation = c_obj
+                    setattr(obj.wow_m2_geoset, f"uv_transform_{i + 1}", c_obj)
 
-                        bpy.context.view_layer.objects.active = obj
-                        bpy.ops.object.modifier_add(type='UV_WARP')
-                        uv_transform = bpy.context.object.modifiers[-1]
-                        uv_transform.name = 'M2TexTransform_{}'.format(i + 1)
-                        uv_transform.object_from = obj
-                        uv_transform.object_to = c_obj
-                        uv_transform.uv_layer = 'UVMap' if not i else 'UVMap.001'
+                    # --- Create actions and FCurves ---
+                    if create_actions:
+                        # --- Global sequences ---
+                        for j, seq_index in enumerate(self.global_sequences):
+                            anim = bpy.context.scene.wow_m2_animations[seq_index]
+                            name = f"TT_{tex_transform_index}_{obj.name}_Global_Sequence_{str(j).zfill(3)}"
 
+                            cur_index = len(anim.anim_pairs)
+                            anim_pair = anim.anim_pairs.add()
+                            anim_pair.type = "OBJECT"
+                            anim_pair.object = c_obj
 
-                        setattr(obj.wow_m2_geoset, 'uv_transform_{}'.format(i + 1), c_obj)
+                            if (
+                                tex_transform.translation.global_sequence == j
+                                and tex_transform.translation.timestamps.n_elements
+                            ):
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(
+                                    action,
+                                    c_obj.name,
+                                    bl_convert_trans_track,
+                                    3,
+                                    0,
+                                    "location",
+                                    tex_transform.translation,
+                                )
 
-                        if create_actions:
-                                
-                            # load global sequences
-                            for j, seq_index in enumerate(self.global_sequences):
-                                anim = bpy.context.scene.wow_m2_animations[seq_index]
+                            if (
+                                tex_transform.rotation.global_sequence == j
+                                and tex_transform.rotation.timestamps.n_elements
+                            ):
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(
+                                    action,
+                                    c_obj.name,
+                                    bl_convert_rot_track,
+                                    4,
+                                    0,
+                                    "rotation_quaternion",
+                                    tex_transform.rotation,
+                                )
 
-                                name = "TT_{}_{}_Global_Sequence_{}".format(tex_tranform_index, obj.name, str(j).zfill(3))
+                            if (
+                                tex_transform.scaling.global_sequence == j
+                                and tex_transform.scaling.timestamps.n_elements
+                            ):
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(
+                                    action,
+                                    c_obj.name,
+                                    bl_convert_trans_track,
+                                    3,
+                                    0,
+                                    "scale",
+                                    tex_transform.scaling,
+                                )
 
-                                cur_index = len(anim.anim_pairs)
-                                anim_pair = anim.anim_pairs.add()
-                                anim_pair.type = 'OBJECT'
-                                anim_pair.object = c_obj
+                            if not anim_pair.action:
+                                anim.anim_pairs.remove(cur_index)
 
-                                if tex_transform.translation.global_sequence == j \
-                                and tex_transform.translation.timestamps.n_elements:
-                                    action = self._bl_create_action(anim_pair, name)
-                                    self._bl_create_fcurves(action, c_obj.name, bl_convert_trans_track, 3, 0, 'location',
-                                                            tex_transform.translation)
+                        # --- Regular animations ---
+                        for j, anim_index in enumerate(self.animations):
+                            # Skip alias animations
+                            if self.alias_animation_lookup.get(j):
+                                continue
 
-                                if tex_transform.rotation.global_sequence == j \
-                                and tex_transform.rotation.timestamps.n_elements:
-                                    action = self._bl_create_action(anim_pair, name)
-                                    self._bl_create_fcurves(action, c_obj.name, bl_convert_rot_track, 4, 0, 'rotation_quaternion',
-                                                            tex_transform.rotation)
+                            anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
+                            sequence = self.m2.root.sequences[anim_index]
+                            field_name = seq_name_table.get_sequence_name(sequence.id)
 
-                                if tex_transform.scaling.global_sequence == j \
-                                and tex_transform.scaling.timestamps.n_elements:
-                                    action = self._bl_create_action(anim_pair, name)
-                                    self._bl_create_fcurves(action, c_obj.name, bl_convert_trans_track, 3, 0, 'scale',
-                                                            tex_transform.scaling)
+                            name = (
+                                f"TT_{tex_transform_index}_{obj.name}_{str(j).zfill(3)}_UnkAnim"
+                                if not field_name
+                                else f"TT_{tex_transform_index}_{obj.name}_{str(j).zfill(3)}_{field_name}({sequence.variation_index})"
+                            )
 
-                                if not anim_pair.action:
-                                        anim.anim_pairs.remove(cur_index)
+                            cur_index = len(anim.anim_pairs)
+                            anim_pair = anim.anim_pairs.add()
+                            anim_pair.type = "OBJECT"
+                            anim_pair.object = c_obj
 
-                        # load animations
-                            for j, anim_index in enumerate(self.animations):
+                            if (
+                                tex_transform.translation.global_sequence < 0
+                                and tex_transform.translation.timestamps.n_elements > j
+                            ):
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(
+                                    action,
+                                    obj.name,
+                                    bl_convert_trans_track,
+                                    3,
+                                    j,
+                                    "location",
+                                    tex_transform.translation,
+                                )
 
-                                # skip alias
-                                if self.alias_animation_lookup.get(j):
-                                    continue
+                            if (
+                                tex_transform.rotation.global_sequence < 0
+                                and tex_transform.rotation.timestamps.n_elements > j
+                            ):
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(
+                                    action,
+                                    obj.name,
+                                    bl_convert_rot_track,
+                                    4,
+                                    j,
+                                    "rotation_quaternion",
+                                    tex_transform.rotation,
+                                )
 
-                                anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
-                                sequence = self.m2.root.sequences[anim_index]
+                            if (
+                                tex_transform.scaling.global_sequence < 0
+                                and tex_transform.scaling.timestamps.n_elements > j
+                            ):
+                                action = self._bl_create_action(anim_pair, name)
+                                self._bl_create_fcurves(
+                                    action,
+                                    obj.name,
+                                    bl_convert_trans_track,
+                                    3,
+                                    j,
+                                    "scale",
+                                    tex_transform.scaling,
+                                )
 
-                                field_name = seq_name_table.get_sequence_name(sequence.id)
-                                name = 'TT_{}_{}_{}_UnkAnim'.format(tex_tranform_index, obj.name, str(j).zfill(3)) \
-                                    if not field_name else "TT_{}_{}_{}_{}_({})".format(tex_tranform_index,
-                                                                                        obj.name,
-                                                                                        str(j).zfill(3),
-                                                                                        field_name,
-                                                                                        sequence.variation_index)
+                            if not anim_pair.action:
+                                anim.anim_pairs.remove(cur_index)
+        # --- Log success ---
+        log.info(f"Imported texture transforms for {len(skin.submeshes)} geosets.")
 
-                                cur_index = len(anim.anim_pairs)
-                                anim_pair = anim.anim_pairs.add()
-                                anim_pair.type = 'OBJECT'
-                                anim_pair.object = c_obj
+    def load_attachments(self, collection):
+        """Import M2 attachments (points like weapons, particle anchors, etc.) into Blender."""
 
-                                if tex_transform.translation.global_sequence < 0 \
-                                and tex_transform.translation.timestamps.n_elements > j:
-                                    action = self._bl_create_action(anim_pair, name)
-                                    self._bl_create_fcurves(action, obj.name, bl_convert_trans_track, 3, j, 'location',
-                                                            tex_transform.translation)
-
-                                if tex_transform.rotation.global_sequence < 0 \
-                                        and tex_transform.rotation.timestamps.n_elements > j:
-                                    action = self._bl_create_action(anim_pair, name)
-                                    self._bl_create_fcurves(action, obj.name, bl_convert_rot_track, 4, j, 'rotation_quaternion',
-                                                            tex_transform.rotation)
-
-                                if tex_transform.scaling.global_sequence < 0 \
-                                        and tex_transform.scaling.timestamps.n_elements > j:
-                                    action = self._bl_create_action(anim_pair, name)
-                                    self._bl_create_fcurves(action, obj.name, bl_convert_trans_track, 3, j,
-                                                            'scale', tex_transform.scaling)
-
-                                if not anim_pair.action:
-                                    anim.anim_pairs.remove(cur_index)
-
-    def load_attachments(self):
-        # TODO: unknown field
-        print("\nImporting attachments.")
-
-        for i, attachment in enumerate(self.m2.root.attachments):
-            bpy.ops.object.empty_add(type='SPHERE', location=(0, 0, 0))
+        for i, attachment in tqdm(enumerate(self.m2.root.attachments), total=len(self.m2.root.attachments), desc="Importing Attachments", ascii=True):
+            # --- Create attachment object ---
+            bpy.ops.object.empty_add(type="SPHERE", location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.empty_display_size = 0.07
-            bpy.ops.object.constraint_add(type='CHILD_OF')
+            
+            # Link object to respective collection
+            util._link_to_single_collection(obj, collection)
+
+            # --- Add and configure constraint ---
+            bpy.ops.object.constraint_add(type="CHILD_OF")
             constraint = obj.constraints[-1]
             constraint.target = self.rig
-            obj.parent = self.rig
-            bone = self.m2.root.bones[attachment.bone]
-            constraint.subtarget = bone.name
 
-            bl_edit_bone = self.rig.data.bones[bone.name]
+            try:
+                bone = self.m2.root.bones[attachment.bone]
+                constraint.subtarget = bone.name
+                bl_edit_bone = self.rig.data.bones[bone.name]
+            except (IndexError, KeyError):
+                log.warn(f"Attachment {i} references an invalid bone index ({attachment.bone}). Skipping binding.")
+                continue
+
             obj.location = attachment.position
 
+            # --- Name and enable attachment ---
             obj.name = M2AttachmentTypes.get_attachment_name(attachment.id, i)
             obj.wow_m2_attachment.enabled = True
             obj.wow_m2_attachment.type = str(attachment.id)
 
-            # animate attachment
+            # --- Setup animation data ---
             obj.animation_data_create()
-            obj.animation_data.action_blend_type = 'ADD'
+            obj.animation_data.action_blend_type = "ADD"
+
             seq_name_table = M2SequenceNames()
             n_global_sequences = len(self.global_sequences)
 
-            # titi test
-            #slot = bpy.context.scene.wow_m2_root_elements.attachments.add()
-            #slot.pointer = obj
-
-            # load global sequence
+            # --- Handle global sequence animation ---
             if attachment.animate_attached.global_sequence >= 0:
-                anim = bpy.context.scene.wow_m2_animations[attachment.animate_attached.global_sequence]
+                anim = bpy.context.scene.wow_m2_animations[
+                    attachment.animate_attached.global_sequence
+                ]
 
-                if not attachment.animate_attached.timestamps.n_elements \
-                or not attachment.animate_attached.timestamps[0]:
-                    return
+                if (
+                    not attachment.animate_attached.timestamps.n_elements
+                    or not attachment.animate_attached.timestamps[0]
+                ):
+                    continue
 
-                name = "AT_{}_{}_Global_Sequence_{}".format(i, obj.name,
-                                                            str(attachment.animate_attached.global_sequence).zfill(3))
+                name = (
+                    f"AT_{i}_{obj.name}_Global_Sequence_"
+                    f"{str(attachment.animate_attached.global_sequence).zfill(3)}"
+                )
 
                 anim_pair = anim.anim_pairs.add()
-                anim_pair.type = 'OBJECT'
+                anim_pair.type = "OBJECT"
                 anim_pair.object = obj
                 anim_pair.action = self._bl_create_action(anim_pair, name)
 
-                self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, 0,
-                                        'wow_m2_attachment.animate', attachment.animate_attached)
+                self._bl_create_fcurves(
+                    anim_pair.action,
+                    "",
+                    self._bl_convert_track_dummy,
+                    1,
+                    0,
+                    "wow_m2_attachment.animate",
+                    attachment.animate_attached,
+                )
 
-                return
+                # Global sequence attachments stop here
+                continue
 
-            # load animations
+            # --- Handle regular per-animation sequences ---
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
                 sequence = self.m2.root.sequences[anim_index]
 
-                if attachment.animate_attached.timestamps.n_elements > anim_index:
-                    if not len(attachment.animate_attached.timestamps[anim_index]):
-                        continue
+                if attachment.animate_attached.timestamps.n_elements <= anim_index:
+                    continue
 
-                    field_name = seq_name_table.get_sequence_name(sequence.id)
-                    name = 'AT_{}_{}_UnkAnim'.format(i, obj.name, str(j).zfill(3)) \
-                         if not field_name else "AT_{}_{}_{}_({})".format(i, obj.name, str(j).zfill(3), field_name,
-                                                                          sequence.variation_index)
+                if not len(attachment.animate_attached.timestamps[anim_index]):
+                    continue
 
-                    anim_pair = anim.anim_pairs.add()
-                    anim_pair.type = 'OBJECT'
-                    anim_pair.object = obj
-                    self._bl_create_action(anim_pair, name)
+                field_name = seq_name_table.get_sequence_name(sequence.id)
+                name = (
+                    f"AT_{i}_{obj.name}_UnkAnim"
+                    if not field_name
+                    else f"AT_{i}_{obj.name}_{str(j).zfill(3)}_{field_name}({sequence.variation_index})"
+                )
 
-                    self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, j,
-                                            'wow_m2_attachment.animate', attachment.animate_attached)
+                anim_pair = anim.anim_pairs.add()
+                anim_pair.type = "OBJECT"
+                anim_pair.object = obj
+                self._bl_create_action(anim_pair, name)
 
-    def load_lights(self):
+                self._bl_create_fcurves(
+                    anim_pair.action,
+                    "",
+                    self._bl_convert_track_dummy,
+                    1,
+                    j,
+                    "wow_m2_attachment.animate",
+                    attachment.animate_attached,
+                )
+
+        # --- Log success ---
+        log.info(f"Imported {len(self.m2.root.attachments)} attachments.")
+
+    def load_lights(self, collection):
+        """Import M2 lights and their animation data into Blender."""
 
         def animate_property(anim_pair, m2_light, prop_name, length, action_name, anim_index):
-
+            """Create and populate FCurves for a given light property."""
             prop_track = getattr(m2_light, prop_name)
 
             try:
@@ -1325,253 +1502,335 @@ class BlenderM2Scene:
                 return
 
             self._bl_create_action(anim_pair, action_name)
-            action_group = self._bl_create_action_group(anim_pair.action, 'Color_{}'.format(prop_name))
+            action_group = self._bl_create_action_group(
+                anim_pair.action, f"Color_{prop_name}"
+            )
 
-            self._bl_create_fcurves(anim_pair.action, action_group, self._bl_convert_track_value if length == 1 else self._bl_convert_track_tuple, length, anim_index,
-                                    'data.wow_m2_light.{}'.format(prop_name), prop_track)
+            self._bl_create_fcurves(
+                anim_pair.action,
+                action_group,
+                self._bl_convert_track_value if length == 1 else self._bl_convert_track_tuple,
+                length,
+                anim_index,
+                f"data.wow_m2_light.{prop_name}",
+                prop_track,
+            )
 
-        for i, light in enumerate(self.m2.root.lights):
-            #bpy.ops.object.lamp_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
-            bpy.ops.object.light_add(type='POINT' if light.type else 'SPOT', location=(0, 0, 0))
+        if not len(self.m2.root.lights):
+            log.info("No lights found to import.")
+            return
+
+        for i, light in tqdm(enumerate(self.m2.root.lights), total=len(self.m2.root.lights), desc="Importing Lights", ascii=True):
+            # --- Create light object ---
+            light_type = "POINT" if light.type else "SPOT"
+            bpy.ops.object.light_add(type=light_type, location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
+            
+            # Link object to respective collection
+            util._link_to_single_collection(obj, collection)
+
             obj.data.wow_m2_light.type = str(light.type)
             obj.data.wow_m2_light.enabled = True
 
             if self.rig:
                 obj.parent = self.rig
 
+            # --- Attach light to bone if available ---
             if light.bone >= 0:
-                bpy.ops.object.constraint_add(type='CHILD_OF')
-                constraint = obj.constraints[-1]
-                constraint.target = self.rig
-                bone = self.m2.root.bones[light.bone]
-                constraint.subtarget = bone.name
+                try:
+                    bpy.ops.object.constraint_add(type="CHILD_OF")
+                    constraint = obj.constraints[-1]
+                    constraint.target = self.rig
+                    bone = self.m2.root.bones[light.bone]
+                    constraint.subtarget = bone.name
+                    obj.location = light.position
+                except (IndexError, KeyError):
+                    log.warn(f"Light {i} references an invalid bone index ({light.bone}). Skipping bone binding.")
 
-                bl_edit_bone = self.rig.data.bones[bone.name]
-                obj.location = light.position
-
-            # animate light
+            # --- Setup animation data ---
             obj.animation_data_create()
-            obj.animation_data.action_blend_type = 'ADD'
+            obj.animation_data.action_blend_type = "ADD"
+
             seq_name_table = M2SequenceNames()
             n_global_sequences = len(self.global_sequences)
 
-            channels = [('ambient_color', 3), ('ambient_intensity', 1), ('diffuse_color', 3),
-                        ('diffuse_intensity', 1), ('attenuation_start', 1), ('attenuation_end', 1), ('visibility', 1)]
-            
-            # titi test
-            #slot = bpy.context.scene.wow_m2_root_elements.lights.add()
-            #slot.pointer = obj
+            channels = [
+                ("ambient_color", 3),
+                ("ambient_intensity", 1),
+                ("diffuse_color", 3),
+                ("diffuse_intensity", 1),
+                ("attenuation_start", 1),
+                ("attenuation_end", 1),
+                ("visibility", 1),
+            ]
 
-            # load global sequences
+            # --- Load global sequences ---
             for j, seq_index in enumerate(self.global_sequences):
-                anim = bpy.context.scene.wow_m2_animations[seq_index]
-                action_name = "LT_{}_{}_Global_Sequence_{}".format(i, obj.name, str(j).zfill(3))
+                anim = bpy.context.scene.wow_m2_animations[j]
+                if anim.is_alias:
+                    continue
 
+                # Determine if anything in this light uses this global sequence
+                needs_animation = any(
+                    getattr(light, channel).global_sequence == seq_index
+                    for channel, _ in channels
+                )
+                if not needs_animation:
+                    continue
+
+                # Create a new anim_pair
                 anim_pair = anim.anim_pairs.add()
-                anim_pair.type = 'OBJECT'
+                anim_pair.type = "OBJECT"
                 anim_pair.object = obj
+
+                action_name = f"LT_{i}_{obj.name}_Global_Sequence_{str(j).zfill(3)}"
+                self._bl_create_action(anim_pair, action_name)
+
+                if not anim_pair.action:
+                    log.warn(f"Failed to create action for light {i}, global seq #{j}")
+                    continue
 
                 for channel, array_length in channels:
                     if getattr(light, channel).global_sequence == seq_index:
                         animate_property(anim_pair, light, channel, array_length, action_name, 0)
 
-                if not anim_pair.action:
-                    anim.anim_pairs.remove(-1)
-
-            # load animations
+            # --- Load regular animations ---
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
-                sequence = self.m2.root.sequences[anim_index]
+                if anim.is_alias:
+                    continue
 
+                # Determine if any channel of this light animates in this animation
+                needs_animation = any(
+                    getattr(light, channel).global_sequence < 0
+                    for channel, _ in channels
+                )
+                if not needs_animation:
+                    continue
+
+                sequence = self.m2.root.sequences[anim_index]
                 field_name = seq_name_table.get_sequence_name(sequence.id)
-                action_name = 'LT_{}_UnkAnim'.format(i, str(j).zfill(3)) if not field_name \
-                    else "LT_{}_{}_({})".format(i, str(j).zfill(3), field_name, sequence.variation_index)
+                if field_name:
+                    action_name = f"LT_{i}_{str(j).zfill(3)}_{field_name}({sequence.variation_index})"
+                else:
+                    action_name = f"LT_{i}_{str(j).zfill(3)}_UnkAnim"
 
                 anim_pair = anim.anim_pairs.add()
-                anim_pair.type = 'OBJECT'
+                anim_pair.type = "OBJECT"
                 anim_pair.object = obj
+
+                self._bl_create_action(anim_pair, action_name)
+
+                if not anim_pair.action:
+                    log.warn(f"Failed to create action for light {i}, anim #{anim_index}")
+                    continue
 
                 for channel, array_length in channels:
                     if getattr(light, channel).global_sequence < 0:
                         animate_property(anim_pair, light, channel, array_length, action_name, anim_index)
 
-                if not anim_pair.action:
-                    anim.anim_pairs.remove(-1)
+        # --- Log success ---
+        log.info(f"Imported {len(self.m2.root.lights)} lights.")
 
-    def load_events(self):
+    def load_events(self, collection):
+        """Import M2 events and link them to their corresponding bones."""
 
         if not len(self.m2.root.events):
-            print("\nNo events found to import.")
+            log.info("No events found to import.")
             return
-        else:
-            print("\nImport events.")
 
-        for event in self.m2.root.events:
-            bpy.ops.object.empty_add(type='CUBE', location=(0, 0, 0))
+        for i, event in tqdm(enumerate(self.m2.root.events),total=len(self.m2.root.events), desc="Importing Events", ascii=True):
+            # --- Create event object ---
+            bpy.ops.object.empty_add(type="CUBE", location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.scale = (0.019463, 0.019463, 0.019463)
-            bpy.ops.object.constraint_add(type='CHILD_OF')
+            
+            # Link object to respective collection
+            util._link_to_single_collection(obj, collection)
+            
+            # --- Add and configure constraint ---
+            bpy.ops.object.constraint_add(type="CHILD_OF")
             constraint = obj.constraints[-1]
             constraint.target = self.rig
-            obj.parent = self.rig
-            bone = self.m2.root.bones[event.bone]
-            constraint.subtarget = bone.name
+            
+            try:
+                bone = self.m2.root.bones[event.bone]
+                constraint.subtarget = bone.name
+                obj.location = event.position
+            except (IndexError, KeyError):
+                log.warn(f"Event {event.identifier} references invalid bone index ({event.bone}). Skipping binding.")
+                continue
 
-            bl_edit_bone = self.rig.data.bones[bone.name]
-            obj.location = event.position
+            # --- Configure event object ---
             token = M2EventTokens.get_event_name(event.identifier)
-            obj.name = "Event_{}_{}".format(token, event.identifier)
+            obj.name = f"Event_{token}_{event.identifier}"
             obj.wow_m2_event.enabled = True
 
             try:
                 obj.wow_m2_event.token = event.identifier
             except TypeError:
-                print('Warning: unknown event token \"{}\".'.format(event.identifier))
+                log.warn(f"Unknown event token '{event.identifier}'.")
 
-            if token in ('PlayEmoteSound',
-                         'DoodadSoundUnknown',
-                         'DoodadSoundOneShot',
-                         'GOPlaySoundKitCustom',
-                         'GOAddShake'):
+            if token in (
+                "PlayEmoteSound",
+                "DoodadSoundUnknown",
+                "DoodadSoundOneShot",
+                "GOPlaySoundKitCustom",
+                "GOAddShake",
+            ):
                 obj.wow_m2_event.data = event.data
 
-            # animate event firing
+            # --- Setup animation data ---
             obj.animation_data_create()
-            obj.animation_data.action_blend_type = 'ADD'
+            obj.animation_data.action_blend_type = "ADD"
+
             seq_name_table = M2SequenceNames()
             n_global_sequences = len(self.global_sequences)
-            
-            #titi test
-            #slot = bpy.context.scene.wow_m2_root_elements.events.add()
-            #slot.pointer = obj
 
-            # load global sequences
+            # --- Handle global sequence animation ---
             if event.enabled.global_sequence >= 0:
                 anim = bpy.context.scene.wow_m2_animations[event.enabled.global_sequence]
-                if not event.enabled.timestamps.n_elements \
-                or not event.enabled.timestamps[0]:
-                    return
+
+                if (
+                    not event.enabled.timestamps.n_elements
+                    or not event.enabled.timestamps[0]
+                ):
+                    continue
 
                 anim_pair = anim.anim_pairs.add()
-                anim_pair.type = 'OBJECT'
+                anim_pair.type = "OBJECT"
                 anim_pair.object = obj
 
-                name = 'ET_{}_{}_UnkAnim'.format(token, str(event.enabled.global_sequence).zfill(3))
+                name = f"ET_{token}_{str(event.enabled.global_sequence).zfill(3)}_UnkAnim"
 
                 self._bl_create_action(anim_pair, name)
-                self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, 0, 'wow_m2_event.fire',
-                                        event.enabled)
+                self._bl_create_fcurves(
+                    anim_pair.action,
+                    "",
+                    self._bl_convert_track_dummy,
+                    1,
+                    0,
+                    "wow_m2_event.fire",
+                    event.enabled,
+                )
 
-                return
-                        
-            # load animations
+                # Return to skip redundant per-anim handling
+                continue
+
+            # --- Handle per-animation events ---
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
                 sequence = self.m2.root.sequences[anim_index]
 
-                if event.enabled.timestamps.n_elements > anim_index:
-                    if not event.enabled.timestamps[anim_index]:
-                        continue
-                    
-                    if '64' in anim.flags:
-                        alias_next = anim.alias_next
+                if event.enabled.timestamps.n_elements <= anim_index:
+                    continue
 
-                        final_alias = _find_final_alias(self, n_global_sequences, alias_next)
+                if not event.enabled.timestamps[anim_index]:
+                    continue
 
-                        alias_anim = bpy.context.scene.wow_m2_animations[final_alias]              
+                # --- Handle alias animations ---
+                if "64" in anim.flags:
+                    alias_next = anim.alias_next
+                    final_alias = _find_final_alias(self, n_global_sequences, alias_next)
+                    alias_anim = bpy.context.scene.wow_m2_animations[final_alias]
 
-                        for anim_pair_alias in alias_anim.anim_pairs:
-                            if anim_pair_alias.type == 'OBJECT':
-                                if anim_pair_alias.object == obj:
-                                    anim_pair = anim.anim_pairs.add()
-                                    anim_pair.type = 'OBJECT'
-                                    anim_pair.object = obj       
-                                    anim_pair.action = anim_pair_alias.action
-                    else:
-                        anim_pair = anim.anim_pairs.add()
-                        anim_pair.type = 'OBJECT'
-                        anim_pair.object = obj
+                    for anim_pair_alias in alias_anim.anim_pairs:
+                        if anim_pair_alias.type == "OBJECT" and anim_pair_alias.object == obj:
+                            anim_pair = anim.anim_pairs.add()
+                            anim_pair.type = "OBJECT"
+                            anim_pair.object = obj
+                            anim_pair.action = anim_pair_alias.action
+                else:
+                    anim_pair = anim.anim_pairs.add()
+                    anim_pair.type = "OBJECT"
+                    anim_pair.object = obj
 
-                        field_name = seq_name_table.get_sequence_name(sequence.id)
-                        name = 'ET_{}_{}_UnkAnim'.format(token, str(anim_index).zfill(3)) if not field_name \
-                            else "ET_{}_{}_{}_({})".format(token, str(anim_index).zfill(3), field_name,
-                                                            sequence.variation_index)
+                    field_name = seq_name_table.get_sequence_name(sequence.id)
+                    name = (
+                        f"ET_{token}_{str(anim_index).zfill(3)}_UnkAnim"
+                        if not field_name
+                        else f"ET_{token}_{str(anim_index).zfill(3)}_{field_name}({sequence.variation_index})"
+                    )
 
-                        self._bl_create_action(anim_pair, name)
-                        self._bl_create_fcurves(anim_pair.action, "", self._bl_convert_track_dummy, 1, anim_index,
-                                                        'wow_m2_event.fire', event.enabled)
-                    
-    def load_cameras(self, timestamp_convert):
+                    self._bl_create_action(anim_pair, name)
+                    self._bl_create_fcurves(
+                        anim_pair.action,
+                        "",
+                        self._bl_convert_track_dummy,
+                        1,
+                        anim_index,
+                        "wow_m2_event.fire",
+                        event.enabled,
+                    )
+
+        # --- Log success ---
+        log.info(f"Imported {len(self.m2.root.events)} events.")
+
+    def load_cameras(self, collection, timestamp_convert):
+        """Import M2 camera objects, targets, and animation data into Blender."""
 
         def animate_camera_loc(anim_pair, name, cam_track, anim_index):
-
+            """Animate camera or target location using track data."""
             try:
                 frames = cam_track.timestamps[anim_index]
                 track = cam_track.values[anim_index]
             except IndexError:
                 return
 
-            if not len(frames) > 1:
+            if len(frames) <= 1:
                 return
 
-            # create a parent for curve segments
-            p_obj = bpy.data.objects.new(name, None)
-            bpy.context.collection.objects.link(p_obj)
+            # Create a parent object for curve segments
+            parent_obj = bpy.data.objects.new(name, None)
+            bpy.context.collection.objects.link(parent_obj)
 
             curves = []
-            for i in range(1, len(frames)):
-                if timestamp_convert == 'Convert':
-                    frame1 = int(round(frames[i - 1] * (bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000)))
-                    frame2 = int(round(frames[i]  * (bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000)))
-                else: 
-                    frame1 = frames[i - 1]    
-                    frame2 = frames[i]       
+            convert = (timestamp_convert == "Convert")
+            converted_frames = [frame for _, frame in self.convert_timestamps(frames, convert)]
 
-                curve_name = '{}_Path'.format(anim_pair.object.name)
-                curve = bpy.data.curves.new(name=curve_name, type='CURVE')
+            for i in range(1, len(converted_frames)):
+                frame1 = converted_frames[i - 1]
+                frame2 = converted_frames[i]
+
+                curve_name = f"{anim_pair.object.name}_Path"
+                curve = bpy.data.curves.new(name=curve_name, type="CURVE")
                 curve_obj = bpy.data.objects.new(name=curve_name, object_data=curve)
-                curve_obj.parent = p_obj
+                curve_obj.parent = parent_obj
                 bpy.context.collection.objects.link(curve_obj)
 
-                curve.dimensions = '3D'
+                curve.dimensions = "3D"
                 curve.resolution_u = 64
 
-                spline = curve.splines.new('BEZIER')
+                spline = curve.splines.new("BEZIER")
                 spline.resolution_u = 64
                 spline.bezier_points.add(count=1)
 
                 for j, k in enumerate((i - 1, i)):
                     spline_point = spline.bezier_points[j]
                     spline_point.co = Vector(track[k].value) + anim_pair.object.location
-                    spline_point.handle_left_type = 'FREE'
+                    spline_point.handle_left_type = "FREE"
                     spline_point.handle_left = Vector(track[k].in_tan) + anim_pair.object.location
-                    spline_point.handle_right_type = 'FREE'
+                    spline_point.handle_right_type = "FREE"
                     spline_point.handle_right = Vector(track[k].out_tan) + anim_pair.object.location
 
                 curve_slot = anim_pair.object.wow_m2_camera.animation_curves.add()
                 curve_slot.object = curve_obj
                 curve_slot.duration = frame2 - frame1
-
                 curves.append(curve_obj)
 
-            # zero in tan of frist point and out tan of last point
+            # Adjust endpoints (zero tangent handles)
             first_point = curves[0].data.splines[0].bezier_points[0]
             first_point.handle_left = first_point.co
             last_point = curves[-1].data.splines[0].bezier_points[-1]
             last_point.handle_right = last_point.co
 
-            # create contraints and set appropriate drivers for each curve
+            # Set up follow path constraints and drivers
             anim_pair.object.location = (0, 0, 0)
-
-            # active object is required for constraints / drivers to install properly
             bpy.context.view_layer.objects.active = anim_pair.object
             update_follow_path_constraints(None, bpy.context)
 
         def animate_camera_roll(anim_pair, name, cam_track, anim_index):
-
-            action = anim_pair.action
-
+            """Animate camera roll using axis-angle rotation."""
             try:
                 frames = cam_track.timestamps[anim_index]
                 track = cam_track.values[anim_index]
@@ -1581,180 +1840,176 @@ class BlenderM2Scene:
             if not len(frames):
                 return
 
-            if not action:
-                action = anim_pair.action = bpy.data.actions.new(name=name)
+            action = anim_pair.action or bpy.data.actions.new(name=name)
+            anim_pair.action = action
 
-            # create fcurve
-            f_curve = action.fcurves.new(data_path='rotation_axis_angle', index=0, action_group='Roll')
+            # Create roll F-curve
+            fcurve = action.fcurves.new(
+                data_path="rotation_axis_angle", index=0, action_group="Roll"
+            )
+            fcurve.keyframe_points.add(len(frames))
 
-            # init keyframes on the curve
-            f_curve.keyframe_points.add(len(frames))
+            for i, frame in self.convert_timestamps(frames, convert=(timestamp_convert == "Convert")):
+                key = fcurve.keyframe_points[i]
+                key.co = frame, track[i].value
+                key.handle_left = frame, track[i].in_tan
+                key.handle_left_type = "ALIGNED"
+                key.handle_right = frame, track[i].out_tan
+                key.handle_right_type = "ALIGNED"
+                key.interpolation = "BEZIER"  # TODO: Hermite interpolation
 
-            # set translation values for each channel
-            for i, timestamp in enumerate(frames):
-                if timestamp_convert == 'Convert':
-                    frame = int(round( timestamp * ( bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000 )))
-                else: 
-                    frame = timestamp
-
-                keyframe = f_curve.keyframe_points[i]
-                keyframe.co = frame, track[i].value
-                keyframe.handle_left = frame, track[i].in_tan
-                keyframe.handle_left_type = 'ALIGNED'
-                keyframe.handle_right = frame, track[i].out_tan
-                keyframe.handle_right_type = 'ALIGNED'
-                keyframe.interpolation = 'BEZIER'  # TODO: hermite
-
+        # --- Validation ---
         if not len(self.m2.root.cameras):
-            print("\nNo cameras found to import.")
+            log.info("No cameras found to import.")
             return
-        else:
-            print("\nImporting cameras.")
 
-        camera_names = {
-            0: "PortraitCam",
-            1: "CharInfoCam",
-            -1: "MiscCam"
-        }
+        camera_names = {0: "PortraitCam", 1: "CharInfoCam", -1: "MiscCam"}
+        n_global_sequences = len(self.global_sequences)
 
-        for camera in self.m2.root.cameras:
-
-            # create camera object
-            cam = bpy.data.cameras.new(camera_names[camera.type])
-            obj = bpy.data.objects.new(camera_names[camera.type], cam)
-            bpy.context.collection.objects.link(obj)
+        for i, camera in tqdm(enumerate(self.m2.root.cameras), total=len(self.m2.root.cameras), desc="Importing Cameras", ascii=True):
+            # --- Create camera object ---
+            cam_data = bpy.data.cameras.new(camera_names.get(camera.type, "UnknownCam"))
+            obj = bpy.data.objects.new(camera_names.get(camera.type, "UnknownCam"), cam_data)
+            
+            # Link object to respective collection
+            util._link_to_single_collection(obj, collection)
 
             obj.location = camera.position_base
             obj.wow_m2_camera.type = str(camera.type)
             obj.data.clip_start = camera.near_clip
             obj.data.clip_end = camera.far_clip
-            obj.data.lens_unit = 'FOV'
+            obj.data.lens_unit = "FOV"
             obj.data.angle = camera.fov
-
             obj.animation_data_create()
-            obj.animation_data.action_blend_type = 'ADD'
+            obj.animation_data.action_blend_type = "ADD"
 
-            # create camera target object
-            t_obj = bpy.data.objects.new("{}_Target".format(obj.name), None)
-            bpy.context.collection.objects.link(t_obj)
-
+            # --- Create camera target object ---
+            t_obj_name = f"{obj.name}_Target"
+            t_obj = bpy.data.objects.new(t_obj_name, None)
+            
+            # Link target object to respective collection
+            util._link_to_single_collection(t_obj, collection)
+            
             t_obj.location = camera.target_position_base
             t_obj.wow_m2_camera.enabled = True
             t_obj.empty_display_size = 0.07
-            t_obj.empty_display_type = 'CONE'
-            t_obj.rotation_mode = 'AXIS_ANGLE'
+            t_obj.empty_display_type = "CONE"
+            t_obj.rotation_mode = "AXIS_ANGLE"
             t_obj.rotation_axis_angle = (0, 1, 0, 0)
             t_obj.lock_rotation = (True, True, True)
-
             t_obj.animation_data_create()
-            t_obj.animation_data.action_blend_type = 'ADD'
+            t_obj.animation_data.action_blend_type = "ADD"
 
-            # animate camera
-
-            # load global sequences
-            n_global_sequences = len(self.global_sequences)
+            # --- Global sequence animations ---
             for j, seq_index in enumerate(self.global_sequences):
                 anim = bpy.context.scene.wow_m2_animations[j]
 
                 c_anim_pair = anim.anim_pairs.add()
-                c_anim_pair.type = 'OBJECT'
+                c_anim_pair.type = "OBJECT"
                 c_anim_pair.object = obj
 
                 t_anim_pair = anim.anim_pairs.add()
-                t_anim_pair.type = 'OBJECT'
+                t_anim_pair.type = "OBJECT"
                 t_anim_pair.object = t_obj
 
-                name = '{}_UnkAnim'.format(str(j).zfill(3))
-                c_name = "CM{}".format(name)
-                t_name = "CT{}".format(name)
+                base_name = f"_{str(j).zfill(3)}_UnkAnim"
+                c_name = f"CM{base_name}"
+                t_name = f"CT{base_name}"
 
                 if camera.positions.global_sequence == seq_index:
                     animate_camera_loc(c_anim_pair, c_name, camera.positions, 0)
-
                 if camera.target_position.global_sequence == seq_index:
                     animate_camera_loc(t_anim_pair, t_name, camera.target_position, 0)
-
                 if camera.roll.global_sequence == seq_index:
                     animate_camera_roll(t_anim_pair, t_name, camera.roll, 0)
 
-            # load animations
-            anim_data_table = M2SequenceNames()
+            # --- Per-animation sequences ---
+            seq_names = M2SequenceNames()
             for j, anim_index in enumerate(self.animations):
                 anim = bpy.context.scene.wow_m2_animations[j + n_global_sequences]
                 sequence = self.m2.root.sequences[anim_index]
 
-                if '64' in anim.flags:
+                # --- Handle alias animations ---
+                if "64" in anim.flags:
                     alias_next = anim.alias_next
-
                     final_alias = _find_final_alias(self, n_global_sequences, alias_next)
+                    alias_anim = bpy.context.scene.wow_m2_animations[final_alias]
 
-                    alias_anim = bpy.context.scene.wow_m2_animations[final_alias]              
+                    for alias_pair in alias_anim.anim_pairs:
+                        if alias_pair.type == "OBJECT":
+                            if alias_pair.object == obj or alias_pair.object == t_obj:
+                                new_pair = anim.anim_pairs.add()
+                                new_pair.type = "OBJECT"
+                                new_pair.object = alias_pair.object
+                                new_pair.action = alias_pair.action
+                    continue
 
-                    for anim_pair_alias in alias_anim.anim_pairs:
-                        if anim_pair_alias.type == 'OBJECT':
-                            if anim_pair_alias.object == obj:
-                                anim_pair = anim.anim_pairs.add()
-                                anim_pair.type = 'OBJECT'
-                                anim_pair.object = obj       
-                                anim_pair.action = anim_pair_alias.action
-                            elif anim_pair_alias.object == t_obj:
-                                anim_pair = anim.anim_pairs.add()
-                                anim_pair.type = 'OBJECT'
-                                anim_pair.object = t_obj       
-                                anim_pair.action = anim_pair_alias.action
-                else:
+                # --- Normal animation ---
+                c_anim_pair = anim.anim_pairs.add()
+                c_anim_pair.type = "OBJECT"
+                c_anim_pair.object = obj
 
-                    c_anim_pair = anim.anim_pairs.add()
-                    c_anim_pair.type = 'OBJECT'
-                    c_anim_pair.object = obj
+                t_anim_pair = anim.anim_pairs.add()
+                t_anim_pair.type = "OBJECT"
+                t_anim_pair.object = t_obj
 
-                    t_anim_pair = anim.anim_pairs.add()
-                    t_anim_pair.type = 'OBJECT'
-                    t_anim_pair.object = t_obj
+                field_name = seq_names.get_sequence_name(sequence.id)
+                base_name = (
+                    f"_{str(anim_index).zfill(3)}_UnkAnim"
+                    if not field_name
+                    else f"_{str(anim_index).zfill(3)}_{field_name}({sequence.variation_index})"
+                )
+                c_name = f"CM{base_name}"
+                t_name = f"CT{base_name}"
 
-                    field_name = anim_data_table.get_sequence_name(sequence.id)
-                    name = '_{}_UnkAnim'.format(str(anim_index).zfill(3)) if not field_name \
-                        else "_{}_{}_({})".format(str(anim_index).zfill(3), field_name, sequence.variation_index)
+                if camera.positions.global_sequence < 0:
+                    animate_camera_loc(c_anim_pair, c_name, camera.positions, anim_index)
+                if camera.target_position.global_sequence < 0:
+                    animate_camera_loc(t_anim_pair, t_name, camera.target_position, anim_index)
+                if camera.roll.global_sequence < 0:
+                    animate_camera_roll(t_anim_pair, t_name, camera.roll, anim_index)
 
-                    c_name = "CM{}".format(name)
-                    t_name = "CT{}".format(name)
-
-                    if camera.positions.global_sequence < 0:
-                        animate_camera_loc(c_anim_pair, c_name, camera.positions, anim_index)
-
-                    if camera.target_position.global_sequence < 0:
-                        animate_camera_loc(t_anim_pair, t_name, camera.target_position, anim_index)
-
-                    if camera.roll.global_sequence < 0:
-                        animate_camera_roll(t_anim_pair, t_name, camera.roll, anim_index)
-
-            # set target for camera
-            bpy.context.view_layer.objects.active = obj  # active object is required for constraints to install properly
+            # --- Set camera target ---
+            bpy.context.view_layer.objects.active = obj
             obj.wow_m2_camera.target = t_obj
+            
+        # --- Log success ---
+        log.info(f"Imported {len(self.m2.root.cameras)} cameras.")
 
-    def load_ribbons(self):
+    def load_ribbons(self, collection):
+        """Import ribbon emitters from the M2 file into Blender."""
+
+        # --- Validation ---
         if not len(self.m2.root.ribbon_emitters):
-            print("\nNo ribbons found to import.")
+            log.info("No ribbons found to import.")
             return
-        else:
-            print("\nImport ribbons.")
 
         loaded_mats = {}
-        for i,ribbon in enumerate(self.m2.root.ribbon_emitters):
-            bpy.ops.object.empty_add(type='SPHERE', location=(0, 0, 0))
+
+        for i, ribbon in tqdm(enumerate(self.m2.root.ribbon_emitters), total=len(self.m2.root.ribbon_emitters), desc="Importing Ribbons", ascii=True):
+            # --- Create ribbon object ---
+            bpy.ops.object.empty_add(type="SPHERE", location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.empty_display_size = 0.07
-            bpy.ops.object.constraint_add(type='CHILD_OF')
+            
+            # Link object to respective collection
+            util._link_to_single_collection(obj, collection)
+
+            # --- Attach to bone ---
+            bpy.ops.object.constraint_add(type="CHILD_OF")
             constraint = obj.constraints[-1]
             constraint.target = self.rig
-            obj.parent = self.rig
-            bone = self.m2.root.bones[ribbon.bone_index]
-            constraint.subtarget = bone.name
 
-            bl_edit_bone = self.rig.data.bones[bone.name]
-            obj.location = ribbon.position
+            try:
+                bone = self.m2.root.bones[ribbon.bone_index]
+                constraint.subtarget = bone.name
+                obj.location = ribbon.position
+            except (IndexError, KeyError):
+                log.warn(f"Ribbon {i} references invalid bone index ({ribbon.bone_index}). Skipping binding.")
+                continue
 
-            obj.name = f'Ribbon {i}'
+            # --- Set object properties ---
+            obj.name = f"Ribbon_{i}"
             obj.wow_m2_ribbon.enabled = True
 
             obj.wow_m2_ribbon.edges_per_second = ribbon.edges_per_second
@@ -1764,72 +2019,118 @@ class BlenderM2Scene:
             obj.wow_m2_ribbon.texture_cols = ribbon.texture_cols
 
             obj.animation_data_create()
-            obj.animation_data.action_blend_type = 'ADD'
+            obj.animation_data.action_blend_type = "ADD"
 
+            # --- Load textures ---
             for tex_id in ribbon.texture_indices:
-                tex = self.load_texture(tex_id)
-                slot = obj.wow_m2_ribbon.textures.add()
-                slot.pointer = tex
+                try:
+                    tex = self.load_texture(tex_id)
+                    tex_slot = obj.wow_m2_ribbon.textures.add()
+                    tex_slot.pointer = tex
+                except Exception as e:
+                    log.warn(f"Failed to load texture {tex_id} for Ribbon {i}: {e}")
+                    continue
 
+            # --- Load materials ---
+            mat = None
             for mat_id in ribbon.material_indices:
-                mat = None
                 if mat_id in loaded_mats:
                     mat = loaded_mats[mat_id]
                 else:
-                    material = self.m2.root.materials[mat_id]
-                    mat = bpy.data.materials.new(name=f'Ribbon Material #{mat_id}')
-                    mat.wow_m2_material.enabled = True
-                    mat.wow_m2_material.texture_1_render_flags = parse_bitfield(material.flags, 0x800)
-                    mat.wow_m2_material.texture_1 = tex
-                    mat.wow_m2_material.texture_1_blending_mode = str(material.blending_mode)
-                    loaded_mats[mat_id] = mat
+                    try:
+                        material = self.m2.root.materials[mat_id]
+                        mat = bpy.data.materials.new(name=f"Ribbon_Material_{mat_id}")
+                        mat.wow_m2_material.enabled = True
+                        mat.wow_m2_material.texture_1_render_flags = parse_bitfield(material.flags, 0x800)
+                        mat.wow_m2_material.texture_1 = tex
+                        mat.wow_m2_material.texture_1_blending_mode = str(material.blending_mode)
+                        loaded_mats[mat_id] = mat
+                    except IndexError:
+                        log.warn(f"Material index {mat_id} out of range for Ribbon {i}. Skipping.")
+                        continue
 
-            slot = obj.wow_m2_ribbon.materials.add()
-            slot.pointer = mat
+            # --- Assign material to ribbon ---
+            if mat:
+                mat_slot = obj.wow_m2_ribbon.materials.add()
+                mat_slot.pointer = mat
 
-            self._bl_create_sequences(ribbon,'color_track',
-                f'RB_{i}',obj,'wow_m2_ribbon','color',3,self._bl_convert_track_tuple)
+            # --- Animate ribbon tracks ---
+            self._bl_create_sequences(
+                ribbon, "color_track",
+                f"RB_{i}", obj, "wow_m2_ribbon", "color",
+                3, self._bl_convert_track_tuple
+            )
 
-            self._bl_create_sequences(ribbon,'alpha_track',
-                f'RB_{i}',obj,'wow_m2_ribbon','alpha',1,lambda value: [value/0x7fff])
+            self._bl_create_sequences(
+                ribbon, "alpha_track",
+                f"RB_{i}", obj, "wow_m2_ribbon", "alpha",
+                1, lambda value: [value / 0x7FFF]
+            )
 
-            self._bl_create_sequences(ribbon,'height_above_track',
-                f'RB_{i}',obj,'wow_m2_ribbon','height_above',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                ribbon, "height_above_track",
+                f"RB_{i}", obj, "wow_m2_ribbon", "height_above",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(ribbon,'height_below_track',
-                f'RB_{i}',obj,'wow_m2_ribbon','height_below',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                ribbon, "height_below_track",
+                f"RB_{i}", obj, "wow_m2_ribbon", "height_below",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(ribbon,'tex_slot_track',
-                f'RB_{i}',obj,'wow_m2_ribbon','texture_slot',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                ribbon, "tex_slot_track",
+                f"RB_{i}", obj, "wow_m2_ribbon", "texture_slot",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(ribbon,'visibility_track',
-                f'RB_{i}',obj,'wow_m2_ribbon','visibility',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                ribbon, "visibility_track",
+                f"RB_{i}", obj, "wow_m2_ribbon", "visibility",
+                1, self._bl_convert_track_value
+            )
 
-    def load_particles(self, timestamp_convert):
+        # --- Log success ---
+        log.info(f"Imported {len(self.m2.root.ribbon_emitters)} ribbon emitters.")
+
+    def load_particles(self, collection, timestamp_convert):
+        """Import M2 particle emitters into Blender, preserving all animation tracks."""
+
+        # --- Validation ---
         if not len(self.m2.root.particle_emitters):
-            print("\nNo particles found to import.")
+            log.info("No particles found to import.")
             return
-        else:
-            print("\nImport particles.")
 
-        for i,m2_particle in enumerate(self.m2.root.particle_emitters):
-            bpy.ops.object.empty_add(type='SPHERE', location=(0,0,0))
+        for i, m2_particle in tqdm(enumerate(self.m2.root.particle_emitters), total=len(self.m2.root.particle_emitters), desc="Importing Particles", ascii=True):
+            # --- Create particle object ---
+            bpy.ops.object.empty_add(type="SPHERE", location=(0, 0, 0))
             obj = bpy.context.view_layer.objects.active
             obj.empty_display_size = 0.07
-            bpy.ops.object.constraint_add(type='CHILD_OF')
+            
+            # Link object to respective collection
+            util._link_to_single_collection(obj, collection)
+
+            # --- Attach to bone ---
+            bpy.ops.object.constraint_add(type="CHILD_OF")
             constraint = obj.constraints[-1]
             constraint.target = self.rig
-            obj.parent = self.rig
-            bone = self.m2.root.bones[m2_particle.bone]
-            constraint.subtarget = bone.name
-            obj.location = m2_particle.position
-            obj.name = f'Particle {i}'
+
+            try:
+                bone = self.m2.root.bones[m2_particle.bone]
+                constraint.subtarget = bone.name
+                obj.location = m2_particle.position
+            except (IndexError, KeyError):
+                log.warn(f"Particle {i} references invalid bone index ({m2_particle.bone}). Skipping binding.")
+                continue
+
+            # --- Initialize particle object ---
+            obj.name = f"Particle_{i}"
             obj.wow_m2_particle.enabled = True
             obj.animation_data_create()
             bl_particle = obj.wow_m2_particle
 
-            # static fields
-            bl_particle.enabled = True
+            # --- Static properties ---
             bl_particle.flags = parse_bitfield(m2_particle.flags, 0x80000)
             bl_particle.texture = self.load_texture(m2_particle.texture)
             bl_particle.geometry_model_filename = m2_particle.geometry_model_filename.value
@@ -1837,14 +2138,17 @@ class BlenderM2Scene:
             bl_particle.blending_type = str(m2_particle.blending_type)
             bl_particle.emitter_type = str(m2_particle.emitter_type)
             bl_particle.particle_color_index = m2_particle.particle_color_index
-            try: 
+
+            try:
                 bl_particle.particle_type = str(m2_particle.particle_type)
             except TypeError:
-                bl_particle.particle_type = '0'
+                bl_particle.particle_type = "0"
+
             try:
                 bl_particle.side = str(m2_particle.head_or_tail)
             except TypeError:
-                bl_particle.side = '0'
+                bl_particle.side = "0"
+
             bl_particle.texture_tile_rotation = m2_particle.texture_tile_rotation
             bl_particle.texture_dimensions_rows = m2_particle.texture_dimensions_rows
             bl_particle.texture_dimensions_cols = m2_particle.texture_dimension_columns
@@ -1854,7 +2158,7 @@ class BlenderM2Scene:
             bl_particle.tail_length = m2_particle.tail_length
             bl_particle.twinkle_speed = m2_particle.twinkle_speed
             bl_particle.twinkle_percent = m2_particle.twinkle_percent
-            bl_particle.twinkle_scale = (m2_particle.twinkle_scale.min,m2_particle.twinkle_scale.max)
+            bl_particle.twinkle_scale = (m2_particle.twinkle_scale.min, m2_particle.twinkle_scale.max)
             bl_particle.burst_multiplier = m2_particle.burst_multiplier
             bl_particle.drag = m2_particle.drag
             bl_particle.basespin = m2_particle.basespin
@@ -1870,134 +2174,222 @@ class BlenderM2Scene:
             bl_particle.follow_speed_2 = m2_particle.follow_speed2
             bl_particle.follow_scale_2 = m2_particle.follow_scale2
 
-            # animations
-            self._bl_create_sequences(m2_particle,'emission_speed',
-                f'PT_{i}',obj,'wow_m2_particle','emission_speed',1,self._bl_convert_track_value)
+            # --- Standard track-based animations ---
+            self._bl_create_sequences(
+                m2_particle, "emission_speed",
+                f"PT_{i}", obj, "wow_m2_particle", "emission_speed",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'speed_variation',
-                f'PT_{i}',obj,'wow_m2_particle','speed_variation',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "speed_variation",
+                f"PT_{i}", obj, "wow_m2_particle", "speed_variation",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'vertical_range',
-                f'PT_{i}',obj,'wow_m2_particle','vertical_range',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "vertical_range",
+                f"PT_{i}", obj, "wow_m2_particle", "vertical_range",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'horizontal_range',
-                f'PT_{i}',obj,'wow_m2_particle','horizontal_range',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "horizontal_range",
+                f"PT_{i}", obj, "wow_m2_particle", "horizontal_range",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'gravity',
-                f'PT_{i}',obj,'wow_m2_particle','gravity',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "gravity",
+                f"PT_{i}", obj, "wow_m2_particle", "gravity",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'lifespan',
-                f'PT_{i}',obj,'wow_m2_particle','lifespan',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "lifespan",
+                f"PT_{i}", obj, "wow_m2_particle", "lifespan",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'emission_rate',
-                f'PT_{i}',obj,'wow_m2_particle','emission_rate',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "emission_rate",
+                f"PT_{i}", obj, "wow_m2_particle", "emission_rate",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'emission_area_length',
-                f'PT_{i}',obj,'wow_m2_particle','emission_area_length',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "emission_area_length",
+                f"PT_{i}", obj, "wow_m2_particle", "emission_area_length",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'emission_area_width',
-                f'PT_{i}',obj,'wow_m2_particle','emission_area_width',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "emission_area_width",
+                f"PT_{i}", obj, "wow_m2_particle", "emission_area_width",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'z_source',
-                f'PT_{i}',obj,'wow_m2_particle','z_source',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "z_source",
+                f"PT_{i}", obj, "wow_m2_particle", "z_source",
+                1, self._bl_convert_track_value
+            )
 
-            self._bl_create_sequences(m2_particle,'enabled_in',
-                f'PT_{i}',obj,'wow_m2_particle','active',1,self._bl_convert_track_value)
+            self._bl_create_sequences(
+                m2_particle, "enabled_in",
+                f"PT_{i}", obj, "wow_m2_particle", "active",
+                1, self._bl_convert_track_value
+            )
 
-            def create_fcurve_track(action, m2_track,bl_track_name, group_name, track_count, conv = lambda x: x):
-                fcurves = [action.fcurves.new(data_path="wow_m2_particle."+bl_track_name, index=k, action_group=group_name)
+            # --- Helper: generic fcurve creation ---
+            def create_fcurve_track(action, m2_track, bl_track_name, group_name, track_count, conv=lambda x: x):
+                """Create Blender FCurves for a given particle track."""
+                fcurves = [
+                    action.fcurves.new(
+                        data_path=f"wow_m2_particle.{bl_track_name}",
+                        index=k,
+                        action_group=group_name
+                    )
                     for k in range(track_count)
                 ]
 
                 frame_count = len(m2_track.timestamps)
-
                 for fcurve in fcurves:
                     fcurve.keyframe_points.add(frame_count)
 
-                for k in range(frame_count):
-                    if timestamp_convert == 'Convert':
-                        time = int(round( m2_track.timestamps[k] * (bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000)))
-                    else: 
-                        time = m2_track.timestamps[k]
-                    value = conv(m2_track.keys[k])
-                    for j,fcurve in enumerate(fcurves):
+                for (k, time), key in zip(
+                    self.convert_timestamps(m2_track.timestamps, convert=(timestamp_convert == "Convert")),
+                    m2_track.keys
+                ):
+                    value = conv(key)
+                    for j, fcurve in enumerate(fcurves):
                         keyframe = fcurve.keyframe_points[k]
                         keyframe.co = (time, value if track_count == 1 else value[j])
-                        keyframe.interpolation = 'LINEAR'
+                        keyframe.interpolation = "LINEAR"
 
+            # --- Animated color, alpha, scale, cell tracks ---
             obj.animation_data_create()
-            obj.animation_data.action_blend_type = 'ADD'
-            particle_action = bpy.data.actions.new(name=f'PT_{obj.name}_particle_tracks')
+            obj.animation_data.action_blend_type = "ADD"
+
+            particle_action = bpy.data.actions.new(name=f"PT_{obj.name}_particle_tracks")
             particle_action.use_fake_user = True
             obj.wow_m2_particle.action = particle_action
-            create_fcurve_track(particle_action, m2_particle.color_track,'color','Color',3, lambda x: (x[0]/255,x[1]/255,x[2]/255))
-            create_fcurve_track(particle_action, m2_particle.alpha_track,'alpha','',1,lambda x: x/0x7fff)
-            create_fcurve_track(particle_action, m2_particle.scale_track,'scale','Scale',2)
-            create_fcurve_track(particle_action, m2_particle.head_cell_track,'head_cell','',1)
-            create_fcurve_track(particle_action, m2_particle.tail_cell_track,'tail_cell','',1)
 
-            spline_action = bpy.data.actions.new(name=f'PT_{obj.name}_particle_spline')
+            create_fcurve_track(
+                particle_action, m2_particle.color_track,
+                "color", "Color", 3, lambda x: (x[0] / 255, x[1] / 255, x[2] / 255)
+            )
+
+            create_fcurve_track(
+                particle_action, m2_particle.alpha_track,
+                "alpha", "", 1, lambda x: x / 0x7FFF
+            )
+
+            create_fcurve_track(particle_action, m2_particle.scale_track, "scale", "Scale", 2)
+            create_fcurve_track(particle_action, m2_particle.head_cell_track, "head_cell", "", 1)
+            create_fcurve_track(particle_action, m2_particle.tail_cell_track, "tail_cell", "", 1)
+
+            # --- Animated spline track ---
+            spline_action = bpy.data.actions.new(name=f"PT_{obj.name}_particle_spline")
             spline_action.use_fake_user = True
             obj.wow_m2_particle.spline_action = spline_action
+
             fake_spline_fcurve = FBlock(vec3D)
             fake_spline_fcurve.interpolation_type = 1
-            for i,spline in enumerate(m2_particle.spline_points):
-                if timestamp_convert == 'Convert':
-                    fake_spline_fcurve.timestamps.append(int(round(i / (bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000))))
-                else: 
-                    fake_spline_fcurve.timestamps.append(i)
+
+            convert = (timestamp_convert == "Convert")
+            scale = self.fps / 1000.0
+
+            for i, spline in enumerate(m2_particle.spline_points):
+                timestamp = int(round(i / scale)) if convert else i
+                fake_spline_fcurve.timestamps.append(timestamp)
                 fake_spline_fcurve.keys.append(spline)
-            create_fcurve_track(spline_action, fake_spline_fcurve, 'spline_point','Spline', 3)
 
-    def load_collision(self):
+            create_fcurve_track(spline_action, fake_spline_fcurve, "spline_point", "Spline", 3)
+            
+        # --- Log success ---
+        log.info(f"Imported {len(self.m2.root.particle_emitters)} particle emitter.")
 
+    def load_collision(self, collection):
+        """Import the M2 collision mesh into Blender."""
+
+        # --- Validation ---
         if not len(self.m2.root.collision_vertices):
-            print("\nNo collision mesh found to import.")
+            log.info("No collision mesh found to import.")
             return
-        else:
-            print("\nImporting collision mesh.")
 
-        vertices = [vertex for vertex in self.m2.root.collision_vertices]
-        triangles = [self.m2.root.collision_triangles[i:i+3]
-                     for i in range(0, len(self.m2.root.collision_triangles), 3)]
+        # --- Prepare mesh data ---
+        vertices = [v for v in self.m2.root.collision_vertices]
+        triangles = [
+            self.m2.root.collision_triangles[i:i + 3]
+            for i in range(0, len(self.m2.root.collision_triangles), 3)
+        ]
 
-        # create mesh
+        # --- Create mesh ---
         mesh = bpy.data.meshes.new(self.m2.root.name.value)
         mesh.from_pydata(vertices, [], triangles)
 
         for poly in mesh.polygons:
             poly.use_smooth = True
 
-        # create object
-        obj = bpy.data.objects.new('Collision', mesh)
-        bpy.context.collection.objects.link(obj)
+        # --- Create Blender object ---
+        obj = bpy.data.objects.new("Collision", mesh)
+        
+        # Link object to respective collection
+        util._link_to_single_collection(obj, collection)
+
         obj.wow_m2_geoset.collision_mesh = True
         obj.hide_set(True)
+
+        # --- Create transparent material ---
         bl_mat = bpy.data.materials.new(name="Collision")
-        bl_mat.blend_method = 'BLEND'
+        bl_mat.blend_method = "BLEND"
         bl_mat.use_nodes = True
+
         node_tree = bl_mat.node_tree
-        for node in node_tree.nodes:
+
+        # Clear default nodes
+        for node in list(node_tree.nodes):
             node_tree.nodes.remove(node)
-        transparent_bsdf = node_tree.nodes.new(type='ShaderNodeBsdfTransparent')
-        output_node = node_tree.nodes.new(type='ShaderNodeOutputMaterial')
+
+        # Transparent shader setup
+        transparent_bsdf = node_tree.nodes.new(type="ShaderNodeBsdfTransparent")
+        output_node = node_tree.nodes.new(type="ShaderNodeOutputMaterial")
         node_tree.links.new(transparent_bsdf.outputs["BSDF"], output_node.inputs["Surface"])
-        bsdf = bl_mat.node_tree.nodes["Transparent BSDF"]
-        bsdf.inputs['Color'].default_value = (0.381325, 0.887923, 0.371238, 1)
+
+        bsdf = node_tree.nodes["Transparent BSDF"]
+        bsdf.inputs["Color"].default_value = (0.381325, 0.887923, 0.371238, 1)
+
         obj.data.materials.append(bl_mat)
+        
+        # --- Log success ---
+        log.info("Imported collision mesh.")
 
+    def load_globalflags(self, collection):
+        """Import M2 global flags and attach to the M2 root collection."""
+        if not collection or not hasattr(collection, "wow_m2_globalflags"):
+            log.warn("No M2 root collection to attach global flags.")
+            return
 
-    def load_globalflags(self):
-        print("\nImporting global flags.")
-        armature = next((obj for obj in bpy.data.objects if obj.type == 'ARMATURE'), None)
-        armature.wow_m2_globalflags.enabled = True
-        bl_globalflags = armature.wow_m2_globalflags
-
+        bl_globalflags = collection.wow_m2_globalflags
         bl_globalflags.enabled = True
-        if self.m2.root.version >= M2Versions.WOTLK: #If M2 Version is WOTLK, erase all higher expansions flags
-            bl_globalflags.flagsLK = parse_bitfield(self.m2.root.global_flags, 0x10)
-        else:
-            bl_globalflags.flagsLegion = parse_bitfield(self.m2.root.global_flags, 0x200000)
+
+        flags_value = self.m2.root.global_flags
+
+        try:
+            if self.m2.root.version >= M2Versions.WOTLK:
+                flags_lk = parse_bitfield(self.m2.root.global_flags, 0x10)
+                bl_globalflags.flagsLK = set(flags_lk)
+                log.debug(f"Parsed LK flags: {flags_lk}")
+            else:
+                flags_legion = parse_bitfield(self.m2.root.global_flags, 0x200000)
+                bl_globalflags.flagsLegion = set(flags_legion)
+                log.info(f"Parsed Legion flags: {flags_legion}")
+
+            log.info(f"Imported global flags to collection '{collection.name}'")
+
+        except Exception as e:
+            log.error(f"Failed to import global flags: {e}")
 
     def prepare_export_axis(self, forward_axis, scale):
         self.scale = scale
@@ -2094,378 +2486,877 @@ class BlenderM2Scene:
             bpy.ops.object.mode_set( mode = self.old_mode )
 
     def save_properties(self, filepath, selected_only):
-        self.m2.root.name.value = os.path.basename(os.path.splitext(filepath)[0])
-        objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
+        """
+        Exports model root properties such as name, bounding box, and bounding sphere.
+        """
+        try:
+            # --- Set model name ---
+            try:
+                self.m2.root.name.value = os.path.basename(os.path.splitext(filepath)[0])
+                log.debug(f"Set model name to '{self.m2.root.name.value}'")
+            except Exception as e:
+                log.error(f"Failed to set model name from filepath '{filepath}': {e}")
+                self.m2.root.name.value = "UnnamedModel"
 
-        b_min, b_max = get_objs_boundbox_world(filter(lambda ob: not ob.wow_m2_geoset.collision_mesh
-                                                                and ob.type == 'MESH'
-                                                                and not ob.hide_get(), objects))
-        b_min = self._convert_vec(b_min)
-        b_max = self._convert_vec(b_max)
+            # --- Collect objects ---
+            try:
+                objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
+                log.debug(f"Collected {len(objects)} objects ({'selected only' if selected_only else 'entire scene'}).")
+            except Exception as e:
+                log.error(f"Failed to retrieve Blender objects: {e}")
+                return
 
-        self.m2.root.bounding_box.min = b_min
-        self.m2.root.bounding_box.max = b_max
-        self.m2.root.bounding_sphere_radius = sqrt(((b_max[self.axis_order[0]]-b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
-                                                + ((b_max[self.axis_order[1]]-b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
-                                                + ((b_max[2]-b_min[2])) ** 2) / 2
+            # --- Filter valid mesh objects ---
+            try:
+                valid_objects = list(filter(
+                    lambda ob: (
+                        hasattr(ob, "wow_m2_geoset")
+                        and not ob.wow_m2_geoset.collision_mesh
+                        and ob.type == 'MESH'
+                        and not ob.hide_get()
+                    ),
+                    objects
+                ))
 
-        # TODO: flags, collision bounding box
+                if not valid_objects:
+                    log.warn("No valid mesh objects found for bounding box calculation.")
+                    return
+
+                log.debug(f"Filtered {len(valid_objects)} valid mesh objects for bounding box.")
+            except Exception as e:
+                log.error(f"Failed to filter valid mesh objects: {e}")
+                return
+
+            # --- Compute bounding box ---
+            try:
+                b_min, b_max = get_objs_boundbox_world(valid_objects)
+                b_min = self._convert_vec(b_min)
+                b_max = self._convert_vec(b_max)
+                log.debug(f"Computed bounding box: min={b_min}, max={b_max}")
+            except Exception as e:
+                log.error(f"Failed to compute bounding box: {e}")
+                b_min = (0.0, 0.0, 0.0)
+                b_max = (1.0, 1.0, 1.0)
+                log.warn("Using default bounding box values (0,0,0)-(1,1,1).")
+
+            # --- Assign bounding box to model ---
+            try:
+                self.m2.root.bounding_box.min = b_min
+                self.m2.root.bounding_box.max = b_max
+            except Exception as e:
+                log.error(f"Failed to assign bounding box values: {e}")
+
+            # --- Compute bounding sphere radius ---
+            try:
+                dx = (b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale
+                dy = (b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale
+                dz = (b_max[2] - b_min[2])
+                self.m2.root.bounding_sphere_radius = sqrt(dx**2 + dy**2 + dz**2) / 2
+                log.debug(f"Bounding sphere radius computed: {self.m2.root.bounding_sphere_radius:.4f}")
+            except Exception as e:
+                self.m2.root.bounding_sphere_radius = 1.0
+                log.warn(f"Failed to compute bounding sphere radius: {e}, using default value (1.0).")
+
+            # --- Placeholder for future flags / collision boxes ---
+            # log.debug("TODO: Implement flags and collision bounding box export.")
+
+            # --- Log success ---
+            log.info(f"Exported model properties for '{self.m2.root.name.value}'.")
+
+        except Exception as e:
+            log.error(f"Unhandled exception in save_properties: {e}")
+            traceback.print_exc()
 
     def save_bones(self, selected_only):
-
+        """
+        Exports bones from the active armature to M2 format.
+        """
         def add_bone(bl_bone):
-            key_bone_id = int(bl_bone.wow_m2_bone.key_bone_id)
-            flags = construct_bitfield(bl_bone.wow_m2_bone.flags)
-            parent_bone = self.bone_ids[bl_bone.parent.name] if bl_bone.parent else -1
-            pivot = self._convert_vec(bl_bone.head)
+            try:
+                key_bone_id = int(bl_bone.wow_m2_bone.key_bone_id)
+            except Exception:
+                key_bone_id = -1
+                log.warn(f"Bone '{bl_bone.name}' has invalid key_bone_id, defaulting to -1.")
 
-            m2_bone = self.bone_ids[bl_bone.name] = self.m2.add_bone(
-                pivot,
-                key_bone_id,
-                flags,
-                parent_bone,
-                bl_bone.wow_m2_bone.submesh_id,
-                ctypes.c_uint(bl_bone.wow_m2_bone.bone_name_crc).value
-            )
+            try:
+                flags = construct_bitfield(bl_bone.wow_m2_bone.flags)
+            except Exception:
+                flags = 0
+                log.warn(f"Bone '{bl_bone.name}' has invalid flags, defaulting to 0.")
 
-        rigs = list(filter(lambda ob: ob.type == 'ARMATURE' and not ob.hide_get(), bpy.context.scene.objects))
+            parent_bone = -1
+            if bl_bone.parent:
+                if bl_bone.parent.name in self.bone_ids:
+                    parent_bone = self.bone_ids[bl_bone.parent.name]
+                else:
+                    log.warn(f"Bone '{bl_bone.name}' references parent '{bl_bone.parent.name}' "
+                               f"which is not yet registered.")
+            else:
+                parent_bone = -1
+
+            try:
+                pivot = self._convert_vec(tuple(bl_bone.head))
+            except Exception:
+                pivot = tuple(bl_bone.head)
+                log.warn(f"Bone '{bl_bone.name}' pivot conversion failed, using raw coordinates.")
+
+            try:
+                submesh_id = int(bl_bone.wow_m2_bone.submesh_id)
+            except Exception:
+                submesh_id = 0
+                log.warn(f"Bone '{bl_bone.name}' has invalid submesh_id, defaulting to 0.")
+
+            try:
+                bone_crc = ctypes.c_uint(bl_bone.wow_m2_bone.bone_name_crc).value
+            except Exception:
+                bone_crc = 0
+                log.warn(f"Bone '{bl_bone.name}' has invalid CRC, defaulting to 0.")
+
+            m2_bone = self.m2.add_bone(pivot, key_bone_id, flags, parent_bone, submesh_id, bone_crc)
+            self.bone_ids[bl_bone.name] = m2_bone
+
+            log.debug(f"Added bone '{bl_bone.name}' (KeyBone={key_bone_id}, Parent={parent_bone}, Flags={flags})")
+
+        # --- Find armatures ---
+        rigs = [
+            ob for ob in bpy.context.scene.objects
+            if ob.type == 'ARMATURE' and not ob.hide_get()
+        ]
 
         if len(rigs) > 1:
-            raise Exception('Error: M2 exporter does not support more than one armature. Hide or remove the extra one.')
+            log.error("M2 exporter does not support more than one armature. Hide or remove the extra one.")
+            raise Exception("Error: M2 exporter does not support more than one armature. Hide or remove the extra one.")
 
-        for rig in rigs:
-            self.rig = rig
-            bpy.context.view_layer.objects.active = rig
-            bpy.ops.object.mode_set(mode='EDIT')
-
-            armature = rig.data
-
-            has_unsorted_bones = False
-            for bone in armature.edit_bones:
-                if bone.wow_m2_bone.sort_index < 0:
-                    has_unsorted_bones = True
-                    break
-
-            if has_unsorted_bones:
-                # find root bone, check if we only have one root bone
-                root_bone = None
-                global_bones = []
-                for bone in armature.edit_bones:
-                    if root_bone is not None and bone.parent is None and bone.children:
-                        raise Exception('Error: M2 exporter does not support more than one global root bone.')
-
-                    if bone.parent is None:
-                        if bone.children:
-                            root_bone = bone
-                            add_bone(root_bone)
-                        else:
-                            global_bones.append(bone)
-
-                # add global bones
-                for bone in global_bones:
-                    add_bone(bone)
-
-                # find root keybone, write additional bones
-                root_keybone = None
-
-                if root_bone:
-                    for bone in root_bone.children:
-
-                        if bone.wow_m2_bone.key_bone_id == '26':
-                            root_keybone = bone
-                            continue
-
-                        add_bone(bone)
-                        for child_bone in bone.children_recursive:
-                            add_bone(child_bone)
-
-                # write root keybone and its children
-                if root_keybone:
-                    add_bone(root_keybone)
-                    for bone in root_keybone.children_recursive:
-                        add_bone(bone)
-            else:
-                all_bones = [bone for bone in armature.edit_bones]
-                all_bones.sort(key=lambda x:x.wow_m2_bone.sort_index)
-                for bone in all_bones: add_bone(bone)
-
-            bpy.ops.object.mode_set(mode='OBJECT')
-
-            break
-
-        else:
-            # Add an empty bone, if the model is not animated
+        if not rigs:
+            log.debug("No armature found — creating a dummy bone at origin.")
             if selected_only:
                 bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-                origin = self._convert_vec(get_origin_position())
-            else:
-                origin = self._convert_vec(get_origin_position())
+            origin = self._convert_vec(get_origin_position())
+            return
 
-        # TODO: should we always do this?
+        # --- Process first (and only) rig ---
+        rig = rigs[0]
+        self.rig = rig
+        bpy.context.view_layer.objects.active = rig
+        bpy.ops.object.mode_set(mode='EDIT')
+        armature = rig.data
+
+        # --- Check if bones have sort indices ---
+        has_unsorted_bones = any(bone.wow_m2_bone.sort_index < 0 for bone in armature.edit_bones)
+
+        if has_unsorted_bones:
+            log.debug("Bone sort indices not found — performing hierarchy-based export order.")
+            root_bone = None
+            global_bones = []
+
+            for bone in armature.edit_bones:
+                if root_bone and bone.parent is None and bone.children:
+                    log.error("Multiple root bones with children detected. Only one global root bone is allowed.")
+                    raise Exception("Error: Multiple global root bones found. Only one root bone with children is allowed.")
+
+                if bone.parent is None:
+                    if bone.children:
+                        root_bone = bone
+                        add_bone(root_bone)
+                    else:
+                        global_bones.append(bone)
+
+            # Add global non-parented bones
+            for bone in global_bones:
+                add_bone(bone)
+
+            # Find keybone #26 if any
+            root_keybone = None
+            if root_bone:
+                for bone in root_bone.children:
+                    if bone.wow_m2_bone.key_bone_id == '26':
+                        root_keybone = bone
+                        continue
+                    add_bone(bone)
+                    for child in bone.children_recursive:
+                        add_bone(child)
+
+            if root_keybone:
+                add_bone(root_keybone)
+                for child in root_keybone.children_recursive:
+                    add_bone(child)
+        else:
+            log.debug("Using predefined bone sort order for export.")
+            all_bones = sorted(armature.edit_bones, key=lambda b: b.wow_m2_bone.sort_index)
+            for bone in all_bones:
+                add_bone(bone)
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # --- Ensure key bone lookup is initialized ---
         if len(self.m2.root.key_bone_lookup) == 0:
             self.m2.root.key_bone_lookup.append(-1)
+            log.debug("Initialized empty key bone lookup table (no keybones defined).")
+
+        log.info(f"Exported {len(self.bone_ids)} bones from armature '{rig.name}'.")
 
     def save_cameras(self):
-        cameras = [cam for cam in bpy.data.objects if cam.type == 'CAMERA']
-        cameras.sort(key=lambda cam: int(cam.wow_m2_camera.type) if int(cam.wow_m2_camera.type) >= 0 else 3)
-        for i, blender_cam in tqdm(enumerate(cameras), desc='Exporting Cameras', ascii=True):
-            self.camera_ids[blender_cam.name] = i
-            m2_cam = M2Camera()
-            m2_cam.position_base = self._convert_vec(blender_cam.location)
-            m2_cam.type = int(blender_cam.wow_m2_camera.type)
-            m2_cam.near_clip = blender_cam.data.clip_start
-            m2_cam.far_clip = blender_cam.data.clip_end
-            m2_cam.fov = blender_cam.data.angle
+        """
+        Exports all M2 cameras from Blender camera objects with wow_m2_camera data.
+        """
+        # --- Collect cameras ---
+        cameras = [
+            cam for cam in bpy.data.objects
+            if cam.type == 'CAMERA' and getattr(cam, "wow_m2_camera", None)
+        ]
 
-            if blender_cam.wow_m2_camera.target:
-                m2_cam.target_position_base = self._convert_vec(blender_cam.wow_m2_camera.target.location)
-                self.camera_target_ids[blender_cam.wow_m2_camera.target.name] = i
+        if not cameras:
+            log.info("No cameras found in the scene.")
+            return
 
-            self.m2.root.cameras.append(m2_cam)
-            if m2_cam.type >= 0:
-                while len(self.m2.root.camera_lookup_table) <= m2_cam.type:
-                    self.m2.root.camera_lookup_table.append(-1)
-                self.m2.root.camera_lookup_table.set_index(m2_cam.type, i)
+        # --- Sort cameras by type (default fallback = 3) ---
+        cameras.sort(
+            key=lambda cam: int(cam.wow_m2_camera.type)
+            if int(cam.wow_m2_camera.type) >= 0 else 3
+        )
+
+        success_count = 0
+
+        for i, bl_cam in tqdm(enumerate(cameras), total=len(cameras), desc='Exporting Cameras', ascii=True):
+            try:
+                # --- Register camera ---
+                self.camera_ids[bl_cam.name] = i
+                m2_cam = M2Camera()
+                bl_data = bl_cam.wow_m2_camera
+
+                # --- Position and type ---
+                try:
+                    m2_cam.position_base = self._convert_vec(tuple(bl_cam.location))
+                except Exception:
+                    m2_cam.position_base = tuple(bl_cam.location)
+                    log.warn(f"Camera '{bl_cam.name}' position could not be converted properly, using raw location.")
+
+                try:
+                    m2_cam.type = int(bl_data.type)
+                except Exception:
+                    m2_cam.type = 0
+                    log.warn(f"Camera '{bl_cam.name}' has invalid type, defaulting to 0.")
+
+                # --- Camera clipping distances ---
+                try:
+                    m2_cam.near_clip = float(bl_cam.data.clip_start)
+                    m2_cam.far_clip = float(bl_cam.data.clip_end)
+                except Exception:
+                    m2_cam.near_clip = 0.1
+                    m2_cam.far_clip = 500.0
+                    log.warn(f"Camera '{bl_cam.name}' missing valid clip distances, using defaults (0.1 / 500.0).")
+
+                # --- Field of view ---
+                try:
+                    m2_cam.fov = float(bl_cam.data.angle)
+                except Exception:
+                    m2_cam.fov = 0.785398  # ~45 degrees
+                    log.warn(f"Camera '{bl_cam.name}' has invalid FOV, using default 45°.")
+
+                # --- Handle camera target ---
+                try:
+                    if getattr(bl_data, "target", None):
+                        target = bl_data.target
+                        if target and target.type == "EMPTY":
+                            m2_cam.target_position_base = self._convert_vec(tuple(target.location))
+                            self.camera_target_ids[target.name] = i
+                            log.debug(f"Camera '{bl_cam.name}' assigned target '{target.name}'.")
+                        else:
+                            log.warn(f"Camera '{bl_cam.name}' has invalid or missing target object.")
+                            m2_cam.target_position_base = (0.0, 0.0, 0.0)
+                    else:
+                        m2_cam.target_position_base = (0.0, 0.0, 0.0)
+                        log.debug(f"Camera '{bl_cam.name}' has no target assigned.")
+                except Exception as e:
+                    log.error(f"Failed to process camera target for '{bl_cam.name}': {e}")
+                    m2_cam.target_position_base = (0.0, 0.0, 0.0)
+
+                # --- Append to model ---
+                self.m2.root.cameras.append(m2_cam)
+
+                # --- Manage lookup table safely ---
+                if m2_cam.type >= 0:
+                    while len(self.m2.root.camera_lookup_table) <= m2_cam.type:
+                        self.m2.root.camera_lookup_table.append(-1)
+                    try:
+                        self.m2.root.camera_lookup_table.set_index(m2_cam.type, i)
+                    except Exception as e:
+                        log.warn(f"Failed to set camera lookup table index for '{bl_cam.name}': {e}")
+
+                # --- Log success ---
+                log.debug(f"Exported Camera '{bl_cam.name}'")
+                success_count += 1
+
+            except Exception as e:
+                log.error(f"Failed exporting camera '{bl_cam.name}': {e}")
+                traceback.print_exc()
+                continue
+                
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(cameras)} cameras successfully.")
 
     def save_attachments(self):
-        attachments = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_attachment.enabled]
+        """
+        Exports all M2 attachments from Blender empties with wow_m2_attachment enabled.
+        """
+        # --- Collect enabled attachments ---
+        attachments = [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY' and getattr(obj, "wow_m2_attachment", None) and obj.wow_m2_attachment.enabled
+        ]
 
         if not attachments:
+            log.info("No attachments found in the scene.")
             return
 
-        attachments.sort(key=lambda att: int(att.wow_m2_attachment.type) if int(att.wow_m2_attachment.type) >= 0 else float('inf'))
+        # --- Sort by attachment type (unknown types go last) ---
+        attachments.sort(
+            key=lambda att: int(att.wow_m2_attachment.type)
+            if int(att.wow_m2_attachment.type) >= 0 else float('inf')
+        )
 
-        for i, bl_att in tqdm(enumerate(attachments), desc='Exporting Attachments', ascii=True):
-            self.attachment_ids[bl_att.name] = i
-            att = M2Attachment()
-            self.m2.root.attachments.append(att)
-            att.id = int(bl_att.wow_m2_attachment.type)
-            if len(bl_att.constraints) > 0:
-                # TODO: properly find constraint
-                att.bone = self.bone_ids[bl_att.constraints[0].subtarget]
-                att.position = self._convert_vec(bl_att.location)
-            while len(self.m2.root.attachment_lookup_table) <= att.id:
-                self.m2.root.attachment_lookup_table.append(0xffff)
-            self.m2.root.attachment_lookup_table.set_index(att.id,i)
+        success_count = 0
+
+        for i, bl_att in tqdm(enumerate(attachments), total=len(attachments), desc='Exporting Attachments', ascii=True):
+            try:
+                # --- Register attachment ---
+                self.attachment_ids[bl_att.name] = i
+                m2_att = M2Attachment()
+                self.m2.root.attachments.append(m2_att)
+                bl_data = bl_att.wow_m2_attachment
+
+                # --- Attachment type ---
+                try:
+                    m2_att.id = int(bl_data.type)
+                except Exception:
+                    m2_att.id = 0
+                    log.warn(f"Attachment '{bl_att.name}' has invalid type, defaulting to 0.")
+
+                # --- Constraint / Bone assignment ---
+                if bl_att.constraints:
+                    constraint = bl_att.constraints[0]
+                    subtarget = getattr(constraint, "subtarget", None)
+                    if subtarget:
+                        if subtarget in self.bone_ids:
+                            m2_att.bone = self.bone_ids[subtarget]
+                        else:
+                            log.warn(f"Attachment '{bl_att.name}' references unknown bone '{subtarget}'. Using bone index 0.")
+                            m2_att.bone = 0
+                    else:
+                        log.warn(f"Attachment '{bl_att.name}' has a constraint without subtarget. Using bone index 0.")
+                        m2_att.bone = 0
+                else:
+                    log.warn(f"Attachment '{bl_att.name}' has no constraints. Using bone index 0.")
+                    m2_att.bone = 0
+
+                # --- Position conversion ---
+                try:
+                    m2_att.position = self._convert_vec(tuple(bl_att.location))
+                except Exception:
+                    m2_att.position = tuple(bl_att.location)
+
+                # --- Ensure lookup table is large enough ---
+                while len(self.m2.root.attachment_lookup_table) <= m2_att.id:
+                    self.m2.root.attachment_lookup_table.append(0xFFFF)
+
+                # --- Register attachment index ---
+                try:
+                    self.m2.root.attachment_lookup_table.set_index(m2_att.id, i)
+                except Exception as e:
+                    log.warn(f"Failed setting lookup index for attachment '{bl_att.name}' (id={m2_att.id}): {e}")
+
+                # --- Log success ---
+                log.debug(f"Exported Attachment '{bl_att.name}', Bone={m2_att.bone}")
+                success_count += 1
+
+            except Exception as e:
+                log.error(f"Failed exporting attachment '{bl_att.name}': {e}")
+                traceback.print_exc()
+                continue
+                
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(attachments)} attachments successfully.")
 
     def save_events(self):
-        events = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_event.enabled]
+        """
+        Exports all M2 events from Blender empties with wow_m2_event enabled.
+        """
+        # --- Collect enabled event empties ---
+        events = [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY' and getattr(obj, "wow_m2_event", None) and obj.wow_m2_event.enabled
+        ]
 
         if not events:
+            log.info("No M2 events found in the scene.")
             return
 
-        for i, bl_evt in tqdm(enumerate(events), desc='Exporting Events', ascii=True):
-            self.event_ids[bl_evt.name] = i
-            evt = M2Event()
-            self.m2.root.events.append(evt)
-            evt.identifier = bl_evt.wow_m2_event.token
-            token = M2EventTokens.get_event_name(evt.identifier)
-            if len(bl_evt.constraints) > 0:
-                # TODO: properly find constraint
-                evt.bone = self.bone_ids[bl_evt.constraints[0].subtarget]
-                evt.position = self._convert_vec(bl_evt.location)
-            if token in ('PlayEmoteSound',
-                'DoodadSoundUnknown',
-                'DoodadSoundOneShot',
-                'GOPlaySoundKitCustom',
-                'GOAddShake'):
-                evt.data = bl_evt.wow_m2_event.data
-            self.final_events[bl_evt.name] = evt
+        success_count = 0
+
+        for i, bl_evt in tqdm(enumerate(events), total=len(events), desc='Exporting Events', ascii=True):
+            try:
+                # --- Register event ---
+                self.event_ids[bl_evt.name] = i
+                m2_event = M2Event()
+                self.m2.root.events.append(m2_event)
+                bl_data = bl_evt.wow_m2_event
+
+                # --- Event identifier ---
+                m2_event.identifier = bl_data.token
+                token_name = M2EventTokens.get_event_name(m2_event.identifier)
+                if not token_name:
+                    log.warn(f"Event '{bl_evt.name}' uses unknown event token '{m2_event.identifier}'.")
+
+                # --- Safe constraint handling ---
+                if bl_evt.constraints:
+                    constraint = bl_evt.constraints[0]
+                    subtarget = getattr(constraint, "subtarget", None)
+                    if subtarget:
+                        if subtarget in self.bone_ids:
+                            m2_event.bone = self.bone_ids[subtarget]
+                        else:
+                            log.warn(f"Event '{bl_evt.name}' references unknown bone '{subtarget}'. Using bone index 0.")
+                            m2_event.bone = 0
+                    else:
+                        log.warn(f"Event '{bl_evt.name}' has a constraint without subtarget. Using bone index 0.")
+                        m2_event.bone = 0
+                else:
+                    log.warn(f"Event '{bl_evt.name}' has no constraints. Using bone index 0.")
+                    m2_event.bone = 0
+
+                # --- Position ---
+                try:
+                    m2_event.position = self._convert_vec(tuple(bl_evt.location))
+                except Exception:
+                    m2_event.position = tuple(bl_evt.location)
+
+                # --- Event-specific data handling ---
+                event_data_tokens = {
+                    'PlayEmoteSound',
+                    'DoodadSoundUnknown',
+                    'DoodadSoundOneShot',
+                    'GOPlaySoundKitCustom',
+                    'GOAddShake'
+                }
+
+                if token_name in event_data_tokens:
+                    try:
+                        m2_event.data = bl_data.data
+                    except Exception as e:
+                        log.warn(f"Event '{bl_evt.name}' ({token_name}) missing valid data field: {e}")
+                        m2_event.data = 0
+                else:
+                    m2_event.data = 0
+
+                # Register final event mapping
+                self.final_events[bl_evt.name] = m2_event
+
+                # --- Summary info ---
+                log.debug(f"Exported Event '{bl_evt.name}'")
+                success_count += 1
+
+            except Exception as e:
+                log.error(f"Failed exporting event '{bl_evt.name}': {e}")
+                traceback.print_exc()
+                continue
+                
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(events)} events successfully.")
 
     def save_lights(self):
-        lights = [light for light in bpy.data.objects if light.type == 'LIGHT' and light.data.wow_m2_light.enabled]
+        """
+        Exports all M2 lights from Blender objects with wow_m2_light enabled.
+        """
+        # --- Collect eligible lights ---
+        lights = [
+            light for light in bpy.data.objects
+            if light.type == 'LIGHT'
+            and getattr(light.data, "wow_m2_light", None)
+            and light.data.wow_m2_light.enabled
+        ]
 
         if not lights:
-            return        
+            log.info("No lights found in the scene.")
+            return
+
+        success_count = 0
 
         for i, bl_light in tqdm(enumerate(lights), desc='Exporting Lights', ascii=True):
-            self.light_ids[bl_light.name] = i
-            light = M2Light()
-            self.m2.root.lights.append(light)
-            light.type = int(bl_light.data.wow_m2_light.type)
-            if len(bl_light.constraints) > 0:
-                # TODO: properly find constraint
-                light.bone = self.bone_ids[bl_light.constraints[0].subtarget]
-            light.position = self._convert_vec(bl_light.location)
+            try:
+                # --- Register light ---
+                self.light_ids[bl_light.name] = i
+                m2_light = M2Light()
+                self.m2.root.lights.append(m2_light)
+
+                bl_data = bl_light.data.wow_m2_light
+
+                # --- Type ---
+                try:
+                    m2_light.type = int(bl_data.type)
+                except Exception:
+                    m2_light.type = 0
+                    log.warn(f"Light '{bl_light.name}' has invalid type, defaulting to 0.")
+
+                # --- Constraint handling ---
+                if bl_light.constraints:
+                    constraint = bl_light.constraints[0]
+                    subtarget = getattr(constraint, "subtarget", None)
+                    if subtarget:
+                        if subtarget in self.bone_ids:
+                            m2_light.bone = self.bone_ids[subtarget]
+                        else:
+                            log.warn(f"Light '{bl_light.name}' references unknown bone '{subtarget}'. Using bone index 0.")
+                            m2_light.bone = 0
+                    else:
+                        log.warn(f"Light '{bl_light.name}' has a constraint without subtarget. Using bone index 0.")
+                        m2_light.bone = 0
+                else:
+                    log.warn(f"Light '{bl_light.name}' has no constraints. Using bone index 0.")
+                    m2_light.bone = 0
+
+                # --- Position ---
+                try:
+                    m2_light.position = self._convert_vec(tuple(bl_light.location))
+                except Exception as e:
+                    log.warn(f"Light '{bl_light.name}' failed to convert position: {e}")
+                    m2_light.position = tuple(bl_light.location)
+
+                log.debug(f"Exported light '{bl_light.name}' successfully.")
+                success_count += 1
+
+            except Exception as e:
+                log.error(f"Failed exporting light '{bl_light.name}': {e}")
+                traceback.print_exc()
+                continue
+
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(lights)} lights successfully.")
 
     def save_ribbons(self):
-        ribbons = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_ribbon.enabled]
+        """
+        Exports all M2 ribbon emitters from Blender empties with wow_m2_ribbon enabled.
+        """
+        ribbons = [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY' and getattr(obj, "wow_m2_ribbon", None) and obj.wow_m2_ribbon.enabled
+        ]
 
         if not ribbons:
+            log.info("No ribbons found in the scene.")
             return
 
         ribbon_textures = {}
         ribbon_materials = {}
 
-        for i, bl_ribbon in tqdm(enumerate(ribbons), desc='Exporting Ribbons', ascii=True):
-            self.ribbon_ids[bl_ribbon.name] = i
-            m2_ribbon = M2Ribbon()
-            self.m2.root.ribbon_emitters.append(m2_ribbon)
-            if len(bl_ribbon.constraints) > 0:
-                m2_ribbon.bone_index = self.bone_ids[bl_ribbon.constraints[0].subtarget]
-            m2_ribbon.position = self._convert_vec(bl_ribbon.location)
-            m2_ribbon.edges_per_second = bl_ribbon.wow_m2_ribbon.edges_per_second
-            m2_ribbon.edge_lifetime = bl_ribbon.wow_m2_ribbon.edge_lifetime
-            m2_ribbon.gravity = bl_ribbon.wow_m2_ribbon.gravity
-            m2_ribbon.texture_rows = bl_ribbon.wow_m2_ribbon.texture_rows
-            m2_ribbon.texture_cols = bl_ribbon.wow_m2_ribbon.texture_cols
+        success_count = 0
 
-            for tex_slot in bl_ribbon.wow_m2_ribbon.textures:
-                bl_texture = tex_slot.pointer
-                if bl_texture in ribbon_textures:
-                    tex_id = ribbon_textures[bl_texture]
-                else:
-                    tex_id = self.m2.add_texture(
-                        bl_texture.wow_m2_texture.path,
-                        construct_bitfield(bl_texture.wow_m2_texture.flags),
-                        int(bl_texture.wow_m2_texture.texture_type)
-                    )
-                    ribbon_textures[bl_texture] = tex_id
-                m2_ribbon.texture_indices.append(tex_id)
-                wow_path = bl_texture.wow_m2_texture.path
-                self.final_textures[wow_path] = tex_id
+        for i, bl_ribbon in tqdm(enumerate(ribbons), total=len(ribbons), desc='Exporting Ribbons', ascii=True):
+            try:
+                self.ribbon_ids[bl_ribbon.name] = i
+                m2_ribbon = M2Ribbon()
+                self.m2.root.ribbon_emitters.append(m2_ribbon)
+                bl_data = bl_ribbon.wow_m2_ribbon
 
-            for mat_slot in bl_ribbon.wow_m2_ribbon.materials:
-                bl_mat = mat_slot.pointer
-                if bl_mat in ribbon_materials:
-                    mat_id = ribbon_materials[bl_mat]
+                # --- Constraint / Bone assignment ---
+                if bl_ribbon.constraints:
+                    constraint = bl_ribbon.constraints[0]
+                    subtarget = getattr(constraint, "subtarget", None)
+                    if subtarget:
+                        if subtarget in self.bone_ids:
+                            m2_ribbon.bone_index = self.bone_ids[subtarget]
+                        else:
+                            log.warn(f"Ribbon '{bl_ribbon.name}' references unknown bone '{subtarget}'. Using bone index 0.")
+                            m2_ribbon.bone_index = 0
+                    else:
+                        log.warn(f"Ribbon '{bl_ribbon.name}' has a constraint without subtarget. Using bone index 0.")
+                        m2_ribbon.bone_index = 0
                 else:
-                    m2_mat = M2Material()
-                    mat_id = self.m2.root.materials.add(m2_mat)
-                    m2_mat.flags = construct_bitfield(bl_mat.wow_m2_material.texture_1_render_flags)
-                    m2_mat.blending_mode = int(bl_mat.wow_m2_material.texture_1_blending_mode)
-                    ribbon_materials[bl_mat] = mat_id
-                m2_ribbon.material_indices.append(mat_id)
+                    log.warn(f"Ribbon '{bl_ribbon.name}' has no constraints. Using bone index 0.")
+                    m2_ribbon.bone_index = 0
+
+                # --- Base ribbon data ---
+                try:
+                    m2_ribbon.position = self._convert_vec(tuple(bl_ribbon.location))
+                except Exception:
+                    m2_ribbon.position = tuple(bl_ribbon.location)
+
+                m2_ribbon.edges_per_second = bl_data.edges_per_second
+                m2_ribbon.edge_lifetime = bl_data.edge_lifetime
+                m2_ribbon.gravity = bl_data.gravity
+                m2_ribbon.texture_rows = bl_data.texture_rows
+                m2_ribbon.texture_cols = bl_data.texture_cols
+
+                # --- Textures ---
+                if hasattr(bl_data, "textures") and len(bl_data.textures) > 0:
+                    for tex_slot in bl_data.textures:
+                        bl_texture = getattr(tex_slot, "pointer", None)
+                        if not bl_texture:
+                            log.warn(f"Ribbon '{bl_ribbon.name}' has an empty texture slot.")
+                            continue
+
+                        if bl_texture in ribbon_textures:
+                            tex_id = ribbon_textures[bl_texture]
+                        else:
+                            try:
+                                tex_id = self.m2.add_texture(
+                                    bl_texture.wow_m2_texture.path,
+                                    construct_bitfield(bl_texture.wow_m2_texture.flags),
+                                    int(bl_texture.wow_m2_texture.texture_type)
+                                )
+                                ribbon_textures[bl_texture] = tex_id
+                            except Exception as e:
+                                log.error(f"Failed adding texture for ribbon '{bl_ribbon.name}': {e}")
+                                tex_id = 0
+
+                        m2_ribbon.texture_indices.append(tex_id)
+
+                        try:
+                            wow_path = bl_texture.wow_m2_texture.path
+                            self.final_textures[wow_path] = tex_id
+                        except Exception:
+                            pass
+                else:
+                    log.warn(f"Ribbon '{bl_ribbon.name}' has no textures assigned.")
+
+                # --- Materials ---
+                if hasattr(bl_data, "materials") and len(bl_data.materials) > 0:
+                    for mat_slot in bl_data.materials:
+                        bl_mat = getattr(mat_slot, "pointer", None)
+                        if not bl_mat:
+                            log.warn(f"Ribbon '{bl_ribbon.name}' has an empty material slot.")
+                            continue
+
+                        if bl_mat in ribbon_materials:
+                            mat_id = ribbon_materials[bl_mat]
+                        else:
+                            try:
+                                m2_mat = M2Material()
+                                mat_id = self.m2.root.materials.add(m2_mat)
+                                m2_mat.flags = construct_bitfield(bl_mat.wow_m2_material.texture_1_render_flags)
+                                m2_mat.blending_mode = int(bl_mat.wow_m2_material.texture_1_blending_mode)
+                                ribbon_materials[bl_mat] = mat_id
+                            except Exception as e:
+                                log.error(f"Failed adding material for ribbon '{bl_ribbon.name}': {e}")
+                                mat_id = 0
+
+                        m2_ribbon.material_indices.append(mat_id)
+                else:
+                    log.warn(f"Ribbon '{bl_ribbon.name}' has no materials assigned.")
+
+                log.debug(f"Exported Ribbon '{bl_ribbon.name}' successfully with {len(m2_ribbon.texture_indices)} textures and {len(m2_ribbon.material_indices)} materials.")
+                success_count += 1
+
+            except Exception as e:
+                log.error(f"Failed exporting ribbon '{bl_ribbon.name}': {e}")
+                traceback.print_exc()
+                continue
+                
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(ribbons)} ribbons successfully.")
 
     def save_particles(self, timestamp_convert):
-        particles = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and obj.wow_m2_particle.enabled]
+        """
+        Saves particle emitters from Blender empties with wow_m2_particle enabled.
+        """
+        # Collect particle empties
+        particles = [obj for obj in bpy.data.objects if obj.type == 'EMPTY' and getattr(obj, "wow_m2_particle", None) and obj.wow_m2_particle.enabled]
 
         if not particles:
+            log.info("No particle emitters found in the scene.")
             return
 
         particle_textures = {}
 
-        for i, bl_obj in tqdm(enumerate(particles), desc='Saving Particles', ascii=True):
-            self.particle_ids[bl_obj.name] = i
-            m2_particle = M2Particle()
-            self.m2.root.particle_emitters.append(m2_particle)
-            bl_particle = bl_obj.wow_m2_particle
+        def _to_millis(frame_time: float) -> int:
+            """Convert Blender time value to milliseconds when requested."""
+            if timestamp_convert == "Convert":
+                fps = self.fps or 24.0  # fallback if somehow fps is 0
+                denom = fps / 1000.0
+                return int(round(frame_time / denom))
+            return int(frame_time)
 
-            m2_particle.particle_id = 4294967295
-            m2_particle.position = bl_obj.location
+        success_count = 0
 
-            if len(bl_obj.constraints) > 0:
-                m2_particle.bone = self.bone_ids[bl_obj.constraints[0].subtarget]
+        for i, bl_obj in tqdm(enumerate(particles), total=len(particles), desc='Exporting Particles', ascii=True):
+            try:
+                self.particle_ids[bl_obj.name] = i
+                m2_particle = M2Particle()
+                self.m2.root.particle_emitters.append(m2_particle)
+                bl_particle = bl_obj.wow_m2_particle
 
-            bl_texture = bl_particle.texture
-            if bl_texture:
-                if bl_texture in particle_textures:
-                    m2_particle.texture = particle_textures[bl_texture]
-                else:
-                    m2_particle.texture = self.m2.add_texture(
-                        bl_texture.wow_m2_texture.path,
-                        construct_bitfield(bl_texture.wow_m2_texture.flags),
-                        int(bl_texture.wow_m2_texture.texture_type)
-                    )
-                wow_path = bl_texture.wow_m2_texture.path
-                self.final_textures[wow_path] = m2_particle.texture
-            else:
-                m2_particle.texture = 0
+                # Basic identifiers
+                m2_particle.particle_id = 4294967295
 
-            m2_particle.flags = construct_bitfield(bl_particle.flags)
-            m2_particle.geometry_model_filename.value = bl_particle.geometry_model_filename
-            m2_particle.recursion_model_filename.value = bl_particle.recursion_model_filename
-            m2_particle.blending_type = int(bl_particle.blending_type)
-            m2_particle.emitter_type = int(bl_particle.emitter_type)
-            m2_particle.particle_color_index = bl_particle.particle_color_index
-            m2_particle.particle_type = int(bl_particle.particle_type)
-            m2_particle.head_or_tail = int(bl_particle.side)
-            m2_particle.texture_tile_rotation = bl_particle.texture_tile_rotation
-            m2_particle.texture_dimensions_rows = bl_particle.texture_dimensions_rows
-            m2_particle.texture_dimension_columns = bl_particle.texture_dimensions_cols
-            m2_particle.life_span_vary = bl_particle.lifespan_vary
-            m2_particle.emission_rate_vary = bl_particle.emission_rate_vary
-            m2_particle.scale_vary = tuple(bl_particle.scale_vary)
-            m2_particle.tail_length = bl_particle.tail_length
-            m2_particle.twinkle_speed = bl_particle.twinkle_speed
-            m2_particle.twinkle_percent = bl_particle.twinkle_percent
-            m2_particle.twinkle_scale.min = bl_particle.twinkle_scale[0]
-            m2_particle.twinkle_scale.max = bl_particle.twinkle_scale[1]
-            m2_particle.burst_multiplier = bl_particle.burst_multiplier
-            m2_particle.drag = bl_particle.drag
-            m2_particle.basespin = bl_particle.basespin
-            m2_particle.base_spin_vary = bl_particle.basespin_vary
-            m2_particle.spin = bl_particle.spin
-            m2_particle.spin_vary = bl_particle.spin_vary
-            m2_particle.tumble.model_rotation_speed_min = tuple(bl_particle.tumble_min)
-            m2_particle.tumble.model_rotation_speed_max = tuple(bl_particle.tumble_max)
-            m2_particle.wind_vector = tuple(bl_particle.wind)
-            m2_particle.wind_time = bl_particle.wind_time
-            m2_particle.follow_speed1 = bl_particle.follow_speed_1
-            m2_particle.follow_scale1 = bl_particle.follow_scale_1
-            m2_particle.follow_speed2 = bl_particle.follow_speed_2
-            m2_particle.follow_scale2 = bl_particle.follow_scale_2
+                # Position (convert to M2 coord system if needed)
+                try:
+                    m2_particle.position = self._convert_vec(tuple(bl_obj.location))
+                except Exception:
+                    # fallback to raw location if converter isn't available
+                    m2_particle.position = tuple(bl_obj.location)
 
-            def export_fcurve(m2_track,action,data_path,has_time,conv = lambda x: x):
-                fcurves = [fcurve for fcurve in action.fcurves if fcurve.data_path == 'wow_m2_particle.'+data_path]
-                if len(fcurves) == 0:
-                    # TODO: warning?
-                    return
-
-                keyframe_count = len(fcurves[0].keyframe_points)
-                for i,fcurve in enumerate(fcurves):
-                    cur_count = len(fcurve.keyframe_points)
-                    if cur_count != keyframe_count:
-                        raise ValueError(f'Track index {i} keyframe count ({cur_count}) is different from index 0 {keyframe_count} in {action}, {data_path}')
-
-                for i in range(keyframe_count):
-                    values = []
-                    for fcurve in fcurves:
-                        values.append(fcurve.keyframe_points[i].co[1])
-                    values = conv(tuple(values) if len(values)>1 else values[0])
-                    if has_time:
-                        if timestamp_convert == 'Convert':
-                            time = int(round(fcurves[0].keyframe_points[i].co[0] / (bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000)))
-                        else: 
-                            time = int(fcurves[0].keyframe_points[i].co[0])                   
-                        m2_track.timestamps.append(time)
-                        m2_track.keys.append(values)
+                # Bone binding via first constraint (if present and valid)
+                if len(bl_obj.constraints) > 0:
+                    subtarget = getattr(bl_obj.constraints[0], "subtarget", "") or ""
+                    if not subtarget:
+                        log.warn(f"Particle '{bl_obj.name}' has a constraint without subtarget; bone binding skipped.")
+                    elif subtarget not in self.bone_ids:
+                        log.warn(f"Particle '{bl_obj.name}' references unknown bone '{subtarget}'; bone binding skipped.")
                     else:
-                        m2_track.append(values)
+                        m2_particle.bone = self.bone_ids[subtarget]
 
-            if bl_particle.action:
-                export_fcurve(m2_particle.color_track, bl_particle.action, 'color', True, lambda x: (x[0]*255,x[1]*255,x[2]*255))
-                export_fcurve(m2_particle.alpha_track, bl_particle.action, 'alpha', True, lambda x: int(x*0x7fff))
-                export_fcurve(m2_particle.scale_track, bl_particle.action, 'scale', True)
-                export_fcurve(m2_particle.head_cell_track, bl_particle.action, 'head_cell', True, lambda x: int(x))
-                export_fcurve(m2_particle.tail_cell_track, bl_particle.action, 'tail_cell', True, lambda x: int(x))
+                # Texture
+                bl_texture = bl_particle.texture
+                if bl_texture:
+                    if bl_texture in particle_textures:
+                        m2_particle.texture = particle_textures[bl_texture]
+                    else:
+                        try:
+                            tex_id = self.m2.add_texture(
+                                bl_texture.wow_m2_texture.path,
+                                construct_bitfield(bl_texture.wow_m2_texture.flags),
+                                int(bl_texture.wow_m2_texture.texture_type)
+                            )
+                            particle_textures[bl_texture] = tex_id  # cache so we actually reuse it later
+                            m2_particle.texture = tex_id
+                        except Exception as e:
+                            log.warn(f"Failed to add texture for particle '{bl_obj.name}': {e}. Using texture 0.")
+                            m2_particle.texture = 0
+                    # track final textures mapping (safe even if empty path)
+                    try:
+                        wow_path = bl_texture.wow_m2_texture.path
+                        if wow_path not in self.final_textures:
+                            self.final_textures[wow_path] = m2_particle.texture
+                    except Exception:
+                        pass
+                else:
+                    m2_particle.texture = 0
 
-            if bl_particle.spline_action:
-                export_fcurve(m2_particle.spline_points, bl_particle.spline_action, 'spline_point', False)
+                m2_particle.flags = construct_bitfield(bl_particle.flags)
+                m2_particle.geometry_model_filename.value = bl_particle.geometry_model_filename
+                m2_particle.recursion_model_filename.value = bl_particle.recursion_model_filename
+                m2_particle.blending_type = int(bl_particle.blending_type)
+                m2_particle.emitter_type = int(bl_particle.emitter_type)
+                m2_particle.particle_color_index = bl_particle.particle_color_index
+                m2_particle.particle_type = int(bl_particle.particle_type)
+                m2_particle.head_or_tail = int(bl_particle.side)
+                m2_particle.texture_tile_rotation = bl_particle.texture_tile_rotation
+                m2_particle.texture_dimensions_rows = bl_particle.texture_dimensions_rows
+                m2_particle.texture_dimension_columns = bl_particle.texture_dimensions_cols
+                m2_particle.life_span_vary = bl_particle.lifespan_vary
+                m2_particle.emission_rate_vary = bl_particle.emission_rate_vary
+                m2_particle.scale_vary = tuple(bl_particle.scale_vary)
+                m2_particle.tail_length = bl_particle.tail_length
+                m2_particle.twinkle_speed = bl_particle.twinkle_speed
+                m2_particle.twinkle_percent = bl_particle.twinkle_percent
+                m2_particle.twinkle_scale.min = bl_particle.twinkle_scale[0]
+                m2_particle.twinkle_scale.max = bl_particle.twinkle_scale[1]
+                m2_particle.burst_multiplier = bl_particle.burst_multiplier
+                m2_particle.drag = bl_particle.drag
+                m2_particle.basespin = bl_particle.basespin
+                m2_particle.base_spin_vary = bl_particle.basespin_vary
+                m2_particle.spin = bl_particle.spin
+                m2_particle.spin_vary = bl_particle.spin_vary
+                m2_particle.tumble.model_rotation_speed_min = tuple(bl_particle.tumble_min)
+                m2_particle.tumble.model_rotation_speed_max = tuple(bl_particle.tumble_max)
+                m2_particle.wind_vector = tuple(bl_particle.wind)
+                m2_particle.wind_time = bl_particle.wind_time
+                m2_particle.follow_speed1 = bl_particle.follow_speed_1
+                m2_particle.follow_scale1 = bl_particle.follow_scale_1
+                m2_particle.follow_speed2 = bl_particle.follow_speed_2
+                m2_particle.follow_scale2 = bl_particle.follow_scale_2
+
+                # --------
+                # Animated tracks exporter
+                # --------
+                def export_fcurve(m2_track, action, data_path, has_time, conv=lambda x: x):
+                    fcurves = [fc for fc in action.fcurves if fc.data_path == 'wow_m2_particle.' + data_path]
+                    if len(fcurves) == 0:
+                        # no keys for this property in this action
+                        # silently skip, but log as info for visibility
+                        log.info(f"Particle '{bl_obj.name}' has no fcurves for '{data_path}' in action '{action.name}'.")
+                        return
+
+                    keyframe_count = len(fcurves[0].keyframe_points)
+                    for idx, fcurve in enumerate(fcurves):
+                        cur_count = len(fcurve.keyframe_points)
+                        if cur_count != keyframe_count:
+                            raise ValueError(
+                                f"Track index {idx} keyframe count ({cur_count}) is different from index 0 ({keyframe_count}) "
+                                f"in action '{action.name}', path '{data_path}'"
+                            )
+
+                    for k in range(keyframe_count):
+                        values = []
+                        for fcurve in fcurves:
+                            values.append(fcurve.keyframe_points[k].co[1])
+                        values = conv(tuple(values) if len(values) > 1 else values[0])
+
+                        if has_time:
+                            time = _to_millis(fcurves[0].keyframe_points[k].co[0])
+                            m2_track.timestamps.append(time)
+                            m2_track.keys.append(values)
+                        else:
+                            m2_track.append(values)
+
+                # Export action curves
+                if bl_particle.action:
+                    try:
+                        export_fcurve(m2_particle.color_track, bl_particle.action, 'color', True, lambda x: (x[0] * 255, x[1] * 255, x[2] * 255))
+                        export_fcurve(m2_particle.alpha_track, bl_particle.action, 'alpha', True, lambda x: int(x * 0x7fff))
+                        export_fcurve(m2_particle.scale_track, bl_particle.action, 'scale', True)
+                        export_fcurve(m2_particle.head_cell_track, bl_particle.action, 'head_cell', True, lambda x: int(x))
+                        export_fcurve(m2_particle.tail_cell_track, bl_particle.action, 'tail_cell', True, lambda x: int(x))
+                    except Exception as e:
+                        log.error(f"Failed exporting particle action curves for '{bl_obj.name}': {e}")
+
+                # Export spline action curves
+                if bl_particle.spline_action:
+                    try:
+                        export_fcurve(m2_particle.spline_points, bl_particle.spline_action, 'spline_point', False)
+                    except Exception as e:
+                        log.error(f"Failed exporting particle spline curves for '{bl_obj.name}': {e}")
+            
+                log.debug(f"Exported particle '{bl_obj.name}' successfully")
+                success_count += 1
+
+            except Exception as e:
+                log.error(f"Failed exporting particle '{bl_obj.name}': {e}")
+                traceback.print_exc()
+                continue
+                
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(particles)} particles successfully.")
 
     def save_animations(self, timestamp_convert):
-        def bl_to_m2_time(bl):
-            if timestamp_convert == 'Convert':
-                return int(round( bl / (bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / 1000)))
-            else: 
-                return int(bl)                    
+        """Export M2 animation data with safe checks and structured logging."""
 
-        #def bl_to_m2_quat(n):
-            #n = max(min(n,1),-1) * 32767
-            #return int(n + 32767 if n <= 0 else n-32768)
-        
+        # --------
+        # Helpers
+        # --------
+        def bl_to_m2_time(bl):
+            """Convert a Blender time value to M2 time (milliseconds)."""
+            if timestamp_convert == "Convert":
+                fps = self.fps if self.fps > 0 else 24.0
+                return int(round(bl / (fps / 1000.0)))
+            return int(bl)
+
         def bl_to_m2_quat(n, threshold=1e-7):
-            n = max(min(n, 1), -1) * 32767
+            n = max(min(n, 1.0), -1.0) * 32767.0
             if abs(n) < threshold:
-                n = 0
+                n = 0.0
+            # Match original sign mapping
             return int(n + 32767 if n <= 0 else n - 32768)
 
         def bl_to_m2_interpolation(interpolation):
+            # Allow None and default to LINEAR
+            if interpolation is None:
+                return 1
             if interpolation == 'CONSTANT': return 0
-            if interpolation == 'LINEAR': return 1
-            if interpolation == 'BEZIER': return 2
-            if interpolation == 'CUBIC': return 3
-            raise AssertionError('Invalid interpolation type ' + interpolation)
+            if interpolation == 'LINEAR':   return 1
+            if interpolation == 'BEZIER':   return 2
+            if interpolation == 'CUBIC':    return 3
+            log.warn(f"Unknown interpolation '{interpolation}', defaulting to LINEAR.")
+            return 1
 
         def bl_find_interpolation(fcurve):
             last_interp = None
@@ -2482,9 +3373,8 @@ class BlenderM2Scene:
             for wow_seq in bpy.context.scene.wow_m2_animations:
                 if wow_seq.is_global_sequence:
                     global_seq_count += 1
-                    
             return len(bpy.context.scene.wow_m2_animations) - global_seq_count
-        
+
         # Used to measure the highest duration for any keyframe of a given sequence index
         global_seq_durations = {}
         seq_durations = {}
@@ -2528,7 +3418,7 @@ class BlenderM2Scene:
             def write_track(self,path,track_count,m2_track,value_type,converter = lambda x: x, fill_tracks = False):
                 # Exit on empty tracks
                 if not path in self.compounds and not fill_tracks:
-                        #print("M2 track path not found : " + path)                                                              
+                        #log.info(f"M2 track path not found : {path}")
                         return
 
                 anim_count = self.n_animations
@@ -2552,16 +3442,19 @@ class BlenderM2Scene:
                             interpolation = point.interpolation
                         else:
                             if interpolation != point.interpolation and not mismatch_detected:
-                                print(f"\nThere's an interpolation discrepancy in {path}, found {point.interpolation}, but last type for this object was {interpolation}, WoW only supports one interpolation setting.")
-                                print(f'Exportation will continue using the original interpolation, but make sure to check the action: {self.pair.action.name}')
+                                log.warn(f"There's an interpolation discrepancy in {path}, found {point.interpolation}, "
+                                           f"but last type for this object was {interpolation}, WoW only supports one interpolation setting. "
+                                           f"Exportation will continue using the original interpolation, but make sure to check the action: {self.pair.action.name}")
                                 mismatch_detected = True
                                 break
                 
                 # Compare interpolation from (let's say a bone.translation) with other animations, to see discrepancies
                 if m2_track in track_interpolations:
                     if track_interpolations[m2_track] != interpolation:
-                        print(f'\nPath {path} in action {self.pair.action.name} has {interpolation} interpolation while in other sequences uses {track_interpolations[m2_track]}, WoW only supports one.')
-                        print(f'Exportation will continue using the original interpolation, but make sure to check the action: {self.pair.action.name}')
+                        log.warn(
+                            f"Path {path} in action {self.pair.action.name} has {interpolation} interpolation while in other sequences uses {track_interpolations[m2_track]}, WoW only supports one. "
+                            f"Exportation will continue using the original interpolation, but make sure to check the action: {self.pair.action.name}"
+                        )
                 else:
                     m2_track.interpolation_type = bl_to_m2_interpolation(interpolation)
                     track_interpolations[m2_track] = interpolation
@@ -2573,21 +3466,21 @@ class BlenderM2Scene:
                 else:
                     if track_global_sequences[m2_track] != self.global_seq_id:
                         if self.global_seq_id != -1:
-                            raise ValueError(f'\n\nPath {path} in action {self.pair.action.name} was assigned to Global Sequence: {track_global_sequences[m2_track]} and has been found using Global Sequence:  {self.global_seq_id}, WoW only supports one\nExample: If a bone.translation is animated in a Global Sequence it cannot be animated in a different Global Sequence')
+                            raise ValueError(f"\n\nPath {path} in action {self.pair.action.name} was assigned to Global Sequence: {track_global_sequences[m2_track]} and has been found using Global Sequence:  {self.global_seq_id}, WoW only supports one\nExample: If a bone.translation is animated in a Global Sequence it cannot be animated in a different Global Sequence")
                         else:
-                            raise ValueError(f'\n\nPath {path} in action {self.pair.action.name} was assigned to Global Sequence: {track_global_sequences[m2_track]} and has been found in a regular animation\nExample: If a bone.translation is animated in a Global Sequence it cannot be animated in a regular animation')
+                            raise ValueError(f"\n\nPath {path} in action {self.pair.action.name} was assigned to Global Sequence: {track_global_sequences[m2_track]} and has been found in a regular animation\nExample: If a bone.translation is animated in a Global Sequence it cannot be animated in a regular animation")
                 
                 # Find missing tracks (For example, missing Green from RGB Color)
                 for i in range(track_count):
                     if not i in fcurves:
-                        raise ValueError(f'\n\nTrack index {i} from {path} missing in {self.pair.action.name} fcurves')
+                        raise ValueError(f"\n\nTrack index {i} from {path} missing in {self.pair.action.name} fcurves")
 
                 # Find keyframe count discrepancies
                 keyframe_count = len(fcurves[0].keyframe_points)
                 for i,fcurve in fcurves.items():
                     cur_count = len(fcurve.keyframe_points)
                     if cur_count != keyframe_count:
-                        raise ValueError(f'\n\nTrack index {i} keyframe count ({cur_count}) is different from index 0: {keyframe_count} in bone: {path} from action: {self.pair.action.name}')
+                        raise ValueError(f"\n\nTrack index {i} keyframe count ({cur_count}) is different from index 0: {keyframe_count} in bone: {path} from action: {self.pair.action.name}")
                 
                 # Find timestamp discrepancies
                 for i in range(keyframe_count):
@@ -2595,7 +3488,7 @@ class BlenderM2Scene:
                     for j in range(track_count):
                         cur_time = fcurves[j].keyframe_points[i].co[0]
                         if cur_time != time:
-                            raise ValueError(f'\n\nTrack index {j} frame {j} has a different time value ({cur_time}) from index 0 ({time}) in bone: {path} from action: {self.pair.action.name}')
+                            raise ValueError(f"\n\nTrack index {j} frame {j} has a different time value ({cur_time}) from index 0 ({time}) in bone: {path} from action: {self.pair.action.name}")
                 
                 self.ensure_track_length(m2_track, self.seq_id, anim_count, value_type, fill_tracks)
 
@@ -2614,58 +3507,39 @@ class BlenderM2Scene:
                     if not self.global_seq_id in global_seq_durations or time > global_seq_durations[self.global_seq_id]:
                         global_seq_durations[self.global_seq_id] = time
                 else:
-                    # if path.startswith('pose'):
-                    #     if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
-                    #         seq_durations[self.seq_id] = max(33, time)
                     if not self.seq_id in seq_durations or time > seq_durations[self.seq_id]:
                         seq_durations[self.seq_id] = max(33, time)
 
+        # --------
+        # Writers 
+        # --------
         def write_light(cpd, pair):
             m2_light = self.m2.root.lights.values[self.light_ids[pair.object.name]]
-            cpd.write_track('data.wow_m2_light.ambient_color',
-                3, m2_light.ambient_color,vec3D)
-
-            cpd.write_track('data.wow_m2_light.diffuse_color',
-                3, m2_light.diffuse_color,vec3D)
-
-            cpd.write_track('data.wow_m2_light.ambient_intensity',
-                1, m2_light.ambient_intensity,float32)
-
-            cpd.write_track('data.wow_m2_light.diffuse_intensity',
-                1, m2_light.diffuse_intensity,float32)
-
-            cpd.write_track('data.wow_m2_light.attenuation_start',
-                1, m2_light.attenuation_start,float32)
-
-            cpd.write_track('data.wow_m2_light.attenuation_end',
-                1, m2_light.attenuation_end,float32)
-
-            cpd.write_track('data.wow_m2_light.visibility',
-                1, m2_light.visibility,uint8, lambda x: int(x)
-            )
+            cpd.write_track('data.wow_m2_light.ambient_color', 3, m2_light.ambient_color,vec3D)
+            cpd.write_track('data.wow_m2_light.diffuse_color', 3, m2_light.diffuse_color,vec3D)
+            cpd.write_track('data.wow_m2_light.ambient_intensity', 1, m2_light.ambient_intensity,float32)
+            cpd.write_track('data.wow_m2_light.diffuse_intensity', 1, m2_light.diffuse_intensity,float32)
+            cpd.write_track('data.wow_m2_light.attenuation_start', 1, m2_light.attenuation_start,float32)
+            cpd.write_track('data.wow_m2_light.attenuation_end', 1, m2_light.attenuation_end,float32)
+            cpd.write_track('data.wow_m2_light.visibility', 1, m2_light.visibility,uint8, lambda x: int(x))
 
         def write_attachment(cpd, pair):
             m2_attachment = self.m2.root.attachments.values[self.attachment_ids[pair.object.name]]
-            cpd.write_track('wow_m2_attachment.animate',
-                1, m2_attachment.animate_attached,boolean,lambda x: bool(x), fill_tracks=True)
+            cpd.write_track('wow_m2_attachment.animate', 1, m2_attachment.animate_attached,boolean,lambda x: bool(x), fill_tracks=True)
 
         def write_bone(cpd, pair):
             for path in cpd.get_paths():
                 bone_str = re.search('"(.+?)"',path)
                 if not bone_str:
-                    print(f"Warning: FCurve {path} doesn't reference a bone")
+                    log.warn(f"FCurve {path} doesn't reference a bone")
                     continue
                 bone = bone_str.group(1)
 
                 curve_type_str = re.search('([a-zA-Z_]+)$',path)
                 if not curve_type_str:
-                    print(f"Warning: FCurve {path} doesn't have a proper type")
+                    log.warn(f"FCurve {path} doesn't have a proper type")
                     continue
                 curve_type = curve_type_str.group(0)
-
-                #if not bone in self.bone_ids:
-                    #print(f"Warning: FCurve {path} references non-existing bone {bone}")
-                    #continue
 
                 m2_bone = self.m2.root.bones.values[self.bone_ids[bone]]
                 m2_bone.flags = m2_bone.flags | 512
@@ -2694,80 +3568,100 @@ class BlenderM2Scene:
                     cpd.write_track(path,3,m2_bone.translation,vec3D,
                         lambda x: self._convert_vec((x[1],-x[0],x[2])), fill_tracks = False)
 
-        def write_scene(cpd, pair):
+        def write_color_transparency_controller(cpd, pair):
+            """Exports animation tracks from the unified color/transparency controller."""
+
             def extract_scene_data(path):
-                index = re.search('\\[(.+?)\\]', path).group(1)
-                data_path = re.search('\\]\.(.+)', path).group(1)
-                return (int(index),data_path)
+                index = re.search(r"\[(.+?)\]", path).group(1)
+                data_path = re.search(r"\]\.(.+)", path).group(1)
+                return int(index), data_path
 
+            obj = pair.object
+            ct = getattr(obj, "wow_m2_color_transparency", None)
+            if not ct or not ct.enabled:
+                log.warn(f"Object {obj.name} has no active wow_m2_color_transparency.")
+                return
+
+            # --- Handle color animation tracks ---
             for path in cpd.get_paths():
-                if path.startswith("wow_m2_colors"):
-                    (index,data_path) = extract_scene_data(path)
-                    while len(self.m2.root.colors) <= index:
-                        self.m2.root.colors.append(M2Color())
-                    
-                    col = self.m2.root.colors[index]
-                    if index < len(bpy.context.scene.wow_m2_colors):
-                        col_name = bpy.context.scene.wow_m2_colors[index].name
-                    else:
-                        print(f'Error: Color: wow_m2_color[{index}] is animated but doesn\'t actually exist in the scene, create it or consider removing it from the animation')
-                        col_name = None               
-                        #raise Exception(f'\n\nError: Color: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
-                                        
-                    if col_name is not None and col_name in self.color_ids:
-                        old_index = self.color_ids[col_name]
-                        assert old_index == index,f'Color {col_name} has multiple ids: {index},{old_index}'
-                    else:
-                        self.color_ids[col_name] = index
+                # --------------------------------------------------
+                # COLORS
+                # --------------------------------------------------
+                if path.startswith("wow_m2_color_transparency.colors"):
+                    index, data_path = extract_scene_data(path)
 
-                    if data_path == 'color':
-                        cpd.write_track(path,3,col.color,vec3D)
-                
-                if path.startswith("wow_m2_color_alpha"):
-                    (index,data_path) = extract_scene_data(path)
-
+                    # Ensure color slot exists
                     while len(self.m2.root.colors) <= index:
                         self.m2.root.colors.append(M2Color())
 
-                    col = self.m2.root.colors[index]
-                    if index < len(bpy.context.scene.wow_m2_color_alpha):
-                        col_name = bpy.context.scene.wow_m2_color_alpha[index].name
-                    else:
-                        col_name = None
-                        print(f'Error: Color Alpha: wow_m2_color_alpha[{index}] is animated but doesn\'t actually exist in the scene, create it or consider removing it from the animation')
-                        #raise Exception(f'\n\nError: Color Alpha: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
-                    
-                    if col_name is not None and data_path == 'value':
-                        cpd.write_track(path,1,col.alpha,fixed16,lambda x: int(x * 0x7fff))
+                    m2_color = self.m2.root.colors[index]
 
-                if path.startswith("wow_m2_transparency"):
-                    (index,_) = extract_scene_data(path)
+                    if index < len(ct.colors):
+                        color_entry = ct.colors[index]
+                        color_name = color_entry.name
+                    else:
+                        log.error(
+                            f"Color: wow_m2_color_transparency.colors[{index}] "
+                            f"is animated but missing from the controller. Create or remove it."
+                        )
+                        color_name = None
+
+                    # Maintain export ID map
+                    if color_name:
+                        if color_name in self.color_ids:
+                            old_index = self.color_ids[color_name]
+                            assert old_index == index, (
+                                f"Color {color_name} has conflicting IDs {index} vs {old_index}"
+                            )
+                        else:
+                            self.color_ids[color_name] = index
+
+                        # RGB
+                        if data_path == "color":
+                            cpd.write_track(path, 3, m2_color.color, vec3D)
+
+                        # Alpha (do separate object? placeholder code)
+                        elif data_path == "alpha":
+                            cpd.write_track(path, 1, m2_color.alpha, fixed16, lambda x: int(x * 0x7FFF))
+
+                # --------------------------------------------------
+                # TRANSPARENCY
+                # --------------------------------------------------
+                elif path.startswith("wow_m2_color_transparency.transparencies"):
+                    index, data_path = extract_scene_data(path)
+
+                    # Ensure transparency slot exists in the M2 root
                     while len(self.m2.root.texture_weights) <= index:
-                        self.m2.root.texture_weights.append(M2Track(fixed16,M2Header))
+                        self.m2.root.texture_weights.append(M2Track(fixed16, M2Header))
 
-                    # (3.3.5a)
-                    # The transparency lookup table is seemingly worthless,
-                    # it always just contains 0,1,2,3,4... in blizzard m2s
+                    weight = self.m2.root.texture_weights.values[index]
+
+                    # Maintain transparency lookup table (always 0..n)
                     lt = self.m2.root.transparency_lookup_table
                     while len(lt) <= index:
                         lt.append(len(lt))
 
-                    weight = self.m2.root.texture_weights.values[index]
+                    # Ensure corresponding entry exists in the controller
+                    props = ct  # shorthand
+                    while len(props.transparencies) <= index:
+                        t = props.transparencies.add()
+                        t.name = f"Transparency_{len(props.transparencies)-1}"
 
-                    if index < len(bpy.context.scene.wow_m2_transparency):
-                        weight_name = bpy.context.scene.wow_m2_transparency[index].name
+                    trans_entry = props.transparencies[index]
+                    trans_name = trans_entry.name
+
+                    # Maintain export ID map
+                    if trans_name in self.transparency_ids:
+                        old_index = self.transparency_ids[trans_name]
+                        assert old_index == index, (
+                            f"Transparency {trans_name} has conflicting IDs {index} vs {old_index}"
+                        )
                     else:
-                        print(f'Error: Transparency: wow_m2_transparency[{index}] is animated but doesn\'t actually exist in the scene, create it or consider removing it from the animation')
-                        weight_name = None
-                        #raise Exception(f'\n\nError: Transparency: {path} is animated but doesn\'t actually exist in the scene, create it or remove it from the animation if it\'s unused')
-                    if weight_name is not None:
-                        if weight_name in self.transparency_ids:
-                            old_index = self.transparency_ids[weight_name]
-                            assert old_index == index,f'Transparency {weight_name} has multiple ids: {index},{old_index}'
-                        else:
-                            self.transparency_ids[weight_name] = index
+                        self.transparency_ids[trans_name] = index
 
-                        cpd.write_track(path,1,weight,fixed16, lambda x: int(x*0x7fff))
+                    # Write value
+                    if data_path == "value":
+                        cpd.write_track(path, 1, weight, fixed16, lambda x: int(x * 0x7FFF))
 
         def write_event(cpd, pair):
             m2_event = self.m2.root.events[self.event_ids[pair.object.name]]
@@ -2801,40 +3695,21 @@ class BlenderM2Scene:
             trans = M2TextureTransform()
             self.m2.root.texture_transforms.append(trans)
 
-            cpd.write_track("location",3,trans.translation,vec3D, 
-                            lambda x: (
-                                -x[0],
-                                x[1],
-                                x[2]
-                            )
-            )
+            cpd.write_track("location",3,trans.translation,vec3D, lambda x: ( -x[0], x[1], x[2] ))
 
             cpd.write_track("scale",3,trans.scaling,vec3D)
 
             # TODO: fix this with axis order!
-            cpd.write_track("rotation_quaternion",4,trans.rotation,quat,
-                lambda x: (
-                     x[2],
-                    -x[1],
-                     x[3],
-                     x[0]
-                )
-            )
+            cpd.write_track("rotation_quaternion",4,trans.rotation,quat, lambda x: ( x[2], -x[1], x[3], x[0] ))
 
         def write_ribbon(cpd, pair):
             m2_ribbon = self.m2.root.ribbon_emitters[self.ribbon_ids[pair.object.name]]
             cpd.write_track("wow_m2_ribbon.color",3,m2_ribbon.color_track,vec3D)
-            cpd.write_track("wow_m2_ribbon.alpha",1,m2_ribbon.alpha_track,float32,
-                lambda x: int(x*0x7fff)
-            )
+            cpd.write_track("wow_m2_ribbon.alpha",1,m2_ribbon.alpha_track,float32, lambda x: int(x*0x7fff))
             cpd.write_track("wow_m2_ribbon.height_above",1,m2_ribbon.height_above_track,float32)
             cpd.write_track("wow_m2_ribbon.height_below",1,m2_ribbon.height_below_track,float32)
-            cpd.write_track("wow_m2_ribbon.texture_slot",1,m2_ribbon.tex_slot_track,uint16,
-                lambda x: int(x)
-            )
-            cpd.write_track("wow_m2_ribbon.visibility",1,m2_ribbon.visibility_track,uint8,
-                lambda x: int(x)
-            )
+            cpd.write_track("wow_m2_ribbon.texture_slot",1,m2_ribbon.tex_slot_track,uint16, lambda x: int(x))
+            cpd.write_track("wow_m2_ribbon.visibility",1,m2_ribbon.visibility_track,uint8, lambda x: int(x))
 
         def write_particle(cpd, pair):
             m2_particle = self.m2.root.particle_emitters[self.particle_ids[pair.object.name]]
@@ -2875,6 +3750,9 @@ class BlenderM2Scene:
             # TODO: can't write this because the track thinks the m2array type is generic for some reason
             #cpd.write_track("rotation_axis_angle",m2_camera.roll,float32,convert_spline)
 
+        # -------------------------
+        # Main body
+        # -------------------------
         self.m2.root.transparency_lookup_table.add(len(self.m2.root.texture_weights))
 
         global_seq_count = 0
@@ -2882,7 +3760,9 @@ class BlenderM2Scene:
             if wow_seq.is_global_sequence:
                 global_seq_count += 1
 
-        for wow_seq in tqdm(self.scene.wow_m2_animations, desc='Exporting Animations', ascii=True):
+        success_count = 0
+
+        for wow_seq in tqdm(self.scene.wow_m2_animations, total=len(self.scene.wow_m2_animations), desc='Exporting Animations', ascii=True):
             seq_id = 0
             global_seq_id = -1
             if wow_seq.is_global_sequence:
@@ -2916,12 +3796,10 @@ class BlenderM2Scene:
                 )
             
             for pair in wow_seq.anim_pairs:
-                if (pair.type != 'SCENE' and pair.object is None) or pair.action is None:
+                if pair.object is None or pair.action is None:
                     continue
 
-                if pair.type == 'SCENE':
-                    ObjectTracks(seq_id, global_seq_id, pair, write_scene)
-                elif pair.object.type == 'ARMATURE':
+                if pair.object.type == 'ARMATURE':
                     ObjectTracks(seq_id, global_seq_id, pair, write_bone)
                 elif pair.object.type == 'LIGHT':
                     ObjectTracks(seq_id, global_seq_id, pair, write_light)
@@ -2942,6 +3820,8 @@ class BlenderM2Scene:
                         ObjectTracks(seq_id, global_seq_id, pair, write_ribbon)
                     elif pair.object.wow_m2_particle.enabled:
                         ObjectTracks(seq_id, global_seq_id, pair, write_particle)
+                    elif pair.object.wow_m2_color_transparency.enabled:
+                        ObjectTracks(seq_id, global_seq_id, pair, write_color_transparency_controller)
 
             for global_seq_id,duration in global_seq_durations.items():
                 assert global_seq_id < len(self.m2.root.global_sequences)
@@ -2984,42 +3864,82 @@ class BlenderM2Scene:
         
         write_empty_events()
 
-    def save_globalflags(self, need_combiner_flag):   
-        global_flags_armature = next((obj for obj in bpy.data.objects if obj.type == 'ARMATURE'), None)
-        if global_flags_armature is None:
-            pass
-        else:
-            globalflagsLK = list(global_flags_armature.wow_m2_globalflags.flagsLK)  # Convert set to list
+    def save_globalflags(self, need_combiner_flag):
+        """Save global flags back into the M2 file using the M2 root collection."""
+        try:
+            # Locate existing M2 root collection
+            m2_collection = util.find_m2_root_collection()
 
-            if need_combiner_flag:
-                if '8' not in globalflagsLK:
-                    print("Adding Texture Combiner Global Flag")
-                    globalflagsLK.append('8')
-                    global_flags_armature.wow_m2_globalflags.flagsLK = set(globalflagsLK)
+            if not m2_collection:
+                log.warn("No M2 root collection found, skipping global flag save.")
+                return
+
+            if not hasattr(m2_collection, "wow_m2_globalflags"):
+                log.warn(f"Collection '{m2_collection.name}' has no wow_m2_globalflags property.")
+                return
+                
+            if not m2_collection.wow_m2_globalflags.enabled:
+                log.warn(f"Global flags disabled on collection '{m2_collection.name}', skipping flag save.")
+                return
+
+            globalflags = m2_collection.wow_m2_globalflags
+
+            # Read flags defensively
+            try:
+                flags_lk = list(getattr(globalflags, "flagsLK", []))
+                flags_legion = list(getattr(globalflags, "flagsLegion", []))
+            except Exception as e:
+                log.error(f"Failed reading global flags from collection '{m2_collection.name}': {e}")
+                return
+
+            # Texture combiner flag (bit 8)
+            combiner_flag = "8"
+            flag_changed = False
+
+            if need_combiner_flag and combiner_flag not in flags_lk:
+                flags_lk.append(combiner_flag)
+                flag_changed = True
+                log.debug(f"Added texture combiner flag (8), required by model export")
+            elif not need_combiner_flag and combiner_flag in flags_lk:
+                flags_lk.remove(combiner_flag)
+                flag_changed = True
+                log.debug(f"Removed texture combiner flag (8), model export indicates not needed")
+
+            # Write updated flags back into property
+            try:
+                globalflags.flagsLK = set(flags_lk)
+                globalflags.flagsLegion = set(flags_legion)
+            except Exception as e:
+                log.warn(f"Could not update flags on collection '{m2_collection.name}': {e}")
+
+            # Apply combined bitfield to M2 file memory
+            combined_flags = construct_bitfield(flags_lk + flags_legion)
+            self.m2.root.global_flags = combined_flags
+
+            if flag_changed:
+                log.info(f"Updated global flags on '{m2_collection.name}' to {combined_flags}")
             else:
-                if '8' in globalflagsLK:
-                    print("Removing Texture Combiner Global Flag")
-                    globalflagsLK.remove('8')
-                    global_flags_armature.wow_m2_globalflags.flagsLK = set(globalflagsLK)
-            
-            self.m2.root.global_flags = construct_bitfield(globalflagsLK)
-            globalflagsLegion = list(global_flags_armature.wow_m2_globalflags.flagsLegion)  # Convert set to list
-            for item in globalflagsLegion:
-                self.m2.root.global_flags = construct_bitfield(globalflagsLK+globalflagsLegion)
+                log.info("No global flag change required.")
+
+        except Exception as e:
+            log.error(f"Unexpected failure in save_globalflags: {e}")
+            traceback.print_exc()
 
     def save_geosets(self, selected_only, fill_textures, merge_vertices):
+        import io, sys
+
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
         if not objects:
-            raise Exception('Error: no mesh found on the scene or selected.')
+            log.error("No mesh found on the scene or selected.")
+            return
 
-        # deselect all objects before saving geosets
-        bpy.ops.object.select_all(action='DESELECT')
+        bpy.ops.object.select_all(action="DESELECT")
 
         proxy_objects = []
-        tex_anim_lookup_table = [] 
+        tex_anim_lookup_table = []
         tex_combiner_materials = []
         tt_controller_combinations = []
-        rearranged_transforms = []  
+        rearranged_transforms = []
         anim_lookup_executed = False
         need_combiner_flag = False
 
@@ -3029,414 +3949,445 @@ class BlenderM2Scene:
             elif mapping_method == "UVMap.001":
                 return 1
             elif mapping_method == "Env":
-                return -1      
+                return -1
+            return 0
 
-        for wow_seq in self.scene.wow_m2_animations:                
+        # Build transform controllers map
+        for wow_seq in self.scene.wow_m2_animations:
             for pair in wow_seq.anim_pairs:
-                if pair.object is None or (pair.type != 'SCENE' and pair.action is None):
+                if pair.object and pair.object.type == "EMPTY" and pair.object.wow_m2_uv_transform.enabled:
+                    if pair.object.name not in rearranged_transforms:
+                        rearranged_transforms.append(pair.object.name)
+        tt_controller_id_map = {name: idx for idx, name in enumerate(rearranged_transforms)}
+
+        # Export each mesh
+        geoset_objects = [
+            ob for ob in objects
+            if ob.type == "MESH" and not ob.hide_get() and not ob.wow_m2_geoset.collision_mesh
+        ]
+
+        success_count = 0
+
+        for obj in tqdm(geoset_objects, total=len(geoset_objects), desc="Exporting Geosets", ascii=True):
+            try:
+                if not obj.data or not obj.data.polygons:
+                    log.warn(f"Skipping mesh '{obj.name}' — no geometry data.")
                     continue
-                if pair.object.type == 'EMPTY':
-                    if pair.object.wow_m2_uv_transform.enabled:
-                        if pair.object.name not in rearranged_transforms:
-                            rearranged_transforms.append(pair.object.name)
 
-        tt_controller_id_map = {name: idx for idx, name in enumerate(rearranged_transforms)}   
-        
-        for obj in tqdm(filter(lambda ob: not ob.wow_m2_geoset.collision_mesh and ob.type == 'MESH' and not ob.hide_get(), objects), desc='Exporting Geosets', ascii=True):
+                # Duplicate mesh
+                new_obj = obj.copy()
+                new_obj.data = obj.data.copy()
+                proxy_objects.append(new_obj)
+                bpy.context.collection.objects.link(new_obj)
+                bpy.context.view_layer.objects.active = new_obj
+                mesh = new_obj.data
 
-            new_obj = obj.copy()
-            new_obj.data = obj.data.copy()
-            proxy_objects.append(new_obj)
+                if not mesh.uv_layers or not mesh.uv_layers.active:
+                    log.error(f"Mesh '{obj.name}' has no UV Map — skipping.")
+                    bpy.data.objects.remove(new_obj, do_unlink=True)
+                    continue
 
-            bpy.context.collection.objects.link(new_obj)
+                # Apply modifiers safely
+                if obj.modifiers:
+                    for mod in obj.modifiers:
+                        if "M2TexTransform" not in mod.name:
+                            try:
+                                bpy.ops.object.modifier_apply(modifier=mod.name)
+                            except Exception as e:
+                                log.warn(f"Could not apply modifier '{mod.name}' on '{obj.name}': {e}")
 
-            bpy.context.view_layer.objects.active = new_obj
-            mesh = new_obj.data
+                # Silence Blender console temporarily
+                temporal_console_output = io.StringIO()
+                sys.stdout = temporal_console_output
 
-            # security checks
+                # Triangulate and clean mesh
+                try:
+                    bpy.ops.object.mode_set(mode="EDIT")
+                    bpy.ops.mesh.select_all(action="SELECT")
+                    bpy.ops.mesh.reveal()
+                    bpy.ops.mesh.quads_convert_to_tris()
+                    bpy.ops.mesh.delete_loose()
+                    bpy.ops.mesh.select_all(action="DESELECT")
+                    bpy.ops.object.mode_set(mode="OBJECT")
+                except Exception as e:
+                    log.warn(f"Failed to triangulate '{obj.name}': {e}")
+                    bpy.ops.object.mode_set(mode="OBJECT")
 
-            if not mesh.uv_layers.active:
-                raise Exception("Mesh <<{}>> has no UV Map.".format(obj.name))
-            
-            ntexanim = 0
-            tt_controller_id_uv1 = None
-            tt_controller_id_uv2 = None    
+                # Re-enable stdout
+                sys.stdout = sys.__stdout__
+                temporal_console_output.close()
 
-            # apply all modifiers
-            if len(obj.modifiers):
-                for modifier in obj.modifiers:
-                    if 'M2TexTransform' not in modifier.name:
-                        bpy.ops.object.modifier_apply(modifier=modifier.name)
-            
-            #Temporal console to hide Blender's removing vertices messages
-            temporal_console_output = io.StringIO()
-            sys.stdout = temporal_console_output
+                # Compute vertex data
+                mesh.calc_loop_triangles()
+                mesh.calc_normals_split()
 
-            # triangulate mesh, delete loose geometry
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.reveal()
-            bpy.ops.mesh.quads_convert_to_tris()
-            bpy.ops.mesh.delete_loose()
-            bpy.ops.mesh.select_all(action='DESELECT')
-            bpy.ops.object.mode_set(mode='OBJECT')
+                vertices = [self._convert_vec(new_obj.matrix_world @ v.co) for v in mesh.vertices]
+                normals = [(0.0, 0.0, 1.0)] * len(vertices)
+                tex_coords = [(0.0, 0.0)] * len(vertices)
+                tex_coords2 = [(0.0, 0.0)] * len(vertices)
 
-            # prepare scene
-            ###################################
+                for loop in mesh.loops:
+                    v_idx = loop.vertex_index
+                    normals[v_idx] = tuple(getattr(loop, "normal", (0.0, 0.0, 1.0)))
+                    if mesh.uv_layers:
+                        uv1 = mesh.uv_layers[0].data[loop.index].uv
+                        tex_coords[v_idx] = (uv1[0], 1 - uv1[1])
+                        if len(mesh.uv_layers) > 1:
+                            uv2 = mesh.uv_layers[1].data[loop.index].uv
+                            tex_coords2[v_idx] = (uv2[0], 1 - uv2[1])
+                        else:
+                            tex_coords2[v_idx] = tex_coords[v_idx]
 
-            # add custom split normals if there're none
-            bpy.ops.object.use_auto_smooth  = True 
-            bpy.ops.mesh.customdata_custom_splitnormals_add()
-              
-            if merge_vertices: # TODO find a better method           
+                tris = [poly.vertices for poly in mesh.polygons]
 
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.mesh.remove_doubles(threshold = 0.0001, use_sharp_edge_from_normals = True)
-                bpy.ops.uv.select_all(action='SELECT')
-                bpy.ops.uv.seams_from_islands(mark_seams=False, mark_sharp=True)
-                bpy.ops.mesh.select_all(action='DESELECT')
-                bpy.ops.object.mode_set(mode='OBJECT')
-                for e in new_obj.data.edges:
-                    if e.use_edge_sharp:
-                        e.select = True
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.edge_split()
-                bpy.ops.mesh.select_all(action='DESELECT')
-                bpy.ops.object.mode_set(mode='OBJECT')
+                # Compute geometric origin
+                vertcount = len(vertices)
+                origin = tuple(sum(v[i] for v in vertices) / vertcount for i in range(3))
+                sort_pos = get_obj_boundbox_center(new_obj)
+                sort_radius = get_obj_radius(new_obj, sort_pos)
 
-                bpy.ops.object.modifier_add(type='DATA_TRANSFER')
-                bpy.context.object.modifiers["DataTransfer"].use_loop_data = True
-                bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
-                bpy.context.object.modifiers["DataTransfer"].object = obj
-                bpy.ops.object.datalayout_transfer(modifier="DataTransfer")
-                bpy.ops.object.modifier_apply(modifier="DataTransfer")
+                # Bones
+                if self.rig:
+                    bone_indices, bone_weights = [], []
+                    bone_names = [b.name for b in self.rig.data.bones]
+                    unique_bones = set()
 
-            sys.stdout = sys.__stdout__
-            captured_output = temporal_console_output.getvalue()
-            temporal_console_output.close()
-            #print(captured_output) #Print Blender's removed vertices info
-           
-            # smooth edges
-            # bpy.ops.object.mode_set(mode='EDIT')
-            # bpy.ops.mesh.select_all(action='SELECT')
-            # bpy.ops.mesh.mark_sharp(clear=True)
-            # bpy.ops.mesh.select_all(action='DESELECT')
-            # bpy.ops.object.mode_set(mode='OBJECT')
-            
-            # export vertices
-            mesh.calc_loop_triangles()
-            mesh.calc_normals_split()
+                    for vertex in mesh.vertices:
+                        v_bone_indices = [0, 0, 0, 0]
+                        v_bone_weights = [0, 0, 0, 0]
+                        
+                        groups = get_bone_groups(new_obj, vertex, bone_names)[:4]
+                        
+                        for i, g in enumerate(groups):
+                            group_name = (
+                                new_obj.vertex_groups[g.group].name
+                                if g.group < len(new_obj.vertex_groups)
+                                else None
+                            )
+                            bone_id = self.bone_ids.get(group_name)
+                            weight = max(0, min(1, g.weight))
+                            
+                            if bone_id is None:
+                                bone_id = 0
+                                weight = 0
+                                log.warn(f"Mesh '{obj.name}' vertex group '{group_name}' not linked to any known bone, defaulting bone and weight to 0.")
+                                
+                            v_bone_indices[i] = bone_id
+                            v_bone_weights[i] = int(weight * 255)
+                            unique_bones.add(bone_id)
 
-            vertices = [self._convert_vec(new_obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
-            #normals = [self._convert_vec(vertex.normal) for vertex in mesh.vertices] # Original normals
-
-            normals = [(0.0, 0.0, 0.0)] * len(vertices)
-            tex_coords = [(0.0, 0.0)] * len(vertices)
-            tex_coords2 = [(0.0, 0.0)] * len(vertices)
-
-            for loop in mesh.loops:
-
-                normals[loop.vertex_index] = (mesh.loops[loop.index].normal) # custom split normals
-                tex_coords[loop.vertex_index] = (mesh.uv_layers[0].data[loop.index].uv[0],
-                                                 1 - mesh.uv_layers[0].data[loop.index].uv[1])
-                if len(mesh.uv_layers) >= 2:
-                    tex_coords2[loop.vertex_index] = (mesh.uv_layers[1].data[loop.index].uv[0],
-                                                      1 - mesh.uv_layers[1].data[loop.index].uv[1])
-                else:
-                    tex_coords2[loop.vertex_index] = (mesh.uv_layers[0].data[loop.index].uv[0],
-                                                      1 - mesh.uv_layers[0].data[loop.index].uv[1])                    
-
-            tris = [poly.vertices for poly in mesh.polygons]
-
-            # old system
-            # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-            # origin = new_obj.location
-
-            vertx = 0.0
-            verty = 0.0
-            vertz = 0.0
-            vertcount = len(vertices)
-            
-            for vert in vertices:
-                vertx += vert[0]
-                verty += vert[1]
-                vertz += vert[2]
-            
-            origin = ( vertx / vertcount, verty / vertcount, vertz / vertcount )
-            
-            sort_pos = get_obj_boundbox_center(new_obj)
-            sort_radius = get_obj_radius(new_obj, sort_pos)
-
-            if self.rig:
-
-                bone_indices = []
-                bone_weights = []
-
-                bone_names = [bone.name for bone in self.rig.data.bones]
-
-                unique_bones = set()
-
-                for vertex in mesh.vertices:
-                    v_bone_indices = [0, 0, 0, 0]
-                    v_bone_weights = [0, 0, 0, 0]
-
-                    bone_groups = get_bone_groups(new_obj,vertex,bone_names)[:4]
-
-                    for i, group_info in enumerate(bone_groups):
-                        bone_id = self.bone_ids.get(new_obj.vertex_groups[group_info.group].name)
-                        weight = group_info.weight
-
-                        if bone_id is None:
-                            bone_id = 0
-                            weight = 0
-
-                        v_bone_indices[i] = bone_id
-                        v_bone_weights[i] = int(weight * 255)
-
-                        unique_bones.add(bone_id)
-                    
-                    weight_sum = sum(v_bone_weights)
-
-                    if weight_sum != 255:
-                        if weight_sum > 0:
-                            scale = 255 / weight_sum
+                        total = sum(v_bone_weights)
+                        if total != 255 and total > 0:
+                            scale = 255 / total
                             v_bone_weights = [int(w * scale) for w in v_bone_weights]
+                            diff = 255 - sum(v_bone_weights)
+                            if diff != 0:
+                                v_bone_weights[v_bone_weights.index(max(v_bone_weights))] += diff
 
-                        weight_sum = sum(v_bone_weights)
-                        if weight_sum != 255:
-                            diff = 255 - weight_sum
-                            max_weight_index = v_bone_weights.index(max(v_bone_weights))
-                            v_bone_weights[max_weight_index] += diff    
+                        bone_indices.append(v_bone_indices)
+                        bone_weights.append(v_bone_weights)
 
-                    bone_indices.append(v_bone_indices)
-                    bone_weights.append(v_bone_weights)
-                
-                num_bones = len(unique_bones)
+                    if len(unique_bones) > 64:
+                        log.error(f"Mesh '{obj.name}' uses {len(unique_bones)} bones — exceeds 64 bone limit. Split it and retry.")
+                        bpy.data.objects.remove(new_obj, do_unlink=True)
+                        continue
+                else:
+                    bone_indices = [[0, 0, 0, 0] for _ in mesh.vertices]
+                    bone_weights = [[255, 0, 0, 0] for _ in mesh.vertices]
 
-                if num_bones > 64:
-                    bpy.data.objects.remove(new_obj, do_unlink=True)  
-                    raise Exception(f"\n\nWarning: The number of bones affecting the mesh: {obj.name} is {num_bones}, which exceeds the limit of 64! Separate it into more objects, and try again")
+                # Create geoset
+                g_index = self.m2.add_geoset(
+                    vertices, normals, tex_coords, tex_coords2, tris,
+                    bone_indices, bone_weights, origin, sort_pos, sort_radius,
+                    int(new_obj.wow_m2_geoset.mesh_part_id)
+                )
 
-            else:
-                bone_indices = [[0, 0, 0, 0] for _ in mesh.vertices]
-                bone_weights = [[255, 0, 0, 0] for _ in mesh.vertices]
+                # Export materials
+                for i, material in enumerate(mesh.materials):
+                    if not material or not hasattr(material, "wow_m2_material"):
+                        log.warn(f"Mesh '{obj.name}' has invalid material at slot {i}. Skipping.")
+                        continue
 
-            # add geoset
-            g_index = self.m2.add_geoset(vertices, normals, tex_coords, tex_coords2, tris, bone_indices, bone_weights,
-                                         origin, sort_pos, sort_radius, int(new_obj.wow_m2_geoset.mesh_part_id))
-            
-            for i, material in enumerate(mesh.materials):
+                    try:
+                        mat_name = material.name
+                        mat_data = material.wow_m2_material
+                        textures = [mat_data.texture_1, mat_data.texture_2]
+                        valid_textures = [t for t in textures if t]
+                        texture_count = len(valid_textures)
 
-                textures = [material.wow_m2_material.texture_1, material.wow_m2_material.texture_2]
+                        if not valid_textures:
+                            log.warn(f"Material '{mat_name}' on '{obj.name}' has no textures assigned.")
+                            continue
 
-                texture_count = 0
+                        tex1_id = tex2_id = 0
+                        first_path = ""
 
-                for bl_texture in textures:
-                    if bl_texture:
-                        texture_count += 1
-                        wow_path = bl_texture.wow_m2_texture.path
-                        tex_type = bl_texture.wow_m2_texture.texture_type
-                        if texture_count == 1:
-                            if tex_type == '0':
-                                first_path = wow_path
+                        for tex in valid_textures:
+                            if not hasattr(tex, "wow_m2_texture"):
+                                log.warn(f"Material '{mat_name}' on '{obj.name}' has texture slot missing 'wow_m2_texture'.")
+                                continue
+
+                            tex_data = tex.wow_m2_texture
+                            tex_type = int(tex_data.texture_type)
+                            wow_path = tex_data.path or ""
+
+                            # Fill path only for type 0 (file-based) textures
+                            if tex_type == 0:
+                                if fill_textures and not wow_path:
+                                    log.info(f"Texture on '{mat_name}' missing path, attempting auto-fill.")
+                                    wow_path = resolve_texture_path(getattr(tex, "filepath", ""))
+                                if not wow_path:
+                                    log.warn(f"Texture on '{mat_name}' (type 0) has no path, skipping slot.")
+                                    continue
                             else:
-                                first_path = tex_type
+                                # Non-file (e.g., DBC, environment, internal) textures have no path
+                                if not wow_path:
+                                    log.debug(f"Texture on '{mat_name}' type {tex_type} (non-file) – path not required.")
 
-                        if bl_texture.wow_m2_texture.texture_type == 0 and fill_textures and not wow_path:                        
-                            wow_path = resolve_texture_path(bl_texture.filepath)
-                        
-                        self.m2.add_texture(wow_path,
-                                            construct_bitfield(bl_texture.wow_m2_texture.flags),
-                                            int(tex_type),
-                                            )
-                        
-                    if tex_type == '0':
-                        if (wow_path) in self.final_textures:
-                            tex2_id = self.final_textures[wow_path]
+                            # Record first_path behavior (matches original)
+                            if not first_path:
+                                first_path = wow_path if tex_type == 0 else str(tex_type)
+
+                            # Add texture to M2
+                            self.m2.add_texture(
+                                wow_path if tex_type == 0 else "",
+                                construct_bitfield(tex_data.flags),
+                                tex_type
+                            )
+
+                            # Unique texture key (use mat_name for non-file types to avoid collisions)
+                            tex_key = wow_path if tex_type == 0 else f"{mat_name}:{tex_type}"
+                            if tex_key not in self.final_textures:
+                                self.final_textures[tex_key] = len(self.final_textures)
+
+                            tex2_id = self.final_textures[tex_key]
+
+                            # Ensure first texture dominates the pair (matches original logic)
+                            if first_path in self.final_textures:
+                                tex1_id = self.final_textures[first_path]
+
+                        # Fallback for materials with no valid textures
+                        if not first_path:
+                            log.warn(f"Material '{mat_name}' on '{obj.name}' produced no valid textures, skipping material.")
+                            continue
+
+                        # Add pair lookup (combiners expect pairs)
+                        tex_lookup_id = self.m2.add_tex_lookup(tex1_id, tex2_id)
+
+                        # --- Material and render setup ---
+                        render_flags = construct_bitfield(mat_data.texture_1_render_flags)
+                        flags = construct_bitfield(mat_data.flags)
+                        priority_plane = int(mat_data.priority_plane)
+                        bl_mode = int(mat_data.texture_1_blending_mode)
+                        shader_id = 0
+                        mat_layer = i
+
+                        # Color / transparency validation
+                        color_name = mat_data.color
+                        transparency_name = mat_data.transparency
+
+                        if color_name and color_name not in self.color_ids:
+                            log.warn(f"Material '{mat_name}' on '{obj.name}' references missing color '{color_name}'.")
+                            color_id = -1
                         else:
-                            tex2_id = len(self.final_textures)
-                            self.final_textures[wow_path] = tex2_id
+                            color_id = self.color_ids.get(color_name, -1)
 
-                        tex1_id = tex2_id
-
-                        if first_path in self.final_textures:
-                            tex1_id = self.final_textures[first_path]
-                    else:
-                        if (tex_type) in self.final_textures:
-                            tex2_id = self.final_textures[tex_type]
+                        if transparency_name and transparency_name not in self.transparency_ids:
+                            log.warn(f"Material '{mat_name}' on '{obj.name}' references missing transparency '{transparency_name}'.")
+                            transparency_id = 0
                         else:
-                            tex2_id = len(self.final_textures)
-                            self.final_textures[tex_type] = tex2_id
+                            transparency_id = self.transparency_ids.get(transparency_name, 0)
 
-                        tex1_id = tex2_id
+                        tex_1_mapping = mapping(mat_data.texture_1_mapping)
+                        tex_2_mapping = mapping(mat_data.texture_2_mapping)
 
-                        if first_path in self.final_textures:
-                            tex1_id = self.final_textures[first_path]
-                
-                # TODO lyswh, combiners need lookups to be in pairs, so we're exporting everything in pairs for now, in the future
-                # it'd be nice to export first all pairs, and after all individual lookups, but this works
-                tex_lookup_id = self.m2.add_tex_lookup(tex1_id, tex2_id)  
-                           
-                render_flags = construct_bitfield(material.wow_m2_material.texture_1_render_flags)
-                flags = construct_bitfield(material.wow_m2_material.flags)
-                priority_plane = int(material.wow_m2_material.priority_plane)
-                bl_mode = int(material.wow_m2_material.texture_1_blending_mode)
-                shader_id = 0
-                mat_layer = i
+                        # Two-texture combiner setup
+                        if texture_count == 2:
+                            need_combiner_flag = True
+                            tex_combiner_data = (
+                                construct_bitfield(mat_data.texture_2_render_flags),
+                                int(mat_data.texture_2_blending_mode),
+                            )
+                            if tex_combiner_data not in tex_combiner_materials:
+                                tex_combiner_materials.append(tex_combiner_data)
+                                self.m2.root.texture_combiner_combos.extend(tex_combiner_data)
+                            shader_id = tex_combiner_materials.index(tex_combiner_data) * 2
 
-                if material.wow_m2_material.color in bpy.context.scene.wow_m2_colors and material.wow_m2_material.color in self.color_ids or material.wow_m2_material.color == "":
-                    color_id = self.color_ids[material.wow_m2_material.color] if material.wow_m2_material.color != "" else -1
-                else:
-                    print(f'{material.wow_m2_material.color} from {material.name} in object: {obj.name} doesn\'t exist in the scene or is not animated, create it and/or add a keyframe for it and try again.')
-                    raise Exception(f'\n\n{material.wow_m2_material.color} from {material.name} in object: {obj.name} doesn\'t exist in the scene or is not animated, create it and/or add a keyframe for it and try again.')                    
-                
-                if material.wow_m2_material.transparency in bpy.context.scene.wow_m2_transparency and material.wow_m2_material.transparency in self.transparency_ids or material.wow_m2_material.transparency == "":
-                    transparency_id = self.transparency_ids[material.wow_m2_material.transparency] if material.wow_m2_material.transparency != "" else 0
-                else:
-                    print(f'{material.wow_m2_material.transparency} from {material.name} in object: {obj.name} doesn\'t exist in the scene or is not animated, create it and/or add a keyframe for it and try again.')
-                    raise Exception(f'\n\n{material.wow_m2_material.transparency} from {material.name} in object: {obj.name} doesn\'t exist in the scene or is not animated, create it and/or add a keyframe for it and try again.')
+                        # UV transform controllers
+                        ntexanim, tt_controller_id_uv1, tt_controller_id_uv2 = 0, -1, -1
+                        tex1_anim = mat_data.texture_1_animation
+                        tex2_anim = mat_data.texture_2_animation
+                        if tex1_anim:
+                            tt_controller_id_uv1 = tt_controller_id_map.get(tex1_anim.name, -1)
+                            if tt_controller_id_uv1 == -1:
+                                log.warn(f"Material '{mat_name}' references missing UV animation '{tex1_anim.name}'.")
+                            ntexanim += 1
+                        if tex2_anim:
+                            tt_controller_id_uv2 = tt_controller_id_map.get(tex2_anim.name, -1)
+                            if tt_controller_id_uv2 == -1:
+                                log.warn(f"Material '{mat_name}' references missing UV animation '{tex2_anim.name}'.")
+                            ntexanim += 1
 
-                tex_1_mapping = mapping(material.wow_m2_material.texture_1_mapping)
-                tex_2_mapping = 1
+                        combo = (tt_controller_id_uv1, tt_controller_id_uv2)
+                        if combo not in tt_controller_combinations:
+                            tt_controller_combinations.append(combo)
+                        if combo not in tex_anim_lookup_table:
+                            tex_anim_lookup_table.append(combo)
+                            self.m2.root.texture_transforms_lookup_table.extend(combo)
 
-                if texture_count == 2:
+                        transform_id = tex_anim_lookup_table.index(combo) * 2
 
-                    need_combiner_flag = True
-                    tex_2_mapping = mapping(material.wow_m2_material.texture_2_mapping)
-                    texture_2_render_flags = construct_bitfield(material.wow_m2_material.texture_2_render_flags)
-                    texture_2_blending_mode = int(material.wow_m2_material.texture_2_blending_mode)
-                    tex_combiner_data = (texture_2_render_flags, texture_2_blending_mode)
-                  
-                    if tex_combiner_data not in tex_combiner_materials:
-                        tex_combiner_materials.append(tex_combiner_data)
-                        self.m2.root.texture_combiner_combos.append(tex_combiner_data[0])
-                        self.m2.root.texture_combiner_combos.append(tex_combiner_data[1])
-                    
-                    #print("tex_combiners_materials", tex_combiner_materials)
+                        self.m2.add_material_to_geoset(
+                            g_index, render_flags, bl_mode, flags, shader_id,
+                            tex_lookup_id, tex_1_mapping, tex_2_mapping,
+                            priority_plane, mat_layer, texture_count,
+                            color_id, transparency_id, transform_id
+                        )
 
-                    if tex_combiner_data in tex_combiner_materials:
-                        shader_id = next(i for i, value in enumerate(tex_combiner_materials) if value == tex_combiner_data) * 2
-                    else:
-                        shader_id = 0  
+                        log.debug(f"Exported material '{mat_name}'")
 
-                if material.wow_m2_material.texture_1_animation is not None:
-                    tt_controller_name = material.wow_m2_material.texture_1_animation.name
-                    tt_controller_id_uv1 = tt_controller_id_map.get(tt_controller_name, -1)
-                    ntexanim += 1
-                if material.wow_m2_material.texture_2_animation is not None:
-                    tt_controller_name_001 = material.wow_m2_material.texture_2_animation.name
-                    tt_controller_id_uv2 = tt_controller_id_map.get(tt_controller_name_001, -1)
-                    ntexanim += 1   
+                    except Exception as mat_e:
+                        log.error(f"Failed to export material {i} ('{material.name}') of '{obj.name}': {mat_e}")
+                        traceback.print_exc()
+                        continue
 
-                def add_combination(combination):
-                    if combination not in tt_controller_combinations:
-                        tt_controller_combinations.append(combination)                                  
+                bpy.data.objects.remove(new_obj, do_unlink=True)
+                log.debug(f"Exported geoset '{obj.name}'")
+                success_count += 1
 
-                if ntexanim == 0:
-                    add_combination((-1, -1))
-                elif ntexanim == 1:
-                    if tt_controller_id_uv1 is not None:
-                        add_combination((tt_controller_id_uv1, -1))
-                    else:
-                        add_combination((-1, tt_controller_id_uv2))
-                elif ntexanim == 2:
-                    add_combination((tt_controller_id_uv1, tt_controller_id_uv2))
-                
-                if not anim_lookup_executed:
-                    tex_anim_lookup_table.append((-1, -1))       
-                    self.m2.root.texture_transforms_lookup_table.extend([-1,-1])     
-                    anim_lookup_executed = True
-                else:
-                    transform_id = 0
-                if ntexanim != 0:
-                    for tt_combination in tt_controller_combinations:
-                        if (tt_combination) not in tex_anim_lookup_table:
-                            tex_anim_lookup_table.append(tt_combination)
-                            self.m2.root.texture_transforms_lookup_table.extend([tt_combination[0],tt_combination[1]])
-                
-                if tt_controller_id_uv1 is None:
-                    tt_controller_id_uv1 = -1        
-                if tt_controller_id_uv2 is None:
-                    tt_controller_id_uv2 = -1
+            except Exception as e:
+                log.error(f"Failed to export geoset '{obj.name}': {e}")
+                traceback.print_exc()
+                try:
+                    bpy.data.objects.remove(new_obj, do_unlink=True)
+                except:
+                    pass
+                continue
 
-                if ((tt_controller_id_uv1, tt_controller_id_uv2)) in tex_anim_lookup_table:
-                    transform_id = tex_anim_lookup_table.index((tt_controller_id_uv1, tt_controller_id_uv2)) * 2
-                    #print("Animations: ", (tt_controller_id_uv1, tt_controller_id_uv2),"Tex anim lookup table: ", tex_anim_lookup_table, "Lookup ID: ", (tex_anim_lookup_table.index((tt_controller_id_uv1, tt_controller_id_uv2)) * 2))
-
-                #print("tt_combination", tt_controller_combinations)
-                #print("tex_anim_lookup_table", tex_anim_lookup_table)       
-
-                self.m2.add_material_to_geoset(g_index, render_flags, bl_mode, flags, shader_id, tex_lookup_id,
-                                                tex_1_mapping, tex_2_mapping, priority_plane, mat_layer, texture_count, color_id, transparency_id, transform_id)
-
-           
-            bpy.data.objects.remove(new_obj, do_unlink=True)  
-        
+        # Update global flags
         self.save_globalflags(need_combiner_flag)
-
-        # remove temporary objects
-        # for obj in proxy_objects:
-        #     bpy.data.objects.remove(obj, do_unlink=True)
+        
+        # --- Final summary ---
+        log.info(f"Exported {success_count}/{len(geoset_objects)} geosets successfully.")
 
     def save_collision(self, selected_only):
+        """Exports collision meshes, triangulates and collects bounds safely."""
+        import io, sys
+
+        # Get collision meshes
         objects = bpy.context.selected_objects if selected_only else bpy.context.scene.objects
-        objects = list(filter(lambda ob: ob.wow_m2_geoset.collision_mesh and ob.type == 'MESH', objects))
+        objects = list(filter(lambda ob: ob.wow_m2_geoset.collision_mesh and ob.type == "MESH", objects))
+
+        if not objects:
+            log.info("No collision meshes found in scene or selection.")
+            return
 
         proxy_objects = []
 
-        for obj in tqdm(objects, desc='Exporting Collision', ascii=True):
-            new_obj = obj.copy()
-            new_obj.data = obj.data.copy()
-            proxy_objects.append(new_obj)
+        for obj in tqdm(objects, total=len(objects), desc="Exporting Collision", ascii=True):
+            try:
+                if not obj.data or not obj.data.polygons:
+                    log.warn(f"Skipping collision mesh '{obj.name}' — no geometry data.")
+                    continue
 
-            bpy.context.collection.objects.link(new_obj)
+                # Duplicate the mesh for editing
+                new_obj = obj.copy()
+                new_obj.data = obj.data.copy()
+                proxy_objects.append(new_obj)
+                bpy.context.collection.objects.link(new_obj)
+                bpy.context.view_layer.objects.active = new_obj
+                mesh = new_obj.data
 
-            bpy.context.view_layer.objects.active = new_obj
-            mesh = new_obj.data
+                # Apply modifiers (ignore M2TexTransform-like)
+                for mod in obj.modifiers:
+                    try:
+                        bpy.ops.object.modifier_apply(modifier=mod.name)
+                    except Exception as e:
+                        log.warn(f"Could not apply modifier '{mod.name}' on collision mesh '{obj.name}': {e}")
 
-            # apply all modifiers
-            if len(obj.modifiers):
-                for modifier in obj.modifiers:
-                    bpy.ops.object.modifier_apply(modifier=modifier.name)
+                # Silence Blender console to suppress noisy operator output
+                temporal_console_output = io.StringIO()
+                sys.stdout = temporal_console_output
 
-            temporal_console_output = io.StringIO()
-            sys.stdout = temporal_console_output
-             
-            # triangulate mesh, delete loose geometry
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.reveal()
-            bpy.ops.mesh.quads_convert_to_tris()
-            bpy.ops.mesh.delete_loose()
-            bpy.ops.mesh.select_all(action='DESELECT')
-            bpy.ops.object.mode_set(mode='OBJECT')
+                # Triangulate and clean geometry
+                try:
+                    bpy.ops.object.mode_set(mode="EDIT")
+                    bpy.ops.mesh.select_all(action="SELECT")
+                    bpy.ops.mesh.reveal()
+                    bpy.ops.mesh.quads_convert_to_tris()
+                    bpy.ops.mesh.delete_loose()
+                    bpy.ops.mesh.select_all(action="DESELECT")
+                    bpy.ops.object.mode_set(mode="OBJECT")
+                except Exception as e:
+                    log.warn(f"Triangulation failed for collision mesh '{obj.name}': {e}")
+                    bpy.ops.object.mode_set(mode="OBJECT")
 
-            sys.stdout = sys.__stdout__
-            captured_output = temporal_console_output.getvalue()
-            temporal_console_output.close()
+                # Restore stdout
+                sys.stdout = sys.__stdout__
+                temporal_console_output.close()
 
-            # collect geometry data
-            vertices = [self._convert_vec(tuple(new_obj.matrix_world @ vertex.co)) for vertex in mesh.vertices]
-            faces = [tuple([vertex for vertex in poly.vertices]) for poly in mesh.polygons]
-            normals = [self._convert_vec(tuple(poly.normal)) for poly in mesh.polygons]
+                # Verify valid mesh data
+                if not mesh.vertices or not mesh.polygons:
+                    log.warn(f"Collision mesh '{obj.name}' has no valid vertices or faces after processing.")
+                    bpy.data.objects.remove(new_obj, do_unlink=True)
+                    continue
 
-            self.m2.add_collision_mesh(vertices, faces, normals)
-            bpy.data.objects.remove(new_obj, do_unlink=True)
+                # Collect geometry data
+                vertices = [self._convert_vec(tuple(new_obj.matrix_world @ v.co)) for v in mesh.vertices]
+                faces = [tuple(poly.vertices) for poly in mesh.polygons]
+                normals = [self._convert_vec(tuple(poly.normal)) for poly in mesh.polygons]
 
-        # remove temporary objects
-        #for obj in proxy_objects:
-        #    bpy.data.objects.remove(obj, do_unlink=True)
+                # Sanity check
+                if not vertices or not faces:
+                    log.warn(f"Skipping collision mesh '{obj.name}' — empty geometry.")
+                    bpy.data.objects.remove(new_obj, do_unlink=True)
+                    continue
 
-        # calculate collision bounding box
-        b_min, b_max = get_objs_boundbox_world(objects)
-        b_min = self._convert_vec(b_min)
-        b_max = self._convert_vec(b_max)
-        self.m2.root.collision_box.min = b_min
-        self.m2.root.collision_box.max = b_max
-        self.m2.root.collision_sphere_radius = sqrt(((b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
-                                                    + ((b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
-                                                    + ((b_max[2] - b_min[2])) ** 2) / 2
+                # Add to M2
+                self.m2.add_collision_mesh(vertices, faces, normals)
+                bpy.data.objects.remove(new_obj, do_unlink=True)
 
-        #for key, identifier in self.final_events.items():
-        #    print(key, identifier)
+            except Exception as e:
+                log.error(f"Failed to export collision mesh '{obj.name}': {e}")
+                traceback.print_exc()
+                try:
+                    bpy.data.objects.remove(new_obj, do_unlink=True)
+                except:
+                    pass
+                continue
+
+        # Compute collision bounding box safely
+        try:
+            if not objects:
+                log.warn("No valid collision objects found to compute bounding box.")
+                return
+
+            b_min, b_max = get_objs_boundbox_world(objects)
+            if b_min is None or b_max is None:
+                log.warn("Failed to compute collision bounding box — no valid geometry.")
+                return
+
+            b_min = self._convert_vec(b_min)
+            b_max = self._convert_vec(b_max)
+
+            self.m2.root.collision_box.min = b_min
+            self.m2.root.collision_box.max = b_max
+            self.m2.root.collision_sphere_radius = (
+                sqrt(
+                    ((b_max[self.axis_order[0]] - b_min[self.axis_order[0]]) * self.axis_polarity[0] * self.scale) ** 2
+                    + ((b_max[self.axis_order[1]] - b_min[self.axis_order[1]]) * self.axis_polarity[1] * self.scale) ** 2
+                    + ((b_max[2] - b_min[2])) ** 2
+                )
+                / 2
+            )
+        except Exception as e:
+            log.error(f"Failed to compute collision bounding box: {e}")
+            traceback.print_exc()
+
+        # Clean up proxies (redundant, but safe)
+        for p in proxy_objects:
+            try:
+                if p.name in bpy.data.objects:
+                    bpy.data.objects.remove(p, do_unlink=True)
+            except:
+                pass
