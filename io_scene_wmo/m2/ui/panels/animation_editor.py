@@ -5,9 +5,9 @@ from ....pywowlib.enums.m2_enums import M2SequenceNames
 from ....pywowlib import WoWVersions
 
 
-###############################
-## User Interface
-###############################
+# ---------------------------
+# User Interface
+# ---------------------------
 class M2_Animation_IDS:
 
     context = None
@@ -295,10 +295,11 @@ class M2_OT_animation_editor_id_search(bpy.types.Operator):
         return {"FINISHED"}
 
 
-#### UI List layouts ####
+# ---------------------------
+# UI List layouts
+# ---------------------------
 
-# Animation List
-
+# --- Animation List ---
 def update_animation_collection(self, context):
 
     anim_ids = M2_Animation_IDS.anim_ids
@@ -422,12 +423,8 @@ class M2_OT_animation_editor_sequence_duplicate(bpy.types.Operator):
             bpy.ops.scene.wow_m2_animation_editor_object_add()
 
             animation[new_anim].anim_pairs[i].type = animation[anim_to_copy].anim_pairs[i].type
-            if animation[new_anim].anim_pairs[i].type == 'SCENE':
-                animation[new_anim].anim_pairs[i].scene =  animation[anim_to_copy].anim_pairs[i].scene
-                animation[new_anim].anim_pairs[i].action =  animation[anim_to_copy].anim_pairs[i].action
-            else:
-                animation[new_anim].anim_pairs[i].object =  animation[anim_to_copy].anim_pairs[i].object
-                animation[new_anim].anim_pairs[i].action =  animation[anim_to_copy].anim_pairs[i].action
+            animation[new_anim].anim_pairs[i].object =  animation[anim_to_copy].anim_pairs[i].object
+            animation[new_anim].anim_pairs[i].action =  animation[anim_to_copy].anim_pairs[i].action
 
         update_animation_collection(None, None)
 
@@ -539,10 +536,7 @@ class M2_OT_animation_editor_sequence_cleanup(bpy.types.Operator):
         for i, wow_seq in enumerate(context.scene.wow_m2_animations):
             to_remove = []
             for j, pair in enumerate(context.scene.wow_m2_animations[i].anim_pairs):
-                
-                if context.scene.wow_m2_animations[i].anim_pairs[j].type == 'SCENE' and context.scene.wow_m2_animations[i].anim_pairs[j].scene == None:
-                    to_remove.append(j)
-                elif context.scene.wow_m2_animations[i].anim_pairs[j].type == 'OBJECT' and context.scene.wow_m2_animations[i].anim_pairs[j].object == None:
+                if context.scene.wow_m2_animations[i].anim_pairs[j].object == None:
                     to_remove.append(j)
 
             to_remove.sort(reverse=True)
@@ -604,7 +598,7 @@ class M2_OT_animation_editor_go_to_animation(bpy.types.Operator):
             return {'CANCELLED'}
 
 
-# Object list
+# --- Object list ---
 class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
@@ -636,8 +630,6 @@ class M2_UL_animation_editor_sequence_object_list(bpy.types.UIList):
                         icon = 'OBJECT_DATA'
 
                 row.label(text=item.object.name, icon=icon)
-            elif item.type == 'SCENE' and item.scene:
-                row.label(text=item.scene.name, icon='SCENE_DATA')
             else:
                 row.label(text="Empty slot", icon='MATCUBE')
 
@@ -754,10 +746,9 @@ class M2_OT_animation_editor_action_unlink(bpy.types.Operator):
         anim_pair.action = None
         return {'FINISHED'}
 
-###############################
-## Property groups
-###############################
-
+# ---------------------------
+# Property groups
+# ---------------------------
 
 def poll_object(self, obj):
     # TODO: safer polling
@@ -784,20 +775,6 @@ def poll_object(self, obj):
 
     return True
 
-def poll_scene(self, scene):
-
-    if scene.name != bpy.context.scene.name:
-        return False
-
-    sequence = bpy.context.scene.wow_m2_animations[bpy.context.scene.wow_m2_cur_anim_index]
-
-    for anim_pair in sequence.anim_pairs:
-        if anim_pair.scene == scene:
-            return False
-
-    return True
-
-
 def update_object(self, context):
     sequence = bpy.context.scene.wow_m2_animations[bpy.context.scene.wow_m2_cur_anim_index]
     anim_pair = sequence.anim_pairs[sequence.active_object_index]
@@ -807,42 +784,19 @@ def update_object(self, context):
         anim_pair.object.animation_data.action_blend_type = 'ADD'
 
 
-def update_scene(self, context):
-    sequence = bpy.context.scene.wow_m2_animations[bpy.context.scene.wow_m2_cur_anim_index]
-    anim_pair = sequence.anim_pairs[sequence.active_object_index]
-
-    if anim_pair.scene:
-        anim_pair.scene.animation_data_create()
-        anim_pair.scene.animation_data.action_blend_type = 'ADD'
-
-
 def update_action(self, context):
     sequence = bpy.context.scene.wow_m2_animations[bpy.context.scene.wow_m2_cur_anim_index]
     anim_pair = sequence.anim_pairs[sequence.active_object_index]
     if anim_pair.type == 'OBJECT' and anim_pair.object and anim_pair.object.animation_data:
         anim_pair.object.animation_data.action = anim_pair.action
-    elif anim_pair.type == 'SCENE' and anim_pair.scene and anim_pair.scene.animation_data:
-        anim_pair.scene.animation_data.action = anim_pair.action
-
-
-def update_anim_pair_type(self, context):
-    sequence = bpy.context.scene.wow_m2_animations[bpy.context.scene.wow_m2_cur_anim_index]
-    anim_pair = sequence.anim_pairs[sequence.active_object_index]
-    if anim_pair.type == 'OBJECT':
-        anim_pair.scene = None
-    else:
-        anim_pair.object = None
-
 
 class WowM2AnimationEditorAnimationPairsPropertyGroup(bpy.types.PropertyGroup):
 
-    type:  bpy.props.EnumProperty(
+    type: bpy.props.EnumProperty(
         name="Type",
-        description="Defines whether object or scene is animated",
-        items=[('OBJECT', "Object", "", 'OBJECT_DATA', 0),
-               ('SCENE', "Scene", "", 'SCENE_DATA', 1)],
-        default='OBJECT',
-        update=update_anim_pair_type
+        description="Animation target type",
+        items=[('OBJECT', "Object", "", 'OBJECT_DATA', 0)],
+        default='OBJECT'
     )
 
     object:  bpy.props.PointerProperty(
@@ -853,14 +807,6 @@ class WowM2AnimationEditorAnimationPairsPropertyGroup(bpy.types.PropertyGroup):
         update=update_object
     )
 
-    scene:  bpy.props.PointerProperty(
-        type=bpy.types.Scene,
-        name="Scene",
-        description="Scene to animate in this animation sequence",
-        poll=poll_scene,
-        update=update_scene
-    )
-
     action:  bpy.props.PointerProperty(
         type=bpy.types.Action,
         name="Action",
@@ -868,11 +814,9 @@ class WowM2AnimationEditorAnimationPairsPropertyGroup(bpy.types.PropertyGroup):
         update=update_action
     )
 
-
 def update_playback_speed(self, context):
     sequence = bpy.context.scene.wow_m2_animations[bpy.context.scene.wow_m2_cur_anim_index]
     context.scene.render.fps_base = sequence.playback_speed
-
 
 def update_primary_sequence(self, context):
     flag_set = self.flags
@@ -888,11 +832,9 @@ def update_primary_sequence(self, context):
     if is_changed:
         self.flags = flag_set
 
-
 def update_animation_flags(self, context):
     self.is_primary_sequence = '32' in self.flags
     self.is_alias = '64' in self.flags
-
 
 def update_alias(self, context):
     flag_set = self.flags
@@ -940,8 +882,8 @@ def update_global_sequence(self, context):
 def update_stash_to_nla(self, context):
     if self.stash_to_nla and not context.scene.wow_m2_animations[context.scene.wow_m2_cur_anim_index] == self:
         for anim_pair in self.anim_pairs:
-            if (anim_pair.object or anim_pair.scene) and anim_pair.action:
-                obj = anim_pair.object if anim_pair.type == 'OBJECT' else anim_pair.scene
+            if anim_pair.object and anim_pair.action:
+                obj = anim_pair.object
 
                 nla_track = obj.animation_data.nla_tracks.get(anim_pair.action.name)
 
@@ -964,8 +906,8 @@ def update_stash_to_nla(self, context):
      
     else:
         for anim_pair in self.anim_pairs:
-            if (anim_pair.object or anim_pair.scene) and anim_pair.action:
-                obj = anim_pair.object if anim_pair.type == 'OBJECT' else anim_pair.scene
+            if anim_pair.object and anim_pair.action:
+                obj = anim_pair.object
                 nla_track = obj.animation_data.nla_tracks.get(anim_pair.action.name)
 
                 if nla_track:
@@ -1175,7 +1117,6 @@ class WowM2AnimationEditorPropertyGroup(bpy.types.PropertyGroup):
         min=0
     )
 
-
 def update_scene_frame_range():
     frame_end = 0
 
@@ -1240,14 +1181,20 @@ def update_animation(self, context):
                     bone.rotation_quaternion = (1, 0, 0, 0)
                     bone.scale = (1, 1, 1)
 
-    for color in context.scene.wow_m2_colors:
-        color.color = (0.5, 0.5, 0.5)
+    active_obj = bpy.context.object
 
-    for alpha in context.scene.wow_m2_color_alpha:
-        alpha.value = 1.0
+    # Reset colors / transparencies only if the object supports them
+    if active_obj and hasattr(active_obj, "wow_m2_color_transparency"):
+        ct = active_obj.wow_m2_color_transparency
 
-    for trans in context.scene.wow_m2_transparency:
-        trans.value = 1.0
+        if hasattr(ct, "colors"):
+            for color in ct.colors:
+                color.color = (0.5, 0.5, 0.5)
+                color.alpha = 1.0
+
+        if hasattr(ct, "transparencies"):
+            for trans in ct.transparencies:
+                trans.value = 1.0
 
     if bpy.context.scene.animation_data:
         bpy.context.scene.animation_data.action = None
@@ -1258,16 +1205,11 @@ def update_animation(self, context):
 
         if i == context.scene.wow_m2_cur_anim_index:
             for anim_pair in anim.anim_pairs:
-                if anim_pair.type == 'OBJECT':
-                    try:
-                        anim_pair.object.animation_data.action = anim_pair.action
-                    except:
-                        pass
-                else:
-                    try:
-                        anim_pair.scene.animation_data.action = anim_pair.action
-                    except:
-                        pass
+                try:
+                    anim_pair.object.animation_data.action = anim_pair.action
+                except:
+                    pass
+
 
 
         if anim.is_global_sequence:
@@ -1281,19 +1223,20 @@ def update_animation(self, context):
                 if not anim.is_global_sequence:
                     for i, anim in enumerate(global_seqs):
                         for anim_pair in anim.anim_pairs:
-                            if anim_pair.type == 'OBJECT':
-                                anim_pair.object.animation_data.action = anim_pair.action
+                            anim_pair.object.animation_data.action = anim_pair.action
 
     for anim_pair in sequence.anim_pairs:
-        if anim_pair.type == 'OBJECT':
-            try:
-                anim_pair.object.animation_data.action = anim_pair.action
-            except:
-                pass
+        try:
+            anim_pair.object.animation_data.action = anim_pair.action
+        except:
+            pass
 
     #for seq in global_seqs:
         #update_stash_to_nla(seq, bpy.context)
 
+# ---------------------------
+# Register
+# ---------------------------
 
 def register():
     bpy.types.Scene.wow_m2_animations =  bpy.props.CollectionProperty(

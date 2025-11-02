@@ -1,59 +1,96 @@
 import bpy
-from ..enums import *
+from ..enums import GLOBAL_FLAGS
+
+
+# ---------------------------
+# Property Group
+# ---------------------------
+
+class WowM2globalflagsPropertyGroup(bpy.types.PropertyGroup):
+    enabled: bpy.props.BoolProperty(
+        name="Enabled",
+        description="Enable M2 global flags for this collection",
+        default=False,
+    )
+
+    flagsLK: bpy.props.EnumProperty(
+        name="WotLK Flags",
+        description="M2 global flags used in WotLK",
+        items=GLOBAL_FLAGS[:5],
+        options={"ENUM_FLAG"},
+    )
+
+    flagsLegion: bpy.props.EnumProperty(
+        name="Legion Flags",
+        description="M2 global flags used in Legion/Retail",
+        items=GLOBAL_FLAGS[5:],
+        options={"ENUM_FLAG"},
+    )
+
+# ---------------------------
+# User Interface
+# ---------------------------
 
 class M2_PT_global_flags_panel(bpy.types.Panel):
+    bl_label = "M2 Global Flags"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "object"
-    bl_label = "M2 Global Flags"
-
-    def draw_header(self, context):
-        self.layout.prop(context.object.wow_m2_globalflags, "enabled", text="")
-
-    def draw(self, context):
-        layout = self.layout
-        layout.enabled = context.object.wow_m2_globalflags.enabled
-        col = layout.column()
-        globalflags = context.object.wow_m2_globalflags
-        col.label(text='Flags')
-        if context.scene.wow_scene.version == '2':
-            col.prop(globalflags, 'flagsLK', text='Flags')
-        if context.scene.wow_scene.version == '6':
-            col.prop(globalflags, 'flagsLK', text='Flags')
-            col.prop(globalflags, 'flagsLegion', text='Flags')
+    bl_context = "collection"
 
     @classmethod
     def poll(cls, context):
-        return (context.object is not None and
-                context.object.type == 'ARMATURE' and
-                context.scene is not None and
-                context.scene.wow_scene.type == 'M2')    
+        col = getattr(context, "collection", None)
+        if not col:
+            return False
 
-class WowM2globalflagsPropertyGroup(bpy.types.PropertyGroup):
-    enabled:  bpy.props.BoolProperty(
-        name='Enabled',
-        description='Enable this armature to have M2 globalflags',
-        default=False
-    )
+        # Only show on collections marked as M2 roots
+        return col.get("wow_m2_collection", False)
 
-    flagsLK:  bpy.props.EnumProperty(
-        name="Global flags",
-        description="",
-        items=GLOBAL_FLAGS[:5],
-        options={"ENUM_FLAG"}
-    )
+    def draw_header(self, context):
+        self.layout.prop(context.collection.wow_m2_globalflags, "enabled", text="")
 
-    flagsLegion:  bpy.props.EnumProperty(
-        name="Global flags",
-        description="",
-        items=GLOBAL_FLAGS[5:],
-        options={"ENUM_FLAG"}
-    )
+    def draw(self, context):
+        col = context.collection
+        flags = col.wow_m2_globalflags
+        scene = context.scene
+
+        layout = self.layout
+        layout.enabled = flags.enabled
+
+        box = layout.box()
+        box.label(text="Global Flags", icon="WORLD_DATA")
+
+        # Determine version (2 = WotLK, 6 = Legion/Retail)
+        if hasattr(scene, "wow_scene"):
+            version = scene.wow_scene.version
+        else:
+            version = "2"
+
+        # --- WotLK flags ---
+        box.label(text="WotLK Flags")
+        wl_box = box.column(align=True)
+
+        from ..enums import GLOBAL_FLAGS  # ensure correct import path if needed
+
+        for identifier, label, tooltip, icon, bit in GLOBAL_FLAGS[:5]:
+            wl_box.prop_enum(flags, "flagsLK", identifier, text=label, icon=icon)
+
+        # --- Legion flags (only if version >= 6, else optional) ---
+        if version == '6':
+            box.separator()
+            box.label(text="Legion Flags")
+            lg_box = box.column(align=True)
+
+            for identifier, label, tooltip, icon, bit in GLOBAL_FLAGS[5:]:
+                lg_box.prop_enum(flags, "flagsLegion", identifier, text=label, icon=icon)
+
+# ---------------------------
+# Register
+# ---------------------------
 
 def register():
-    bpy.types.Object.wow_m2_globalflags = bpy.props.PointerProperty(type=WowM2globalflagsPropertyGroup)
+    bpy.types.Collection.wow_m2_globalflags = bpy.props.PointerProperty(type=WowM2globalflagsPropertyGroup)
 
 
 def unregister():
-    del bpy.Object.wow_m2_globalflags
-
+    del bpy.types.Collection.wow_m2_globalflags

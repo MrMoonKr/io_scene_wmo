@@ -8,12 +8,10 @@ from .material import M2_PT_material_panel
 from .geoset import M2_PT_geoset_panel
 from .attachment import M2_PT_attachment_panel
 from .event import M2_PT_event_panel
-from .colors import *
+from .color_transparency import *
 from .texture import M2_PT_texture_panel
 from .utils import M2_UL_root_elements_template_list, update_current_object, is_obj_unused
 from .... import ui_icons
-
-from .transparency import *
 
 
 ######################
@@ -484,24 +482,6 @@ class M2TexturePointerPropertyGroup(bpy.types.PropertyGroup):
     name:  bpy.props.StringProperty()
 
 
-class ColorPointerPropertyGroup(bpy.types.PropertyGroup):
-    
-    color:  bpy.props.FloatVectorProperty(
-        name='Color',
-        description='The color applied to WoW material. Can be animated. Alpha defines model transparency and is multiplied with transparency value',
-        subtype='COLOR',
-        size=4,
-        default=(1.0, 1.0, 1.0, 1.0),
-        min=0.0,
-        max=1.0,
-        update=update_color_change
-    )
-
-    pointer_old:  bpy.props.PointerProperty(type=bpy.types.Material)
-
-    name:  bpy.props.StringProperty()
-
-
 class WoWM2_RootComponents(bpy.types.PropertyGroup):
 
     cur_widget: bpy.props.EnumProperty(
@@ -525,9 +505,6 @@ class WoWM2_RootComponents(bpy.types.PropertyGroup):
 
     materials:  bpy.props.CollectionProperty(type=M2MaterialPointerPropertyGroup)
     cur_material:  bpy.props.IntProperty()
-    
-    colors:  bpy.props.CollectionProperty(type=ColorPointerPropertyGroup)
-    cur_color:  bpy.props.IntProperty()
     
     textures:  bpy.props.CollectionProperty(type=M2TexturePointerPropertyGroup)
     cur_texture:  bpy.props.IntProperty()

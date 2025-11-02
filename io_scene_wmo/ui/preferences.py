@@ -140,6 +140,30 @@ class WBS_PG_ProjectPreferences(bpy.types.PropertyGroup):
         description="Use the merge vertices algorythm when quick saving m2's with topbar button",
         default=True
     )
+    
+    verbosity_level: bpy.props.EnumProperty(
+        name="Log Verbosity",
+        description="Controls how detailed output messages should be",
+        items=[
+            ('1', "ERROR", "Only show critical errors"),
+            ('2', "WARNING", "Show warnings and errors"),
+            ('3', "INFO", "Show general info, warnings, and errors"),
+            ('4', "DEBUG", "Show all messages including debug output"),
+        ],
+        default='3',
+        options=set()
+    )
+    
+    scene_type: bpy.props.EnumProperty(
+        name="Default Scene Type",
+        description="Controls which scene type should be the default",
+        items=[
+            ('M2', "M2", "Default to M2"),
+            ('WMO', "WMO", "Default to WMO"),
+        ],
+        default='WMO',
+        options=set()
+    )
 
 class WBS_OT_ProjectListActions(bpy.types.Operator):
     """
@@ -177,6 +201,8 @@ class WBS_OT_ProjectListActions(bpy.types.Operator):
 
     def duplicate_project(self, source, target):
         target.name = f"{source.name}_copy"
+        target.verbosity_level = source.verbosity_level
+        target.scene_type = source.scene_type
         target.wow_path = source.wow_path
         target.wmv_path = source.wmv_path
         target.wow_export_path = source.wow_export_path
@@ -337,6 +363,8 @@ class WBS_AP_Preferences(bpy.types.AddonPreferences):
             box.prop(proj_prefs, 'cache_dir_path')
             box.prop(proj_prefs, 'project_dir_path')
             box.prop(proj_prefs, 'export_method_enum', text='Export Directory Path')
+            box.prop(proj_prefs, "verbosity_level")
+            box.prop(proj_prefs, "scene_type")
 
             col = layout.column(align=True)
             col.label(text='Export Folder Settings:', icon='SETTINGS')
