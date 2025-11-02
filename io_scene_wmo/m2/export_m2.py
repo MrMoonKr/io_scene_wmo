@@ -109,14 +109,15 @@ def export_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     Exports an M2 file to disk.
     Removes old file, builds M2 data, and writes the final model output.
     """
-    # Remove existing file to avoid corruption
-    if os.path.exists(filepath):
-        os.remove(filepath)
 
     # Create and assemble M2 structure
     m2 = create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices)
     if not m2:
         raise Exception("Export aborted due to critical errors.")
-    
+
+    # Remove existing file to avoid corruption
+    if os.path.exists(filepath):
+        os.remove(filepath)
+        
     # Write M2 to disk
     m2.write(filepath)
