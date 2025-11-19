@@ -1044,8 +1044,8 @@ class BlenderM2Scene:
             log.info(f"Imported {len(self.m2.root.sequences)} animations ({len(self.m2.root.global_sequences)} global sequences).")
 
         except Exception as e:
-            log.error(f"Animation import FAILED: {e}")
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            log.error(f"Failed to import Animations: {e}\n{tb}")
 
     def load_geosets(self, collection):
         """Import geosets (submeshes) from the M2 model into Blender."""
@@ -2055,41 +2055,17 @@ class BlenderM2Scene:
                 mat_slot.pointer = mat
 
             # --- Animate ribbon tracks ---
-            self._bl_create_sequences(
-                ribbon, "color_track",
-                f"RB_{i}", obj, "wow_m2_ribbon", "color",
-                3, self._bl_convert_track_tuple
-            )
+            ribbon_tracks = [
+                ("color_track",        "color",         3, self._bl_convert_track_tuple),
+                ("alpha_track",        "alpha",         1, lambda v: [v / 0x7FFF]),
+                ("height_above_track", "height_above",  1, self._bl_convert_track_value),
+                ("height_below_track", "height_below",  1, self._bl_convert_track_value),
+                ("tex_slot_track",     "texture_slot",  1, self._bl_convert_track_value),
+                ("visibility_track",   "visibility",    1, self._bl_convert_track_value),
+            ]
 
-            self._bl_create_sequences(
-                ribbon, "alpha_track",
-                f"RB_{i}", obj, "wow_m2_ribbon", "alpha",
-                1, lambda value: [value / 0x7FFF]
-            )
-
-            self._bl_create_sequences(
-                ribbon, "height_above_track",
-                f"RB_{i}", obj, "wow_m2_ribbon", "height_above",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                ribbon, "height_below_track",
-                f"RB_{i}", obj, "wow_m2_ribbon", "height_below",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                ribbon, "tex_slot_track",
-                f"RB_{i}", obj, "wow_m2_ribbon", "texture_slot",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                ribbon, "visibility_track",
-                f"RB_{i}", obj, "wow_m2_ribbon", "visibility",
-                1, self._bl_convert_track_value
-            )
+            for track_name, m2_prop, dimension, converter in ribbon_tracks:
+                self._bl_create_sequences(ribbon, track_name, f"RB_{i}", obj, "wow_m2_ribbon", m2_prop, dimension, converter)
 
         # --- Log success ---
         log.info(f"Imported {len(self.m2.root.ribbon_emitters)} ribbon emitters.")
@@ -2175,71 +2151,22 @@ class BlenderM2Scene:
             bl_particle.follow_scale_2 = m2_particle.follow_scale2
 
             # --- Standard track-based animations ---
-            self._bl_create_sequences(
-                m2_particle, "emission_speed",
-                f"PT_{i}", obj, "wow_m2_particle", "emission_speed",
-                1, self._bl_convert_track_value
-            )
+            particle_tracks = [
+                ("emission_speed",        "emission_speed"),
+                ("speed_variation",       "speed_variation"),
+                ("vertical_range",        "vertical_range"),
+                ("horizontal_range",      "horizontal_range"),
+                ("gravity",               "gravity"),
+                ("lifespan",              "lifespan"),
+                ("emission_rate",         "emission_rate"),
+                ("emission_area_length",  "emission_area_length"),
+                ("emission_area_width",   "emission_area_width"),
+                ("z_source",              "z_source"),
+                ("enabled_in",            "active"),
+            ]
 
-            self._bl_create_sequences(
-                m2_particle, "speed_variation",
-                f"PT_{i}", obj, "wow_m2_particle", "speed_variation",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "vertical_range",
-                f"PT_{i}", obj, "wow_m2_particle", "vertical_range",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "horizontal_range",
-                f"PT_{i}", obj, "wow_m2_particle", "horizontal_range",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "gravity",
-                f"PT_{i}", obj, "wow_m2_particle", "gravity",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "lifespan",
-                f"PT_{i}", obj, "wow_m2_particle", "lifespan",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "emission_rate",
-                f"PT_{i}", obj, "wow_m2_particle", "emission_rate",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "emission_area_length",
-                f"PT_{i}", obj, "wow_m2_particle", "emission_area_length",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "emission_area_width",
-                f"PT_{i}", obj, "wow_m2_particle", "emission_area_width",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "z_source",
-                f"PT_{i}", obj, "wow_m2_particle", "z_source",
-                1, self._bl_convert_track_value
-            )
-
-            self._bl_create_sequences(
-                m2_particle, "enabled_in",
-                f"PT_{i}", obj, "wow_m2_particle", "active",
-                1, self._bl_convert_track_value
-            )
+            for track_name, m2_prop in particle_tracks:
+                self._bl_create_sequences(m2_particle, track_name, f"PT_{i}", obj, "wow_m2_particle", m2_prop, 1, self._bl_convert_track_value)
 
             # --- Helper: generic fcurve creation ---
             def create_fcurve_track(action, m2_track, bl_track_name, group_name, track_count, conv=lambda x: x):
@@ -2389,35 +2316,40 @@ class BlenderM2Scene:
             log.info(f"Imported global flags to collection '{collection.name}'")
 
         except Exception as e:
-            log.error(f"Failed to import global flags: {e}")
+            tb = traceback.format_exc()
+            log.error(f"Failed to import global flags: {e}\n{tb}")
 
     def prepare_export_axis(self, forward_axis, scale):
         self.scale = scale
         self.forward_axis = forward_axis
 
+        # Apply armature scale if present
         armatures = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']
-        # check for > 1 is later
-        if len(armatures) > 0:
+        if armatures:
             armature = armatures[0]
-            scale = armature.scale
-            if abs(scale[0]-scale[1])>0.0001 or abs(scale[0]-scale[2])>0.0001:
-                raise ValueError(f'Non-uniform object scaling in armature {armature.name}, WBS doesn\'t know how to do this yet :(')
-            self.scale *= scale[0]
+            arm_scale = armature.scale
 
-        if forward_axis == 'X+':
-            self.axis_order = [0,1]
-            self.axis_polarity = [1,1]
-        elif forward_axis == 'X-':
-            self.axis_order = [0,1]
-            self.axis_polarity = [-1,-1]
-        elif forward_axis == 'Y+':
-            self.axis_order = [1,0]
-            self.axis_polarity = [1,-1]
-        elif forward_axis == 'Y-':
-            self.axis_order = [1,0]
-            self.axis_polarity = [-1,1]
-        else:
-            raise ValueError(f'Invalid forward axis: {forward_axis}')
+            # Check non-uniform scaling
+            if (
+                abs(arm_scale[0] - arm_scale[1]) > 0.0001
+                or abs(arm_scale[0] - arm_scale[2]) > 0.0001
+            ):
+                raise ValueError(f"Non-uniform object scaling in armature {armature.name}, WBS can't handle this yet :(")
+
+            self.scale *= arm_scale[0]
+
+        # Axis mapping table
+        axis_map = {
+            "X+": ([0, 1], [ 1,  1]),
+            "X-": ([0, 1], [-1, -1]),
+            "Y+": ([1, 0], [ 1, -1]),
+            "Y-": ([1, 0], [-1,  1]),
+        }
+
+        try:
+            self.axis_order, self.axis_polarity = axis_map[forward_axis]
+        except KeyError:
+            raise ValueError(f"Invalid forward axis: {forward_axis}") from None
 
     def _convert_vec(self,vec):
         return (
@@ -2564,8 +2496,8 @@ class BlenderM2Scene:
             log.info(f"Exported model properties for '{self.m2.root.name.value}'.")
 
         except Exception as e:
-            log.error(f"Unhandled exception in save_properties: {e}")
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            log.error(f"Unhandled exception in save_properties: {e}\n{tb}")
 
     def save_bones(self, selected_only):
         """
@@ -2788,8 +2720,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed exporting camera '{bl_cam.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed exporting camera '{bl_cam.name}': {e}\n{tb}")
                 continue
                 
         # --- Final summary ---
@@ -2870,8 +2802,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed exporting attachment '{bl_att.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed exporting attachment '{bl_att.name}': {e}\n{tb}")
                 continue
                 
         # --- Final summary ---
@@ -2956,8 +2888,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed exporting event '{bl_evt.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed exporting event '{bl_evt.name}': {e}\n{tb}")
                 continue
                 
         # --- Final summary ---
@@ -3025,8 +2957,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed exporting light '{bl_light.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed exporting light '{bl_light.name}': {e}\n{tb}")
                 continue
 
         # --- Final summary ---
@@ -3136,7 +3068,8 @@ class BlenderM2Scene:
                                 m2_mat.blending_mode = int(bl_mat.wow_m2_material.texture_1_blending_mode)
                                 ribbon_materials[bl_mat] = mat_id
                             except Exception as e:
-                                log.error(f"Failed adding material for ribbon '{bl_ribbon.name}': {e}")
+                                tb = traceback.format_exc()
+                                log.error(f"Failed adding material for ribbon '{bl_ribbon.name}': {e}\n{tb}")
                                 mat_id = 0
 
                         m2_ribbon.material_indices.append(mat_id)
@@ -3147,8 +3080,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed exporting ribbon '{bl_ribbon.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed exporting ribbon '{bl_ribbon.name}': {e}\n{tb}")
                 continue
                 
         # --- Final summary ---
@@ -3320,8 +3253,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed exporting particle '{bl_obj.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed exporting particle '{bl_obj.name}': {e}\n{tb}")
                 continue
                 
         # --- Final summary ---
@@ -3415,7 +3348,10 @@ class BlenderM2Scene:
                         while len(track.values) < anim_count:
                             track.values.add(M2Array(value_type))
 
-            def write_track(self,path,track_count,m2_track,value_type,converter = lambda x: x, fill_tracks = False):
+            def write_track(self, path, track_count, m2_track, value_type, converter = None, fill_tracks = False):
+                if converter is None:
+                    converter = (lambda x: x)
+            
                 # Exit on empty tracks
                 if not path in self.compounds and not fill_tracks:
                         #log.info(f"M2 track path not found : {path}")
@@ -3515,13 +3451,20 @@ class BlenderM2Scene:
         # --------
         def write_light(cpd, pair):
             m2_light = self.m2.root.lights.values[self.light_ids[pair.object.name]]
-            cpd.write_track('data.wow_m2_light.ambient_color', 3, m2_light.ambient_color,vec3D)
-            cpd.write_track('data.wow_m2_light.diffuse_color', 3, m2_light.diffuse_color,vec3D)
-            cpd.write_track('data.wow_m2_light.ambient_intensity', 1, m2_light.ambient_intensity,float32)
-            cpd.write_track('data.wow_m2_light.diffuse_intensity', 1, m2_light.diffuse_intensity,float32)
-            cpd.write_track('data.wow_m2_light.attenuation_start', 1, m2_light.attenuation_start,float32)
-            cpd.write_track('data.wow_m2_light.attenuation_end', 1, m2_light.attenuation_end,float32)
-            cpd.write_track('data.wow_m2_light.visibility', 1, m2_light.visibility,uint8, lambda x: int(x))
+
+            tracks = [
+                ("ambient_color",        3, "ambient_color",        vec3D,   None),
+                ("diffuse_color",        3, "diffuse_color",        vec3D,   None),
+                ("ambient_intensity",    1, "ambient_intensity",    float32, None),
+                ("diffuse_intensity",    1, "diffuse_intensity",    float32, None),
+                ("attenuation_start",    1, "attenuation_start",    float32, None),
+                ("attenuation_end",      1, "attenuation_end",      float32, None),
+                ("visibility",           1, "visibility",           uint8,   (lambda x: int(x))),
+            ]
+
+            for name, dim, attr, dtype, conv in tracks:
+                value = getattr(m2_light, attr)
+                cpd.write_track(f"data.wow_m2_light.{name}", dim, value, dtype, conv)
 
         def write_attachment(cpd, pair):
             m2_attachment = self.m2.root.attachments.values[self.attachment_ids[pair.object.name]]
@@ -3704,34 +3647,55 @@ class BlenderM2Scene:
 
         def write_ribbon(cpd, pair):
             m2_ribbon = self.m2.root.ribbon_emitters[self.ribbon_ids[pair.object.name]]
-            cpd.write_track("wow_m2_ribbon.color",3,m2_ribbon.color_track,vec3D)
-            cpd.write_track("wow_m2_ribbon.alpha",1,m2_ribbon.alpha_track,float32, lambda x: int(x*0x7fff))
-            cpd.write_track("wow_m2_ribbon.height_above",1,m2_ribbon.height_above_track,float32)
-            cpd.write_track("wow_m2_ribbon.height_below",1,m2_ribbon.height_below_track,float32)
-            cpd.write_track("wow_m2_ribbon.texture_slot",1,m2_ribbon.tex_slot_track,uint16, lambda x: int(x))
-            cpd.write_track("wow_m2_ribbon.visibility",1,m2_ribbon.visibility_track,uint8, lambda x: int(x))
+
+            tracks = [
+                ("color",         3, "color_track",        vec3D,  None),
+                ("alpha",         1, "alpha_track",        float32, lambda x: int(x * 0x7fff)),
+                ("height_above",  1, "height_above_track", float32, None),
+                ("height_below",  1, "height_below_track", float32, None),
+                ("texture_slot",  1, "tex_slot_track",     uint16, lambda x: int(x)),
+                ("visibility",    1, "visibility_track",   uint8,  lambda x: int(x)),
+            ]
+
+            for name, dim, attr, dtype, conv in tracks:
+                cpd.write_track(
+                    f"wow_m2_ribbon.{name}",
+                    dim,
+                    getattr(m2_ribbon, attr),
+                    dtype,
+                    conv
+                )
 
         def write_particle(cpd, pair):
             m2_particle = self.m2.root.particle_emitters[self.particle_ids[pair.object.name]]
-            cpd.write_track("wow_m2_particle.emission_speed",1,m2_particle.emission_speed,float32)
-            cpd.write_track("wow_m2_particle.speed_variation",1,m2_particle.speed_variation,float32)
-            cpd.write_track("wow_m2_particle.vertical_range",1,m2_particle.vertical_range,float32)
-            cpd.write_track("wow_m2_particle.horizontal_range",1,m2_particle.horizontal_range,float32)
-            cpd.write_track("wow_m2_particle.gravity",1,m2_particle.gravity,float32)
-            cpd.write_track("wow_m2_particle.lifespan",1,m2_particle.lifespan,float32)
-            cpd.write_track("wow_m2_particle.emission_rate",1,m2_particle.emission_rate,float32)
-            cpd.write_track("wow_m2_particle.emission_area_length",1,m2_particle.emission_area_length,float32)
-            cpd.write_track("wow_m2_particle.emission_area_width",1,m2_particle.emission_area_width,float32)
-            cpd.write_track("wow_m2_particle.z_source",1,m2_particle.z_source,float32)
-            cpd.write_track("wow_m2_particle.color_track",3,m2_particle.color_track,vec3D)
-            cpd.write_track("wow_m2_particle.alpha",1,m2_particle.alpha_track,float32)
-            cpd.write_track("wow_m2_particle.scale",2,m2_particle.scale_track,vec2D)
-            #cpd.write_track("wow_m2_particle.head_cell_track",1,m2_particle.head_cell_track,uint16,
-                #lambda x: int(x))
-            #cpd.write_track("wow_m2_particle.tail_cell_track",1,m2_particle.tail_cell_track,uint16,
-                #lambda x: int(x))
-            cpd.write_track("wow_m2_particle.active",1,m2_particle.enabled_in,uint8,
-                lambda x: int(x), fill_tracks = True)
+
+            tracks = [
+                ("emission_speed",        1, "emission_speed",        float32, None),
+                ("speed_variation",       1, "speed_variation",       float32, None),
+                ("vertical_range",        1, "vertical_range",        float32, None),
+                ("horizontal_range",      1, "horizontal_range",      float32, None),
+                ("gravity",               1, "gravity",               float32, None),
+                ("lifespan",              1, "lifespan",              float32, None),
+                ("emission_rate",         1, "emission_rate",         float32, None),
+                ("emission_area_length",  1, "emission_area_length",  float32, None),
+                ("emission_area_width",   1, "emission_area_width",   float32, None),
+                ("z_source",              1, "z_source",              float32, None),
+                ("color_track",           3, "color_track",           vec3D,   None),
+                ("alpha",                 1, "alpha_track",           float32, None),
+                ("scale",                 2, "scale_track",           vec2D,   None),
+                ("active",                1, "enabled_in",            uint8,   lambda x: int(x)),
+            ]
+
+            for name, dim, attr, dtype, conv in tracks:
+                kwargs = {"fill_tracks": True} if name == "active" else {}
+                cpd.write_track(
+                    f"wow_m2_particle.{name}",
+                    dim,
+                    getattr(m2_particle, attr),
+                    dtype,
+                    conv,
+                    **kwargs
+                )
 
         def write_camera(cpd, pair):
             m2_camera = self.m2.root.cameras[self.camera_ids[pair.object.name]]
@@ -3877,7 +3841,7 @@ class BlenderM2Scene:
             if not hasattr(m2_collection, "wow_m2_globalflags"):
                 log.warn(f"Collection '{m2_collection.name}' has no wow_m2_globalflags property.")
                 return
-                
+                    
             if not m2_collection.wow_m2_globalflags.enabled:
                 log.warn(f"Global flags disabled on collection '{m2_collection.name}', skipping flag save.")
                 return
@@ -3888,6 +3852,7 @@ class BlenderM2Scene:
             try:
                 flags_lk = list(getattr(globalflags, "flagsLK", []))
                 flags_legion = list(getattr(globalflags, "flagsLegion", []))
+                log.debug(f"Read flags from collection '{m2_collection.name}': LK={flags_lk}, Legion={flags_legion}")
             except Exception as e:
                 log.error(f"Failed reading global flags from collection '{m2_collection.name}': {e}")
                 return
@@ -3899,22 +3864,27 @@ class BlenderM2Scene:
             if need_combiner_flag and combiner_flag not in flags_lk:
                 flags_lk.append(combiner_flag)
                 flag_changed = True
-                log.debug(f"Added texture combiner flag (8), required by model export")
+                log.debug("Added texture combiner flag (8), required by model export.")
             elif not need_combiner_flag and combiner_flag in flags_lk:
                 flags_lk.remove(combiner_flag)
                 flag_changed = True
-                log.debug(f"Removed texture combiner flag (8), model export indicates not needed")
+                log.debug("Removed texture combiner flag (8), model export indicates not needed.")
 
             # Write updated flags back into property
             try:
                 globalflags.flagsLK = set(flags_lk)
                 globalflags.flagsLegion = set(flags_legion)
+                log.debug(f"Updated collection flags: LK={flags_lk}, Legion={flags_legion}")
             except Exception as e:
                 log.warn(f"Could not update flags on collection '{m2_collection.name}': {e}")
 
             # Apply combined bitfield to M2 file memory
-            combined_flags = construct_bitfield(flags_lk + flags_legion)
-            self.m2.root.global_flags = combined_flags
+            try:
+                combined_flags = construct_bitfield(flags_lk + flags_legion)
+                self.m2.root.global_flags = combined_flags
+            except Exception as e:
+                log.error(f"Failed to construct or assign combined bitfield: {e}")
+                return
 
             if flag_changed:
                 log.info(f"Updated global flags on '{m2_collection.name}' to {combined_flags}")
@@ -3922,8 +3892,8 @@ class BlenderM2Scene:
                 log.info("No global flag change required.")
 
         except Exception as e:
-            log.error(f"Unexpected failure in save_globalflags: {e}")
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            log.error(f"Unexpected failure in save_globalflags: {e}\n{tb}")
 
     def save_geosets(self, selected_only, fill_textures, merge_vertices):
         import io, sys
@@ -4112,64 +4082,51 @@ class BlenderM2Scene:
                         mat_name = material.name
                         mat_data = material.wow_m2_material
                         textures = [mat_data.texture_1, mat_data.texture_2]
-                        valid_textures = [t for t in textures if t]
-                        texture_count = len(valid_textures)
 
+                        valid_textures = [t for t in textures if t and hasattr(t, "wow_m2_texture")]
                         if not valid_textures:
-                            log.warn(f"Material '{mat_name}' on '{obj.name}' has no textures assigned.")
+                            log.warn(
+                                f"Material '{mat_name}' on '{obj.name}' has no valid textures "
+                                f"(missing texture or texture missing wow_m2_texture attribute)."
+                            )
                             continue
 
-                        tex1_id = tex2_id = 0
-                        first_path = ""
+                        first_path = None
+                        texture_count = 0
 
-                        for tex in valid_textures:
-                            if not hasattr(tex, "wow_m2_texture"):
-                                log.warn(f"Material '{mat_name}' on '{obj.name}' has texture slot missing 'wow_m2_texture'.")
-                                continue
+                        for texture in valid_textures:
+                            texture_count += 1
+                            tex_data = texture.wow_m2_texture
+                            wow_path = tex_data.path
+                            tex_type = tex_data.texture_type
 
-                            tex_data = tex.wow_m2_texture
-                            tex_type = int(tex_data.texture_type)
-                            wow_path = tex_data.path or ""
+                            # Determine first_path on first valid texture
+                            if texture_count == 1:
+                                first_path = wow_path if tex_type == '0' else tex_type
 
-                            # Fill path only for type 0 (file-based) textures
-                            if tex_type == 0:
-                                if fill_textures and not wow_path:
-                                    log.info(f"Texture on '{mat_name}' missing path, attempting auto-fill.")
-                                    wow_path = resolve_texture_path(getattr(tex, "filepath", ""))
-                                if not wow_path:
-                                    log.warn(f"Texture on '{mat_name}' (type 0) has no path, skipping slot.")
-                                    continue
-                            else:
-                                # Non-file (e.g., DBC, environment, internal) textures have no path
-                                if not wow_path:
-                                    log.debug(f"Texture on '{mat_name}' type {tex_type} (non-file) – path not required.")
+                            # Resolve empty type-0 texture path only when needed
+                            if tex_type == 0 and fill_textures and not wow_path:
+                                wow_path = resolve_texture_path(texture.filepath)
 
-                            # Record first_path behavior (matches original)
-                            if not first_path:
-                                first_path = wow_path if tex_type == 0 else str(tex_type)
-
-                            # Add texture to M2
+                            # Add texture to self.m2
                             self.m2.add_texture(
                                 wow_path if tex_type == 0 else "",
                                 construct_bitfield(tex_data.flags),
-                                tex_type
+                                int(tex_type),
                             )
 
-                            # Unique texture key (use mat_name for non-file types to avoid collisions)
-                            tex_key = wow_path if tex_type == 0 else f"{mat_name}:{tex_type}"
-                            if tex_key not in self.final_textures:
-                                self.final_textures[tex_key] = len(self.final_textures)
+                            # Key is either the wow_path (if type 0) or the tex_type literal
+                            key = wow_path if tex_type == '0' else tex_type
 
-                            tex2_id = self.final_textures[tex_key]
+                            if key not in self.final_textures:
+                                self.final_textures[key] = len(self.final_textures)
 
-                            # Ensure first texture dominates the pair (matches original logic)
+                            tex2_id = self.final_textures[key]
+
+                            # tex1_id defaults to tex2_id, unless first_path overrides
+                            tex1_id = tex2_id
                             if first_path in self.final_textures:
                                 tex1_id = self.final_textures[first_path]
-
-                        # Fallback for materials with no valid textures
-                        if not first_path:
-                            log.warn(f"Material '{mat_name}' on '{obj.name}' produced no valid textures, skipping material.")
-                            continue
 
                         # Add pair lookup (combiners expect pairs)
                         tex_lookup_id = self.m2.add_tex_lookup(tex1_id, tex2_id)
@@ -4199,19 +4156,24 @@ class BlenderM2Scene:
                             transparency_id = self.transparency_ids.get(transparency_name, 0)
 
                         tex_1_mapping = mapping(mat_data.texture_1_mapping)
-                        tex_2_mapping = mapping(mat_data.texture_2_mapping)
+                        tex_2_mapping = 1
 
                         # Two-texture combiner setup
                         if texture_count == 2:
                             need_combiner_flag = True
+                            tex_2_mapping = mapping(mat_data.texture_2_mapping)
                             tex_combiner_data = (
                                 construct_bitfield(mat_data.texture_2_render_flags),
-                                int(mat_data.texture_2_blending_mode),
+                                int(mat_data.texture_2_blending_mode)
                             )
+                            
                             if tex_combiner_data not in tex_combiner_materials:
                                 tex_combiner_materials.append(tex_combiner_data)
-                                self.m2.root.texture_combiner_combos.extend(tex_combiner_data)
-                            shader_id = tex_combiner_materials.index(tex_combiner_data) * 2
+                                self.m2.root.texture_combiner_combos.append(tex_combiner_data[0])
+                                self.m2.root.texture_combiner_combos.append(tex_combiner_data[1])
+
+                            if tex_combiner_data in tex_combiner_materials:
+                                shader_id = next(i for i, value in enumerate(tex_combiner_materials) if value == tex_combiner_data) * 2
 
                         # UV transform controllers
                         ntexanim, tt_controller_id_uv1, tt_controller_id_uv2 = 0, -1, -1
@@ -4247,8 +4209,8 @@ class BlenderM2Scene:
                         log.debug(f"Exported material '{mat_name}'")
 
                     except Exception as mat_e:
-                        log.error(f"Failed to export material {i} ('{material.name}') of '{obj.name}': {mat_e}")
-                        traceback.print_exc()
+                        tb = traceback.format_exc()
+                        log.error(f"Failed to export material {i} ('{material.name}') of '{obj.name}': {mat_e}\n{tb}")
                         continue
 
                 bpy.data.objects.remove(new_obj, do_unlink=True)
@@ -4256,8 +4218,8 @@ class BlenderM2Scene:
                 success_count += 1
 
             except Exception as e:
-                log.error(f"Failed to export geoset '{obj.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed to export geoset '{obj.name}': {e}\n{tb}")
                 try:
                     bpy.data.objects.remove(new_obj, do_unlink=True)
                 except:
@@ -4348,8 +4310,8 @@ class BlenderM2Scene:
                 bpy.data.objects.remove(new_obj, do_unlink=True)
 
             except Exception as e:
-                log.error(f"Failed to export collision mesh '{obj.name}': {e}")
-                traceback.print_exc()
+                tb = traceback.format_exc()
+                log.error(f"Failed to export collision mesh '{obj.name}': {e}\n{tb}")
                 try:
                     bpy.data.objects.remove(new_obj, do_unlink=True)
                 except:
@@ -4381,8 +4343,8 @@ class BlenderM2Scene:
                 / 2
             )
         except Exception as e:
-            log.error(f"Failed to compute collision bounding box: {e}")
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            log.error(f"Failed to compute collision bounding box: {e}\n{tb}")
 
         # Clean up proxies (redundant, but safe)
         for p in proxy_objects:

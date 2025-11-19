@@ -156,8 +156,8 @@ def import_m2(version, filepath, is_local_file, time_import_method):
             if result_key:
                 results[result_key] = result
         except Exception as e:
-            log.error(f"Import step '{step_name}' failed: {e}")
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            log.error(f"Import step '{step_name}' failed: {e}\n{tb}")
             continue
 
     # --- Handle results ---

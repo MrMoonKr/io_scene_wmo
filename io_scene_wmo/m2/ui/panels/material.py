@@ -95,6 +95,8 @@ class M2_PT_material_panel(bpy.types.Panel):
     bl_label = "M2 Material"
 
     def draw(self, context):
+        controller = util.find_color_transparency_controller()
+    
         layout = self.layout
         col = layout.column()
         col.label(text='Textures')
@@ -180,10 +182,22 @@ class M2_PT_material_panel(bpy.types.Panel):
         col.label(text='Sorting control:')
         col.prop(context.material.wow_m2_material, "priority_plane")
         col.separator()
-        col.prop_search(context.material.wow_m2_material, "color",
-                        context.scene, "wow_m2_colors", text='Color', icon='COLOR')
-        col.prop_search(context.material.wow_m2_material, "transparency",
-                        context.scene, "wow_m2_transparency", text='Transparency', icon='RESTRICT_VIEW_OFF')
+        col.prop_search(
+            context.material.wow_m2_material,
+            "color",
+            controller.wow_m2_color_transparency,
+            "colors",
+            text='Color',
+            icon='COLOR'
+        )
+        col.prop_search(
+            context.material.wow_m2_material,
+            "transparency",
+            controller.wow_m2_color_transparency,
+            "transparencies",
+            text='Transparency',
+            icon='RESTRICT_VIEW_OFF'
+        )
 
     @classmethod
     def poll(cls, context):
