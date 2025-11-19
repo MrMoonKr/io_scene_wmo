@@ -66,8 +66,8 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
             func()
             log.debug(f"Completed step: {step_name}")
         except Exception as e:
-            log.error(f"Export step '{step_name}' failed: {e}")
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            log.error(f"Export step '{step_name}' failed: {e}\n{tb}")
             continue
 
     # --- Log final status ---
@@ -118,6 +118,6 @@ def export_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     # Remove existing file to avoid corruption
     if os.path.exists(filepath):
         os.remove(filepath)
-        
+
     # Write M2 to disk
     m2.write(filepath)
