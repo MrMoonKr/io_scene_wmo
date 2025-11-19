@@ -4110,7 +4110,7 @@ class BlenderM2Scene:
 
                             # Add texture to self.m2
                             self.m2.add_texture(
-                                wow_path if tex_type == 0 else "",
+                                wow_path if tex_type == '0' else "",
                                 construct_bitfield(tex_data.flags),
                                 int(tex_type),
                             )
