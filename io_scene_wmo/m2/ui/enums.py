@@ -1,5 +1,4 @@
 from ...utils.misc import load_game_data
-from ... import ui_icons
 from ...pywowlib.enums.m2_enums import *
 
 __reload_order_index__ = -1

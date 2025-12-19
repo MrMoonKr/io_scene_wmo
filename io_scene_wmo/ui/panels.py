@@ -1,7 +1,7 @@
 import bpy
 from bpy.app.handlers import persistent
 from ..ui.preferences import get_project_preferences
-from .. import ui_icons
+from .. import icons
 from ..utils.callbacks import on_release
 from ..utils.custom_object import CustomObject
 from .enums import WoWSceneTypes
@@ -60,14 +60,18 @@ class WBS_PT_wow_scene(bpy.types.Panel):
     def poll(cls, context):
         return context.scene is not None
 
+def VersionEnumItems(self, context):
+    return [
+        ('2', 'WotLK', "", icons.ui_icons['WOTLK'], 0),
+        ('6', 'Legion', "", icons.ui_icons['LEGION'], 1)
+    ]
 
 class WowScenePropertyGroup(bpy.types.PropertyGroup):
 
     version: bpy.props.EnumProperty(
         name='Client version',
-        items=[('2', 'WotLK', "", ui_icons['WOTLK'], 0),
-               ('6', 'Legion', "", ui_icons['LEGION'], 1)],
-        default='2'
+        items= VersionEnumItems,
+        default=0
     )
 
     type: bpy.props.EnumProperty(

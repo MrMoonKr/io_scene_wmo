@@ -11,7 +11,6 @@ from .event import M2_PT_event_panel
 from .color_transparency import *
 from .texture import M2_PT_texture_panel
 from .utils import M2_UL_root_elements_template_list, update_current_object, is_obj_unused
-from .... import ui_icons
 
 
 ######################

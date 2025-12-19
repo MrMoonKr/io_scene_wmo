@@ -7,6 +7,7 @@ from ..custom_objects import *
 from ...ui.enums import SpecialCollections
 from ...ui.collections import get_current_wow_model_collection, get_or_create_collection, get_wmo_groups_list
 
+from .... import icons
 
 def update_wow_visibility(self, context):
     values = self.wow_visibility
@@ -168,15 +169,15 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
                     box = col1_row1.box()
                     box.prop(proj_prefs, "direct_path")  
             col1_row2.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
-                            icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])        
+                            icon_value=icons.ui_icons['WOW_STUDIO_DOODADS_ADD'])        
             col1_row2.operator("scene.wow_import_last_wmo_from_wmv", text='WMO',
-                            icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])                      
-            col1_row3.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
-            col1_row3.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])                    
+                            icon_value=icons.ui_icons['WOW_STUDIO_WMO_ADD'])                      
+            col1_row3.operator("scene.wow_add_fog", text='Fog', icon_value=icons.ui_icons['WOW_STUDIO_FOG_ADD'])
+            col1_row3.operator("scene.wow_add_liquid", text='Liquid', icon_value=icons.ui_icons['WOW_STUDIO_LIQUID_ADD'])                    
 
             col1_row4.operator("scene.wow_add_light", text='Light', icon='LIGHT')      
             col1_row4.operator("scene.wow_add_scale_reference", text='Scale',
-                            icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+                            icon_value=icons.ui_icons['WOW_STUDIO_SCALE_ADD'])
             col1_row5.operator("scene.wow_wmo_texture_import", text='Texture', icon='IMAGE_DATA')
         else:
             col.separator()
@@ -193,7 +194,7 @@ class WMO_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
                 col1_row0.prop(proj_prefs, 'import_method', text='')                  
 
             col1_row2.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
-                            icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD']) 
+                            icon_value=icons.ui_icons['WOW_STUDIO_DOODADS_ADD']) 
 
     @classmethod
     def poll(cls, context):
@@ -257,15 +258,15 @@ class WMO_MT_mesh_wow_components_add(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        col.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
-        col.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
-        col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+        col.operator("scene.wow_add_fog", text='Fog', icon_value=icons.ui_icons['WOW_STUDIO_FOG_ADD'])
+        col.operator("scene.wow_add_liquid", text='Liquid', icon_value=icons.ui_icons['WOW_STUDIO_LIQUID_ADD'])
+        col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=icons.ui_icons['WOW_STUDIO_SCALE_ADD'])
         col.operator("scene.wow_add_light", text='Light', icon='LIGHT')
 
         if hasattr(bpy, "wow_game_data") and bpy.wow_game_data.files:
             col.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
-                         icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])
-            col.operator("scene.wow_import_last_wmo_from_wmv", text='WMO', icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
+                         icon_value=icons.ui_icons['WOW_STUDIO_DOODADS_ADD'])
+            col.operator("scene.wow_import_last_wmo_from_wmv", text='WMO', icon_value=icons.ui_icons['WOW_STUDIO_WMO_ADD'])
 
     @classmethod
     def poll(cls, context):
@@ -273,7 +274,7 @@ class WMO_MT_mesh_wow_components_add(bpy.types.Menu):
 
 
 def wow_components_add_menu_item(self, context):
-    self.layout.menu("WMO_MT_mesh_wow_components_add", icon_value=ui_icons['WOW_STUDIO_WOW'])
+    self.layout.menu("WMO_MT_mesh_wow_components_add", icon_value=icons.ui_icons['WOW_STUDIO_WOW'])
 
 
 def render_viewport_toggles_right(self, context):
@@ -332,4 +333,4 @@ def unregister():
     del bpy.types.Scene.wow_enable_culling
 
     bpy.types.VIEW3D_MT_add.remove(wow_components_add_menu_item)
-    bpy.types.VIEW3D_MT_add.remove(render_viewport_toggles_right)
+    bpy.types.VIEW3D_HT_header.remove(render_viewport_toggles_right)

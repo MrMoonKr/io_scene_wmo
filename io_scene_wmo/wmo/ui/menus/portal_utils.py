@@ -1,5 +1,4 @@
 from bpy.types import Menu
-from .... import ui_icons
 
 
 class VIEW3D_MT_wmo_portal_actions(Menu):

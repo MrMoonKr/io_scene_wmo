@@ -2,6 +2,8 @@ import bpy
 from ....ui.preferences import get_project_preferences
 from ..enums import *
 
+from .... import icons
+
 
 def update_wow_visibility(self, context):
     values = self.m2_visibility
@@ -91,7 +93,7 @@ class M2_PT_tools_panel_object_mode_add_to_scene(bpy.types.Panel):
 
         
         col1_row1.operator("scene.wow_import_last_m2_from_wmv", text='M2',
-            icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD']) 
+            icon_value=icons.ui_icons['WOW_STUDIO_DOODADS_ADD']) 
         
         
         if proj_prefs := get_project_preferences():
@@ -130,7 +132,7 @@ class M2_PT_tools_object_mode_actions(bpy.types.Panel):
         col1_row1.operator("scene.m2_ot_enable_drivers", text='Drivers ON', icon='RADIOBUT_ON')
         col1_row1.operator("scene.m2_ot_disable_drivers", text='Drivers OFF', icon='RADIOBUT_OFF')
 
-        box_col.operator("scene.wow_creature_editor_toggle", text='Creature Editor', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+        box_col.operator("scene.wow_creature_editor_toggle", text='Creature Editor', icon_value=icons.ui_icons['WOW_STUDIO_SCALE_ADD'])
 
         if bpy.context.selected_objects:
             box_col.operator("scene.m2_fill_textures", text='Fill Paths', icon='SEQ_SPLITVIEW')
@@ -153,26 +155,26 @@ class M2_MT_mesh_wow_components_add(bpy.types.Menu):
 
         if hasattr(bpy, "wow_game_data") and bpy.wow_game_data.files:
             col.operator("scene.wow_import_last_m2_from_wmv", text='M2',
-                icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])          
+                icon_value=icons.ui_icons['WOW_STUDIO_DOODADS_ADD'])          
 
         col.operator("scene.m2_add_attachment", text='Attachment', icon='POSE_HLT')
         col.operator("scene.m2_add_event", text='Event', icon='POSE_HLT')
-        # col.operator("scene.wow_add_fog", text='Fog', icon_value=ui_icons['WOW_STUDIO_FOG_ADD'])
-        # col.operator("scene.wow_add_liquid", text='Liquid', icon_value=ui_icons['WOW_STUDIO_LIQUID_ADD'])
-        # col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=ui_icons['WOW_STUDIO_SCALE_ADD'])
+        # col.operator("scene.wow_add_fog", text='Fog', icon_value=icons.ui_icons['WOW_STUDIO_FOG_ADD'])
+        # col.operator("scene.wow_add_liquid", text='Liquid', icon_value=icons.ui_icons['WOW_STUDIO_LIQUID_ADD'])
+        # col.operator("scene.wow_add_scale_reference", text='Scale', icon_value=icons.ui_icons['WOW_STUDIO_SCALE_ADD'])
         # col.operator("scene.wow_add_light", text='Light', icon='LIGHT')
 # 
         #if hasattr(bpy, "wow_game_data") and bpy.wow_game_data.files:
         #     col.operator("scene.wow_wmo_import_doodad_from_wmv", text='M2',
-        #                  icon_value=ui_icons['WOW_STUDIO_DOODADS_ADD'])
-        #     col.operator("scene.wow_import_last_wmo_from_wmv", text='WMO', icon_value=ui_icons['WOW_STUDIO_WMO_ADD'])
+        #                  icon_value=icons.ui_icons['WOW_STUDIO_DOODADS_ADD'])
+        #     col.operator("scene.wow_import_last_wmo_from_wmv", text='WMO', icon_value=icons.ui_icons['WOW_STUDIO_WMO_ADD'])
 
     @classmethod
     def poll(cls, context):
         return context.scene is not None and context.scene.wow_scene.type == 'M2'
 
 def wow_components_add_menu_item(self, context):
-    self.layout.menu("M2_MT_mesh_wow_components_add", icon_value=ui_icons['WOW_STUDIO_WOW'])
+    self.layout.menu("M2_MT_mesh_wow_components_add", icon_value=icons.ui_icons['WOW_STUDIO_WOW'])
 
 
 def render_viewport_toggles_right(self, context):
@@ -212,4 +214,4 @@ def unregister():
     del bpy.types.Scene.m2_visibility
 
     bpy.types.VIEW3D_MT_add.remove(wow_components_add_menu_item)
-    bpy.types.VIEW3D_MT_add.remove(render_viewport_toggles_right)
+    bpy.types.VIEW3D_HT_header.remove(render_viewport_toggles_right)

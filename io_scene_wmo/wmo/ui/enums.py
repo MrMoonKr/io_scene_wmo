@@ -1,4 +1,4 @@
-from ... import ui_icons
+from ... import icons
 from enum import Enum, auto
 
 __reload_order_index__ = -1
@@ -44,16 +44,19 @@ blending_enum = [
     ('9', "Blend_SrcAlphaOpaque", ""), ('10', "Blend_NoAlphaAdd", ""), ('11', "Blend_ConstantAlpha", "")
 ]
 
-material_flag_enum = [
-    ("1", "Unlit", "Disable lighting", 'SHADING_SOLID', 0x1),
-    ("2", "Unfogged", "Disable fog", 'MOD_FLUID', 0x2),
-    ("4", "Two-sided", "Render from both sides", 'MOD_UVPROJECT', 0x4),
-    ("8", "Exterior light", "Ignore local WMO lighting, use world lighting instead", 'LIGHT_SUN', 0x8),
-    ("16", "Night Glow", "Used for windows to glow at nighttime", ui_icons['MAT_NIGHT_GLOW'], 0x10),
-    ("32", "Window", "Unknown, used for windows", ui_icons['MAT_WINDOW'], 0x20),
-    ("64", "Clamp_S", "Force texture to use clamp _s adressing", 'DISCLOSURE_TRI_DOWN', 0x40),
-    ("128", "Clamp_T", "Force texture to use clamp _t adressing", 'TRIA_DOWN', 0x80)
-]
+def MaterialFlagEnumItems(self, context):
+    return [
+        ("1", "Unlit", "Disable lighting", 'SHADING_SOLID', 0x1),
+        ("2", "Unfogged", "Disable fog", 'MOD_FLUID', 0x2),
+        ("4", "Two-sided", "Render from both sides", 'MOD_UVPROJECT', 0x4),
+        ("8", "Exterior light", "Ignore local WMO lighting, use world lighting instead", 'LIGHT_SUN', 0x8),
+        ("16", "Night Glow", "Used for windows to glow at nighttime", icons.ui_icons['MAT_NIGHT_GLOW'], 0x10),
+        ("32", "Window", "Unknown, used for windows", icons.ui_icons['MAT_WINDOW'], 0x20),
+        ("64", "Clamp_S", "Force texture to use clamp _s adressing", 'DISCLOSURE_TRI_DOWN', 0x40),
+        ("128", "Clamp_T", "Force texture to use clamp _t adressing", 'TRIA_DOWN', 0x80)
+    ]
+
+material_flag_enum = MaterialFlagEnumItems
 
 group_flag_enum = [
     ('0', "Vertex color", "Check if you need vertex color in this group", 'SHADING_RENDERED', 0x1),

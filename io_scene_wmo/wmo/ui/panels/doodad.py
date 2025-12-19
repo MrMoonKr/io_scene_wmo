@@ -67,4 +67,4 @@ def register():
 
 
 def unregister():
-    bpy.types.Object.wow_wmo_doodad = None
+    del bpy.types.Object.wow_wmo_doodad

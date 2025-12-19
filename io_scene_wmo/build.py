@@ -24,7 +24,6 @@ def print_info(*s: str):
 
 
 def build_type_mismatch(debug: bool) -> bool:
-
     has_mismatch = False
     if os.path.exists("build/build.cache"):
         with open("build/build.cache", 'rb') as f:
@@ -53,7 +52,6 @@ def clean_build_data(ext_dirs: Iterable[str]):
 
 
 def create_distribution(addon_root_path: str, dist_path: str):
-
     print_info(f'\nCreating WBS distribution in \"{dist_path}\" ...')
     os.makedirs(dist_path, exist_ok=True)
 
@@ -135,7 +133,6 @@ def create_distribution(addon_root_path: str, dist_path: str):
 
 
 def build_project(debug: bool, clean: bool, no_req: bool, dist_path: Optional[str]):
-
     start_time = time.time()
 
     print_info('\nBuilding WoW Blender Studio...')
@@ -242,7 +239,6 @@ def build_project(debug: bool, clean: bool, no_req: bool, dist_path: Optional[st
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="Build WoW Blender Studio."
                                                  "\nMake sure your Python version matches the version of Python"
                                                  " inside the target Blender distribution."

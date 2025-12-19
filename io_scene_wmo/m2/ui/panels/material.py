@@ -748,5 +748,5 @@ def register():
     bpy.types.Material.wow_m2_material = bpy.props.PointerProperty(type=WowM2MaterialPropertyGroup)
 
 def unregister():
-    bpy.utils.unregister_class(TexturePathDefaultButton)
+    #bpy.utils.unregister_class(TexturePathDefaultButton)
     del bpy.types.Material.wow_m2_material

@@ -1,10 +1,9 @@
-import os
 import bpy
-import sys
 import typing
 import inspect
 import pkgutil
 import importlib
+import traceback
 from pathlib import Path
 from .third_party.ordered_set import OrderedSet
 
@@ -20,7 +19,8 @@ MODULES_TO_IGNORE = (
     "developer_utils",
     "pywowlib",
     "wbs_kernel",
-    "render"
+    "render",
+    "icons"
 )
 
 modules = None
@@ -37,23 +37,30 @@ def init():
 
 def register():
     for cls in ordered_classes:
-        bpy.utils.register_class(cls)
+        try:
+            bpy.utils.register_class(cls)
+        except:
+            traceback.print_exc()
 
     for module in modules:
-
         if module.__name__ == __name__:
             continue
+
         if hasattr(module, "register"):
             module.register()
 
 
 def unregister():
     for cls in reversed(ordered_classes):
-        bpy.utils.unregister_class(cls)
+        try:
+            bpy.utils.unregister_class(cls)
+        except:
+            traceback.print_exc()
 
     for module in modules:
         if module.__name__ == __name__:
             continue
+        
         if hasattr(module, "unregister"):
             module.unregister()
 
