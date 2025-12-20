@@ -11,6 +11,7 @@ from ..ui.preferences import get_project_preferences
 from ..utils.misc import resolve_outside_model_path
 from . import m2_scene
 from .operations import m2_action_logger as log
+from .operations.m2_export_validation import run_validations
 
 def create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices):
     """
@@ -70,27 +71,29 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
             log.error(f"Export step '{step_name}' failed: {e}\n{tb}")
             continue
 
-    # --- Log final status ---
-    log.info(
-        f"Successfully exported M2 to '{filepath}' "
-        f"(Total export time: {time.strftime('%M minutes %S seconds', time.gmtime(time.time() - start_time))})"
-    )
-    
-    warnings, errors = log.print_export_log()
+    # --- Run export validations ---
+    run_validations()
 
-    # Display viewport notification based on result
-    if errors:
+
+    # --- Display viewport notification based on result and log final status ---
+    if log.log_has_errors():
         bpy.ops.wbs.viewport_text_display(
             'INVOKE_DEFAULT',
             message="ERROR: M2 Export Failed! Check console!",
             font_size=32, y_offset=120, color=(1, 0, 0, 1)
         )
-        return None  
-    elif warnings:
+        log.error("Export aborted due to errors. See log summary for details.")
+        # Set m2 to None type object. We don't want to try to export it with errors.
+        m2 = None
+    elif log.log_has_warnings():
         bpy.ops.wbs.viewport_text_display(
             'INVOKE_DEFAULT',
             message="WARNING: M2 Exported with Warnings, check console!",
             font_size=28, y_offset=100, color=(1, 0.15, 0.15, 1)
+        )
+        log.warn(
+            f"Successfully exported M2 to '{filepath}' with warnings, see log summary for details."
+            f"(Total export time: {time.strftime('%M minutes %S seconds', time.gmtime(time.time() - start_time))})"
         )
     else:
         bpy.ops.wbs.viewport_text_display(
@@ -98,6 +101,13 @@ def create_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
             message="Info: Successfully exported M2!",
             font_size=24, y_offset=67
         )
+        log.info(
+            f"Successfully exported M2 to '{filepath}' "
+            f"(Total export time: {time.strftime('%M minutes %S seconds', time.gmtime(time.time() - start_time))})"
+        )
+
+    # --- Print export log ---
+    log.print_export_log()
 
     # --- Clear logging system ---
     log.clear()
@@ -113,7 +123,7 @@ def export_m2(version, filepath, selected_only, fill_textures, forward_axis, sca
     # Create and assemble M2 structure
     m2 = create_m2(version, filepath, selected_only, fill_textures, forward_axis, scale, merge_vertices)
     if not m2:
-        raise Exception("Export aborted due to critical errors.")
+        raise Exception("Export aborted due to critical errors! See console!")
 
     # Remove existing file to avoid corruption
     if os.path.exists(filepath):

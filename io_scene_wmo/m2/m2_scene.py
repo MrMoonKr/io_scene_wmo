@@ -601,21 +601,17 @@ class BlenderM2Scene:
 
         # Link the armature to the scene and activate it
         util._link_to_single_collection(rig, collection)
-        
+
         bpy.context.view_layer.objects.active = rig
         bpy.context.view_layer.update()
 
         bpy.ops.object.mode_set(mode="EDIT")
 
-        # Enable layers 1–4 for organization
-        for i in range(1, 5):
-            bpy.context.object.data.layers[i] = True
-
         # Create bones
         for i, bone in tqdm(enumerate(self.m2.root.bones), total=len(self.m2.root.bones), desc="Importing Armature Bones", ascii=True):
             bl_edit_bone = armature.edit_bones.new(bone.name)
             bl_edit_bone.head = Vector(bone.pivot)
-            bl_edit_bone.tail = bl_edit_bone.head + Vector((0.1, 0.0, 0.0))  # small offset along X
+            bl_edit_bone.tail = bl_edit_bone.head + Vector((0.1, 0.0, 0.0)) # small offset along X
 
             wow_bone = bl_edit_bone.wow_m2_bone
             wow_bone.sort_index = i
@@ -628,9 +624,10 @@ class BlenderM2Scene:
             except TypeError:
                 log.warn(f"Failed to set keybone ID '{bone.key_bone_id}'. Unknown keybone ID.")
 
-            # Assign layers based on bone naming convention
+            # Assign layers
             layers = bl_edit_bone.layers
-            layers[:] = [False] * 32  # reset all layers to False first
+            for j in range(5):
+                layers[j] = False
 
             if "AT_" in bone.name:
                 layers[3] = True
@@ -640,7 +637,9 @@ class BlenderM2Scene:
                 layers[2] = True
             elif bone.key_bone_id == -1:
                 layers[1] = True
-
+            else:
+                layers[0] = True
+                
             log.debug(f"Bone {i}: name='{bone.name}', crc={bone.bone_name_crc}")
 
         # Link children to parents
@@ -650,10 +649,43 @@ class BlenderM2Scene:
                 parent = armature.edit_bones[bones[bone.parent_bone].name]
                 child.parent = parent
 
-        bpy.context.view_layer.update()
+        bpy.ops.object.mode_set(mode="POSE")
+
+        # Create bone groups
+
+        pose = rig.pose
+
+        group_default = pose.bone_groups.new(name="DEFAULT")
+        group_unkeyed = pose.bone_groups.new(name="UNKEYED")
+        group_skeletal = pose.bone_groups.new(name="SKELETAL")
+        group_attachment = pose.bone_groups.new(name="ATTACHMENT")
+        group_event = pose.bone_groups.new(name="EVENT")
+
+        group_default.color_set = 'DEFAULT'
+        group_unkeyed.color_set = 'THEME09'
+        group_skeletal.color_set = 'THEME03'
+        group_attachment.color_set = 'THEME04'
+        group_event.color_set = 'THEME01'
+
+        # Assign pose bones to groups
+        for bone in self.m2.root.bones:
+            pbone = pose.bones[bone.name]
+
+            if "AT_" in bone.name:
+                pbone.bone_group = group_attachment
+            elif "ET" in bone.name:
+                pbone.bone_group = group_event
+            elif "Bone_" in bone.name:
+                pbone.bone_group = group_skeletal
+            elif bone.key_bone_id == -1:
+                pbone.bone_group = group_unkeyed
+            else:
+                pbone.bone_group = group_default
+
         bpy.ops.object.mode_set(mode="OBJECT")
 
         log.info(f"Imported armature with {len(bones)} bones for '{model_name}'.")
+
 
     def _populate_bl_fcurve(self, f_curves, frames, track, length, callback, interp_type):
         """Populate Blender FCurves with keyframe data from an M2 track."""

@@ -165,24 +165,21 @@ def import_m2(version, filepath, is_local_file, time_import_method):
     if dbc_textures:
         bpy.ops.scene.wow_creature_load_textures(LoadAll=True)
 
-    log.info(
-        f"Done importing M2. (Total import time: {time.strftime('%M minutes %S seconds.', time.gmtime(time.time() - start_time))})"
-    )
-
-    warnings, errors = log.print_import_log()
-    if errors:
-        bpy.ops.wbs.viewport_text_display(
-            'INVOKE_DEFAULT', message="ERROR: M2 Import Failed! Check console!", font_size=32, y_offset=120, color=(1, 0, 0, 1)
-        )
-        return None
-    elif warnings:
-        bpy.ops.wbs.viewport_text_display(
-            'INVOKE_DEFAULT', message="WARNING: M2 Imported with Warnings, check console!", font_size=28, y_offset=100, color=(1, 0.15, 0.15, 1)
-        )
+    # --- Display viewport notification based on result and log final status ---
+    if log.log_has_errors():
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="ERROR: M2 Import Failed! Check console!", font_size=32, y_offset=120, color=(1, 0, 0, 1))
+        log.error("M2 import failed due to errors. See log summary for details.")
+        m2_file = None
+    elif log.log_has_warnings():
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="WARNING: M2 Imported with Warnings, check console!", font_size=28, y_offset=100, color=(1, 0.15, 0.15, 1))
+        log.warn(f"Successfully imported M2 with warnings, see log summary for details. (Total import time: {time.strftime('%M minutes %S seconds.', time.gmtime(time.time() - start_time))})")
     else:
-        bpy.ops.wbs.viewport_text_display(
-            'INVOKE_DEFAULT', message="Info: Successfully imported M2!", font_size=24, y_offset=67
-        )
+        bpy.ops.wbs.viewport_text_display('INVOKE_DEFAULT', message="Info: Successfully imported M2!", font_size=24, y_offset=67)
+        log.info(f"Successfully imported M2. (Total import time: {time.strftime('%M minutes %S seconds.', time.gmtime(time.time() - start_time))})")
+
+    # --- Print import log ---
+    log.print_import_log()
+
 
     log.clear()
     return m2_file

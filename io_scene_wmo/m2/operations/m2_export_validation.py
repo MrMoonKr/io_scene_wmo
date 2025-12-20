@@ -1,5 +1,7 @@
 import bpy
 from ..util import get_bone_groups
+from .enums import LogLevel
+from . import m2_action_logger as log
 
 # ---------------------------
 # Scene validation functions
@@ -18,7 +20,7 @@ def wrong_scene_type():
     elif bpy.context.scene.wow_scene.type != 'M2':
         items.append(f"Wrong scene: Type is {bpy.context.scene.wow_scene.type} but should be M2")
 
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def transformed_objects():
     name = "Transformed Objects"
@@ -57,7 +59,7 @@ def transformed_objects():
         else:
             compare("euler rotation", vec_names, obj.rotation_euler, (0, 0, 0))
 
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def empty_textures():
     name = "Empty Textures"
@@ -90,7 +92,7 @@ def empty_textures():
             if wow_mat.texture_1 is None:
                 items.append(f"Object '{obj.name}', material '{mat.name}' has no M2 textures, may be invisible ingame.")
 
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def empty_texture_paths():
     name = "Empty Texture Path"
@@ -117,7 +119,7 @@ def empty_texture_paths():
         obj_str = ", ".join(obj_names)
         items.append(f"Texture '{texture}' used by ({obj_str}) has no .blp path set.")
 
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def no_materials():
     name = "No Materials"
@@ -132,7 +134,7 @@ def no_materials():
         for obj in bpy.data.objects
         if obj.type == 'MESH' and not obj.wow_m2_geoset.collision_mesh and len(obj.material_slots) == 0
     ]
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def bone_constraints():
     name = "Bone Constraints"
@@ -148,7 +150,7 @@ def bone_constraints():
         for bone in obj.pose.bones:
             for constraint in bone.constraints:
                 items.append(f"Bone {obj.name}.{bone.name} has constraint '{constraint.name}', usually a mistake.")
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def no_animation_pairs():
     name = "No Animation Pairs"
@@ -162,7 +164,7 @@ def no_animation_pairs():
         for seq in bpy.context.scene.wow_m2_animations
         if len(seq.anim_pairs) == 0 and "64" not in seq.flags
     ]
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def missing_animation_items():
     name = "Missing Animation Items"
@@ -179,7 +181,7 @@ def missing_animation_items():
             elif pair.action is None:
                 if pair.object.name not in ['CharInfoCam', 'CharInfoCam_Target', 'PortraitCam', 'PortraitCam_Target']:
                     items.append(f"Sequence '{seq.name}' pair '{pair.object.name}' missing action.")
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def non_primary_sequences():
     name = "Non-primary Sequences"
@@ -193,7 +195,7 @@ def non_primary_sequences():
         for seq in bpy.context.scene.wow_m2_animations
         if not seq.is_global_sequence and "32" not in seq.flags
     ]
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def too_many_bone_groups():
     name = "Too Many Bone Groups"
@@ -210,7 +212,35 @@ def too_many_bone_groups():
         broken = sum(1 for v in obj.data.vertices if len(get_bone_groups(obj, v, bone_names)) > 4)
         if broken > 0:
             items.append(f"Object '{obj.name}' has {broken} vertices with too many bone groups.")
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
+
+def too_many_indices():
+    name = "Too Many Indices"
+    description = [
+        "Issue: A submesh exceeds the maximum index count supported by the M2 format.",
+        "Limit: 65535 indices per submesh.",
+        "Effect: Export will fail.",
+        "Fix: Split the mesh, reduce polycount, or separate materials."
+    ]
+    items = []
+
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH' or not hasattr(obj, "wow_m2_geoset"):
+            continue
+
+        mesh = obj.data
+
+        # Estimate triangle index count
+        tri_count = sum(1 for p in mesh.polygons if p.loop_total == 3)
+        index_count = tri_count * 3
+
+        if index_count > 0xFFFF:
+            items.append(
+                f"Object '{obj.name}' has {index_count} indices "
+                f"(max supported is 65535)."
+            )
+
+    return (name, description, items, LogLevel.ERROR)
 
 def fcurves_transforming_objects():
     name = "FCurves Transforming Objects"
@@ -228,10 +258,10 @@ def fcurves_transforming_objects():
                 if curve.data_path in ["location", "rotation_euler", "scale"]:
                     if pair.object and not pair.object.wow_m2_uv_transform.enabled:
                         items.append(f"FCurve '{curve.data_path}[{curve.array_index}]' in '{pair.action.name}' transforms object '{pair.object.name}'.")
-    return (name, description, items)
+    return (name, description, items, LogLevel.WARN)
 
 def run_validations():
-    """Run all static validation checks and return structured results."""
+    """Run all static validation checks and log results."""
     validation_callbacks = [
         wrong_scene_type,
         transformed_objects,
@@ -243,13 +273,40 @@ def run_validations():
         missing_animation_items,
         non_primary_sequences,
         too_many_bone_groups,
+        too_many_indices,
         fcurves_transforming_objects,
     ]
 
-    results = []
     for callback in validation_callbacks:
-        name, descriptions, items = callback()
-        if items:
-            results.append((name, descriptions, items))
+        try:
+            name, descriptions, items, level = callback()
 
-    return results
+            if not items:
+                continue
+
+            # Build a single multi-line log message
+            lines = [f"[Validation] [{name}]"]
+
+            for d in descriptions:
+                lines.append(d)
+
+            for item in items:
+                lines.append(f"- {item}")
+
+            message = "\n".join(lines)
+
+            # Emit one log entry
+            if level == LogLevel.ERROR:
+                log.error(message)
+            elif level == LogLevel.WARN:
+                log.warn(message)
+            elif level == LogLevel.INFO:
+                log.info(message)
+            else:
+                log.debug(message)
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            log.error(
+                f"Validation '{callback.__name__}' failed:\n{tb}"
+            )
