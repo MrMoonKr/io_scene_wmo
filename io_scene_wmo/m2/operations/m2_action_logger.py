@@ -3,13 +3,7 @@ from enum import IntEnum
 
 from ...ui.preferences import get_project_preferences
 from . import m2_export_validation
-
-class LogLevel(IntEnum):
-    """Logging severity levels."""
-    ERROR = 1
-    WARN = 2
-    INFO = 3
-    DEBUG = 4
+from .enums import LogLevel
 
 # ---------------------------
 # Storage
@@ -80,56 +74,59 @@ def add(level: LogLevel, msg: str, print_now: bool = False):
         print(f"[{timestamp}] [{level.name}] {msg}")
 
 
-def _print_log_summary(title: str, validation_fn=None):
+def _print_log_summary(title: str):
     """
     Print combined summary for import/export logs.
 
     Args:
         title (str): label ("Import" or "Export")
         validation_fn (callable, optional): optional validation hook
-
-    Returns:
-        tuple(bool, bool): (warnings_present, errors_present)
     """
     verbosity = get_verbosity_level()
+
+    def _print_multiline(prefix: str, msg: str):
+        lines = msg.splitlines()
+        print(prefix + lines[0])
+        indent = " " * len(prefix)
+        for line in lines[1:]:
+            print(indent + line)
 
     print("\n##############################################################")
     print(f"          {title} Log Summary")
     print("##############################################################")
 
-    # --- Optional validation ---
-    if callable(validation_fn):
-        for name, descriptions, items in validation_fn():
-            print(f"\n== {name} ==")
-            for d in descriptions:
-                print(f"  {d}")
-            for item in items:
-                add(LogLevel.WARN, f"[{name}] {item}", print_now=True)
-
     # --- Errors & Warnings ---
     if errors:
         print(f"\n== {title} Errors ==")
         for msg in errors:
-            print(f"  [ERROR] {msg}")
+            _print_multiline("  [ERROR] ", msg)
 
     if warnings:
         print(f"\n== {title} Warnings ==")
         for msg in warnings:
-            print(f"  [WARN] {msg}")
+            _print_multiline("  [WARN] ", msg)
 
     # --- Full chronological log ---
     print(f"\n== {title} Log ==")
     for level, msg, timestamp in master_log:
-        if verbosity >= level:
-            print(f"  [{timestamp}] [{level.name}] {msg}")
+        if verbosity < level:
+            continue
+
+        prefix = f"  [{timestamp}] [{level.name}] "
+        lines = msg.splitlines()
+
+        print(prefix + lines[0])
+        indent = " " * len(prefix)
+        for line in lines[1:]:
+            print(indent + line)
 
     # --- Summary footer ---
     print("\n##############################################################")
-    print(f"  Summary: {len(errors)} errors, {len(warnings)} warnings, "
-          f"{len(infos)} info, {len(debugs)} debug messages")
+    print(
+        f"  Summary: {len(errors)} errors, {len(warnings)} warnings, "
+        f"{len(infos)} info, {len(debugs)} debug messages"
+    )
     print("##############################################################\n")
-
-    return bool(warnings), bool(errors)
 
 
 def print_export_log():
@@ -137,7 +134,7 @@ def print_export_log():
     Print export summary and run export validation checks.
     Returns: (warnings_present, errors_present)
     """
-    return _print_log_summary("Export", validation_fn=m2_export_validation.run_validations)
+    return _print_log_summary("Export")
 
 
 def print_import_log():
@@ -146,6 +143,15 @@ def print_import_log():
     Returns: (warnings_present, errors_present)
     """
     return _print_log_summary("Import")
+    
+
+def log_has_errors() -> bool:
+    """Return True if any error-level logs exist."""
+    return bool(errors)
+    
+def log_has_warnings() -> bool:
+    """Return True if any warning-level logs exist."""
+    return bool(warnings)
 
 # ---------------------------
 # Shorthands
